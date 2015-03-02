@@ -2,7 +2,7 @@
 A mobile optimised congestion control algorithm
 
 ## Algorithm
-SCReAM (Self-Clocked Rate Adaptation for Multimedia) is a congestion control algorithm devised mainly for Video.
+SCReAM (**S**elf-**C**locked **R**at**e** **A**daptation for **M**ultimedia) is a congestion control algorithm devised mainly for Video.
 Congestion control for WebRTC media is currently being standardized in the IETF RMCAT WG, the scope of the working group is to define requirements for congestion control and also to standardize a few candidate solutions. 
 SCReAM is a congestion control candidate solution for WebRTC developed at Ericsson Research and optimized for good performance in wireless access. 
 
@@ -16,10 +16,10 @@ SCReAM is optimized in house in a state of the art LTE system simulator for opti
 
 A comparison against GCC (Google Congestion Control) is show below. Notice in particular that SCReAM utilizes free bandwidth much more efficiently. Still the reaction to reduced throughput is more prompt. SCReAMs larger video frame delay is solely because the video bitrate is higher when the throughput drops. The IP packet delay is however considerably lower, something that is highly beneficial for other flows such audio as the latter will then experience less disturbances. The fact that SCReAM maintains a RTP queue on the sender side opens up for further optimizations to congestion, for instance it is possible to discard the contents of the RTP queue and replace with an I frame in order to refresh the video quickly at congestion.
 
-![](https://github.com/EricssonResearch/scream/tree/master/images/image_1.png)
+![](https://github.com/EricssonResearch/scream/tree/master/images/image_1.png?raw=true)
 Figure 1 : Simple bottleneck simulation GCC, the link bandwidth is outlined in red
 
-![](https://github.com/EricssonResearch/scream/tree/master/images/image_1.png)
+![](https://github.com/EricssonResearch/scream/tree/master/images/image_2.png?raw=true)
 Figure 2 : Simple bottleneck simulation SCReAM
 
 ## The code
