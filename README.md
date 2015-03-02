@@ -16,11 +16,11 @@ SCReAM is optimized in house in a state of the art LTE system simulator for opti
 
 A comparison against GCC (**G**oogle **C**ongestion **C**ontrol) is show below. Notice in particular that SCReAM utilizes free bandwidth much more efficiently. Still the reaction to reduced throughput is more prompt. SCReAMs larger video frame delay is solely because the video bitrate is higher when the throughput drops. The IP packet delay is however considerably lower, something that is highly beneficial for other flows such audio as the latter will then experience less disturbances. The fact that SCReAM maintains a RTP queue on the sender side opens up for further optimizations to congestion, for instance it is possible to discard the contents of the RTP queue and replace with an I frame in order to refresh the video quickly at congestion.
 
-![](https://github.com/EricssonResearch/scream/tree/master/images/image_1.png?raw=true)
+![Simple bottleneck simulation GCC](https://github.com/EricssonResearch/scream/blob/master/images/image_1.png)
 
 Figure 1 : Simple bottleneck simulation GCC, the link bandwidth is outlined in red
 
-![](https://github.com/EricssonResearch/scream/tree/master/images/image_2.png?raw=true)
+![Simple bottleneck simulation SCReAM](https://github.com/EricssonResearch/scream/blob/master/images/image_2.png)
 
 Figure 2 : Simple bottleneck simulation SCReAM
 
