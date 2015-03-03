@@ -48,7 +48,7 @@ For more information on how to use the experimental code, please see [https://gi
 
 
 ## References
-[1] http://tools.ietf.org/id/draft-johansson-rmcat-scream-cc-04.txt
+[1] http://tools.ietf.org/id/draft-johansson-rmcat-scream-cc-05.txt
 
 [2] Sigcomm paper http://dl.acm.org/citation.cfm?id=2631976 
 
