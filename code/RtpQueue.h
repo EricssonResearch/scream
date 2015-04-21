@@ -28,6 +28,7 @@ public:
     int sizeOfQueue();
     float getDelay(float currTs);
     bool sendPacket(void *rtpPacket, int &size, unsigned short &seqNr);
+    void clear();
 
     RtpQueueItem *items[RtpQueueSize];
     int head; // Pointer to last inserted item

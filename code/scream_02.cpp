@@ -15,11 +15,11 @@
 using namespace std;
 
 const gint screamTxTick = (int)(1e-3*1000);
-const gfloat Tmax = 200.0f;
-const gboolean isChRate = false; 
+const gfloat Tmax = 100.0f;
+const gboolean isChRate = TRUE; 
 const guint64 rtcpFbInterval_us = 30000;
 const gfloat kVideoFrameRate = 25.0f;
-const gfloat kAudioFrameRate = 50.0f;
+const gfloat kAudioFrameRate = 25.0f;
 const gint kVideoTick = (int)(1000.0/kVideoFrameRate);
 const gint kAudioTick = (int)(1000.0/kAudioFrameRate);
 
@@ -32,11 +32,11 @@ int _tmain(int argc, _TCHAR* argv[])
     NetQueue *netQueueDelay = new NetQueue(0.05f,0.0f,0.0f);
     NetQueue *netQueueRate = 0;
     int ssrcL[2] = {10,11};
-    netQueueRate = new NetQueue(0.0f,1.5e6,0.0f);
+    netQueueRate = new NetQueue(0.0f,5e6,0.0f);
     videoEnc[0] = new VideoEnc(rtpQueue[0], kVideoFrameRate, 0.3f); 
-    videoEnc[1] = new VideoEnc(rtpQueue[1], kAudioFrameRate, 0.0f);
-    screamTx->registerNewStream(rtpQueue[0], ssrcL[0], 1.0f, 150000.0f, 1500000.0f, kVideoFrameRate);
-    screamTx->registerNewStream(rtpQueue[1], ssrcL[1], 1.0f,   5000.0f,   50000.0f, kAudioFrameRate);
+    videoEnc[1] = new VideoEnc(rtpQueue[1], kAudioFrameRate, 0.3f);
+    screamTx->registerNewStream(rtpQueue[0], ssrcL[0], 1.0f, 200000.0f, 5000000.0f, kVideoFrameRate);
+    screamTx->registerNewStream(rtpQueue[1], ssrcL[1], 1.0f, 200000.0f, 5000000.0f, kAudioFrameRate);
 
     gfloat time = 0.0f;
     guint64 time_us = 0;
@@ -63,15 +63,15 @@ int _tmain(int argc, _TCHAR* argv[])
         if ((n+kAudioTick/2) % kAudioTick == 0) {
             // "Encode" audio frame
             videoEnc[1]->setTargetBitrate(screamTx->getTargetBitrate(ssrcL[1]));
-            videoEnc[1]->encode(time);
-            screamTx->newMediaFrame(time_us_tx, ssrcL[1]);
+            int bytes = videoEnc[1]->encode(time);
+            screamTx->newMediaFrame(time_us_tx, ssrcL[1], bytes);
             isEncoded = true;
         }
         if (n % kVideoTick == 0) {
             // "Encode" video frame
             videoEnc[0]->setTargetBitrate(screamTx->getTargetBitrate(ssrcL[0]));
-            videoEnc[0]->encode(time);
-            screamTx->newMediaFrame(time_us_tx, ssrcL[0]);
+            int bytes = videoEnc[0]->encode(time);
+            screamTx->newMediaFrame(time_us_tx, ssrcL[0], bytes);
             isEncoded = TRUE;
         }
         if (isEncoded) {
@@ -135,11 +135,11 @@ int _tmain(int argc, _TCHAR* argv[])
             cout << endl;
         }
 
-        if ((time == 20 || time == 60) && isChRate)
-            netQueueRate->rate = 3e5;
+        if ((time == 40 || time == 160) && isChRate)
+            netQueueRate->rate = 1e6;
 
-        if ((time == 30 || time == 70) && isChRate)
-            netQueueRate->rate = 3e6;
+        if ((time == 60 || time == 170) && isChRate)
+            netQueueRate->rate = 5e6;
 
         n++;
         Sleep(0) ;

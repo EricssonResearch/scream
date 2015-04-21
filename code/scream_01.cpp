@@ -14,9 +14,9 @@
 #include <stdlib.h>
 using namespace std;
 
-const gfloat Tmax = 120.0f;
+const gfloat Tmax = 100.0f;
 const gboolean testLowBitrate = FALSE;
-const gboolean isChRate = FALSE; 
+const gboolean isChRate = TRUE; 
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -31,22 +31,22 @@ int _tmain(int argc, _TCHAR* argv[])
     } else {
         kFrameRate = 25.0f;
         videoTick = (gint)(2000.0/kFrameRate);
-        rtcpFbInterval_us = 20000;
+        rtcpFbInterval_us = 30000;
     }
     ScreamTx *screamTx = new ScreamTx();
     ScreamRx *screamRx = new ScreamRx();
     RtpQueue *rtpQueue = new RtpQueue();
     VideoEnc *videoEnc = 0;
-    NetQueue *netQueueDelay = new NetQueue(0.02f,0.0f,0.0f);
+    NetQueue *netQueueDelay = new NetQueue(0.001f,0.0f,0.0f);
     NetQueue *netQueueRate = 0;
     if (testLowBitrate) {
         netQueueRate = new NetQueue(0.0f,50000,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f); 
         screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f,kFrameRate);
     } else {
-        netQueueRate = new NetQueue(0.0f,1.5e6f,0.0f);
+        netQueueRate = new NetQueue(0.0f,2e6,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f,false);
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 100000.0f, 1500000.0f,kFrameRate);
+        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 100000.0f, 5000000.0f,kFrameRate);
     }
 
 
@@ -76,8 +76,8 @@ int _tmain(int argc, _TCHAR* argv[])
         if (n % videoTick == 0) {
             // "Encode" video frame
             videoEnc->setTargetBitrate(screamTx->getTargetBitrate(10));
-            videoEnc->encode(time);
-            screamTx->newMediaFrame(time_us_tx, 10);
+            int bytes = videoEnc->encode(time);
+            screamTx->newMediaFrame(time_us_tx, 10, bytes);
             /*
             * New RTP packets added, try if OK to transmit
             */
@@ -141,11 +141,11 @@ int _tmain(int argc, _TCHAR* argv[])
             if ((time == 30 || time == 70) && isChRate)
                 netQueueRate->rate = 50000;
         } else {
-            if ((time == 20 || time == 60) && isChRate)
-                netQueueRate->rate = 1e5;
+            if ((time == 40 || time == 60) && isChRate)
+                netQueueRate->rate = 4e5;
 
-            if ((time == 30 || time == 70) && isChRate)
-                netQueueRate->rate = 2.5e6;
+            if ((time == 50 || time == 70) && isChRate)
+                netQueueRate->rate = 2e6;
         }
 
         n++;

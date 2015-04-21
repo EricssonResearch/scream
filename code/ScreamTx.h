@@ -27,6 +27,8 @@ static const gint kBaseOwdHistSize = 50;
 static const gint kOwdNormHistSize = 100;
 static const gint kOwdFractionHistSize = 20;
 static const gint kBytesInFlightHistSize = 5; 
+static const gint kRateRtpHistSize = 21;
+
 
 
 class RtpQueue;
@@ -53,7 +55,7 @@ public:
     * Call this function for each new video frame
     *  Note : isOkToTransmit should be called after newMediaFrame
     */ 
-    void newMediaFrame(guint64 time_us, guint32 ssrc);
+    void newMediaFrame(guint64 time_us, guint32 ssrc, gint bytesRtp);
 
     /*
     * Function determines if an RTP packet with SSRC can be transmitted
@@ -162,6 +164,15 @@ private:
         guint64 lastBitrateAdjustT_us; // Last time rate was updated for this stream
         guint64 lastRateUpdateT_us;    // Last time rate estimate was updated
         guint8 nLoss;            // Ackumulated loss 
+
+        gint bytesRtp;           // Number of RTP bytes from media coder
+        gfloat rateRtp;          // Media bitrate
+        gfloat rateRtpSum;       // Temp accumulated rtpRate
+        gint rateRtpSumN;        //
+        gfloat rateRtpHist[kRateRtpHistSize]; // History of media coder bitrates
+        gint rateRtpHistPtr;     // Ptr to above
+        gfloat rateRtpMedian;    // Median media bitrate
+
     };
 
     /*
@@ -277,9 +288,16 @@ private:
     gint cwndMin;
     gint cwndI;
     gboolean wasCwndIncrease;
-    gint bytesInFlightHist[kBytesInFlightHistSize];
+    gint bytesInFlightHistLo[kBytesInFlightHistSize];
+    gint bytesInFlightHistHi[kBytesInFlightHistSize];
     gint bytesInFlightHistPtr;
-    gint bytesInFlightMax;
+    gint bytesInFlightMaxLo;
+    gint bytesInFlightMaxHi;
+    gint accBytesInFlightMax;
+    gint nAccBytesInFlightMax;
+    gfloat rateTransmitted;  
+    gfloat owdTrendMem;
+
 
     /*
     * Loss event 
@@ -331,7 +349,8 @@ private:
     *  kBytesInFlightHistSize values.
     * Used for congestion window validation.
     */
-    gint getMaxBytesInFlight();
+    gint getMaxBytesInFlightHi();
+    gint getMaxBytesInFlightLo();
 
     /*
     * Returns the number of bytes currently in flight.

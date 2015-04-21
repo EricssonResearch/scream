@@ -6,7 +6,7 @@ class VideoEnc {
 public:
     VideoEnc(RtpQueue* rtpQueue, float frameRate, float delta=0.0, bool simIr=false);
 
-    void encode(float time);
+    int encode(float time);
 
     void setTargetBitrate(float targetBitrate_); 
     void setFrameRate(float frameRate_) {frameRate = frameRate_;};

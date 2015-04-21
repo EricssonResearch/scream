@@ -20,7 +20,7 @@ const gboolean kOpenCwnd = FALSE;
 // Can in some cases cause self-inflicted congestion
 //  i.e the e2e delay can become large even though
 //  there is no competing traffic present
-static const gboolean kEnableSbd = FALSE; 
+static const gboolean kEnableSbd = TRUE; 
 // Fast start can resume if little or no congestion detected 
 static const gboolean kEnableConsecutiveFastStart = TRUE;
 // Packet pacing reduces jitter
@@ -47,7 +47,7 @@ static const gfloat kLossEventRateScale = 0.9f;
 // An incrased value such as 0.5 can improve transmission of Key frames
 // however with a higher risk of unstable behavior in 
 // sudden congestion situations
-static const gfloat kBytesInFlightSlack = 0.0f;
+static const gfloat kBytesInFlightSlack = 0.2f;
 // Rate update interval
 static const guint64 kRateAdjustInterval_us = 200000; // 200ms  
 
@@ -68,7 +68,7 @@ static const gfloat kOwdTargetMax = 0.3f; //ms
 static const gint kReOrderingLimit = 5; 
 // Congestion window validation
 static const gfloat kBytesInFlightHistInterval_us = 1000000; // Time (s) between stores 1s
-static const gfloat kMaxBytesInFlightHeadRoom = 1.1f;
+static const gfloat kMaxBytesInFlightHeadRoom = 1.5f;
 // OWD trend and shared bottleneck detection
 static const guint64 kOwdFractionHistInterval_us = 50000; // 50ms
 // Max video rate estimation update period
@@ -96,7 +96,8 @@ ScreamTx::ScreamTx()
     cwndI(1),
     wasCwndIncrease(FALSE),
     lastBytesInFlightT_us(0),
-    bytesInFlightMax(0),
+    bytesInFlightMaxLo(0),
+    bytesInFlightMaxHi(0),
 
     lossEvent(FALSE),
 
@@ -113,7 +114,11 @@ ScreamTx::ScreamTx()
     lastLossEventT_us(0),
     lastTransmitT_us(0),
     nextTransmitT_us(0),
-    lastRateUpdateT_us(0)
+    lastRateUpdateT_us(0),
+    accBytesInFlightMax(0),
+    nAccBytesInFlightMax(0),
+    rateTransmitted(0),
+    owdTrendMem(0.0f)
 {
     for (int n=0; n < kBaseOwdHistSize; n++)
         baseOwdHist[n] = G_MAXUINT32;
@@ -124,8 +129,10 @@ ScreamTx::ScreamTx()
     for (int n=0; n < kOwdNormHistSize; n++)
         owdNormHist[n] = 0.0f;
     owdNormHistPtr = 0;
-    for (int n=0; n < kBytesInFlightHistSize; n++)
-        bytesInFlightHist[n] = 0;
+    for (int n=0; n < kBytesInFlightHistSize; n++) {
+        bytesInFlightHistLo[n] = 0;
+        bytesInFlightHistHi[n] = 0;
+    }
     bytesInFlightHistPtr = 0;
     for (int n=0; n < kMaxTxPackets; n++) 
         txPackets[n].isUsed = FALSE;
@@ -155,10 +162,11 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
 /*
 * New media frame
 */
-void ScreamTx::newMediaFrame(guint64 time_us, guint32 ssrc) {
+void ScreamTx::newMediaFrame(guint64 time_us, guint32 ssrc, gint bytesRtp) {
     if (!isInitialized) initialize(time_us);
     Stream *stream = getStream(ssrc);
     stream->updateTargetBitrate(time_us);
+    stream->bytesRtp += bytesRtp;
     /*
     * Need to update MSS here, otherwise it will be nearly impossible to 
     * transmit video packets, this because of the small initial MSS 
@@ -179,8 +187,10 @@ gfloat ScreamTx::isOkToTransmit(guint64 time_us, guint32 &ssrc) {
     * this is used in video rate computation
     */
     if (time_us-lastRateUpdateT_us > kRateUpdateInterval_us) {
+        rateTransmitted = 0.0;
         for (int n=0; n < nStreams; n++) {
             streams[n]->updateRate(time_us);
+            rateTransmitted += streams[n]->rateTransmitted;
         }
         lastRateUpdateT_us = time_us;
         /*
@@ -199,7 +209,6 @@ gfloat ScreamTx::isOkToTransmit(guint64 time_us, guint32 &ssrc) {
         * No RTP packets to transmit
         */
         return -1.0f;
-
     ssrc = stream->ssrc;
 
     if (kBypassTxSheduling) {
@@ -216,16 +225,23 @@ gfloat ScreamTx::isOkToTransmit(guint64 time_us, guint32 &ssrc) {
 
     gfloat paceInterval = kMinPaceInterval;
 
-    bytesInFlightMax = MAX(bytesInFlight(), bytesInFlightMax);
+    bytesInFlightMaxLo = 0;
+    if (nAccBytesInFlightMax > 0) {
+        bytesInFlightMaxLo = accBytesInFlightMax/nAccBytesInFlightMax;
+    }
+    bytesInFlightMaxHi = MAX(bytesInFlight(), bytesInFlightMaxHi);
 
     /*
     * Update bytes in flight history for congestion window validation
     */ 
     if (time_us - lastBytesInFlightT_us > kBytesInFlightHistInterval_us) {
-        bytesInFlightHist[bytesInFlightHistPtr] = bytesInFlightMax;
+        bytesInFlightHistLo[bytesInFlightHistPtr] = bytesInFlightMaxLo;
+        bytesInFlightHistHi[bytesInFlightHistPtr] = bytesInFlightMaxHi;
         bytesInFlightHistPtr = (bytesInFlightHistPtr+1) % kBytesInFlightHistSize;
         lastBytesInFlightT_us = time_us;
-        bytesInFlightMax = 0;
+        accBytesInFlightMax = 0;
+        nAccBytesInFlightMax = 0;
+        bytesInFlightMaxLo = 0;
         /* 
         * In addition, reset MSS, this is useful in case for instance
         * a video stream is put on hold, leaving only audio packets to be 
@@ -350,9 +366,11 @@ void ScreamTx::incomingFeedback(guint64 time_us,
     guint16 highestSeqNr,
     guint8  nLoss,        
     gboolean qBit) {
-
         if (!isInitialized) initialize(time_us);
         Stream *stream = getStream(ssrc);
+        accBytesInFlightMax += bytesInFlight();
+        nAccBytesInFlightMax++;
+
         for (int n=0; n < kMaxTxPackets; n++) {
             /*
             * Loop through TX packets with matching SSRC
@@ -433,18 +451,18 @@ gfloat ScreamTx::getTargetBitrate(guint32 ssrc) {
 }
 
 void ScreamTx::printLog(double time) {
-    gint inFlightMax = MAX(bytesInFlight(),getMaxBytesInFlight());
+    gint inFlightMax = MAX(bytesInFlight(),getMaxBytesInFlightHi());
 
-    /* 2- 4 */	cout <<	owd             << " " << owdTrend           << " " << owdTarget   << " " 
+    /* 2- 4 */	cout <<	owd             << " " << owdTrendMem           << " " << owdTarget   << " " 
         /* 5- 7 */		 << owdSbdVar       << " " << owdSbdSkew         << " " << getSRtt()   << " "
         /* 8-11 */		 << cwnd            << " " << cwndI              << " " << inFlightMax << " " << bytesInFlight() << " " 
         /*12-13 */		 << isInFastStart() << " " << getPacingBitrate() << " ";
 
     for (int n=0; n < nStreams; n++) {
         Stream *tmp = streams[n];
-        /*14-17 */		 	    cout << tmp->txSizeBitsAvg/8 << " " << tmp->rtpQueue->getDelay(time) << " "
-            << tmp->targetBitrate << " " << tmp->getMaxRate() << " ";
-        /*18-21 */
+        /*14-20 */		 	    cout << tmp->txSizeBitsAvg/8 << " " << tmp->rtpQueue->getDelay(time) << " "
+            << tmp->targetBitrate << " " << tmp->targetBitrateI << " " << tmp->getMaxRate() << " " << tmp->rateTransmitted << " " << tmp->rateAcked << " ";
+        /*21-27 */
     }
 }
 
@@ -487,6 +505,14 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
         lastRateUpdateT_us = 0;
         lastBitrateAdjustT_us = 0;
         nLoss = 0;
+        bytesRtp = 0;
+        rateRtp = 0.0f;
+        rateRtpSum = 0.0f;
+        rateRtpSumN = 0;
+        for (int n=0; n < kRateRtpHistSize; n++)
+           rateRtpHist[n] = 0;
+        rateRtpHistPtr = 0;
+        rateRtpMedian = 0.0f;
 
 }
 
@@ -498,9 +524,61 @@ void ScreamTx::Stream::updateRate(guint64 time_us) {
         gfloat tDelta = (time_us-lastRateUpdateT_us)/1e6f;
         rateTransmitted = 0.5f*(rateTransmitted + bytesTransmitted*8.0f/tDelta);
         rateAcked = 0.5f*(rateAcked + bytesAcked*8.0f/tDelta);
+        rateRtp = bytesRtp * 8.0f / tDelta;
+        if (rateRtpHist[0] == 0.0f) {
+            /*
+            * Initialize history
+            */
+            for (int i=0; i < kRateRtpHistSize; i++)
+                rateRtpHist[i] = rateRtp;
+        }
     }
+
+    /*
+    * Generate a median RTP bitrate value, this serves to set a reasonably safe 
+    * upper bound to the target bitrate. This limit is useful for stability purposes 
+    * in cases where the link thoughput is limted and the input stimuli to e.g 
+    * a video coder changes between static and varying
+    */
+    rateRtpSum += rateRtp;
+    rateRtpSumN++;
+    if (rateRtpSumN==5) {
+        /*
+        * An average video bitrate is stored every 5 measurement intervals
+        */
+        gboolean isPicked[kRateRtpHistSize];
+        gfloat sorted[kRateRtpHistSize];
+        gint i,j;
+        rateRtpHist[rateRtpHistPtr] = rateRtpSum/5.0;
+        rateRtpHistPtr = (rateRtpHistPtr + 1) % kRateRtpHistSize;
+        rateRtpSum = 0;
+        rateRtpSumN = 0;
+        /*
+        * Create a sorted list
+        */
+        for (i=0; i < kRateRtpHistSize; i++)
+            isPicked[i] = FALSE;
+        for (i=0; i < kRateRtpHistSize; i++) {
+            gfloat minR = 1.0e8;
+            gint minI;
+            for (j=0; j < kRateRtpHistSize; j++) {
+                if (rateRtpHist[j] < minR && !isPicked[j]) {
+                    minR = rateRtpHist[j];
+                    minI = j;
+                }
+            }
+            sorted[i] = minR;
+            isPicked[minI] = TRUE;
+        }
+        /*
+        * Get median value
+        */
+        rateRtpMedian = sorted[kRateRtpHistSize/2];
+    }
+
     bytesTransmitted = 0;
     bytesAcked = 0;
+    bytesRtp = 0;
     lastRateUpdateT_us = time_us;
 }
 
@@ -508,7 +586,7 @@ void ScreamTx::Stream::updateRate(guint64 time_us) {
 * Get the estimated maximum media rate
 */
 gfloat ScreamTx::Stream::getMaxRate() {
-    return MAX(rateTransmitted,rateAcked);
+    return MAX(rateTransmitted,0*rateAcked);
 }
 
 /*
@@ -533,6 +611,11 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
     * Rate is reduced slightly to avoid that more frames than necessary
     * queue up in the sender queue
     */
+
+    /*
+    * Compute a maximum bitrate, this bitrates includes the RTP overhead
+    */
+    gfloat br = getMaxRate();
     if (lossEventFlag) {
         lossEventFlag = FALSE;
         targetBitrateI = targetBitrate;
@@ -542,10 +625,7 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
     } else {
         if (time_us - lastBitrateAdjustT_us < kRateAdjustInterval_us)
             return;
-        /*
-        * Compute a maximum bitrate, this bitrates includes the RTP overhead
-        */
-        gfloat br = getMaxRate();
+
         /*
         * A scale factor that is dependent on the inflection point
         * i.e the last known highest video bitrate
@@ -554,14 +634,6 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
             targetBitrateI;
         sclI *= 4;
         sclI = MAX(0.1f, MIN(1.0f, sclI*sclI));
-        /* 
-        * Need a priority scale as well
-        * Otherwise it will be impossible to 
-        *  achieve a bitrate differentiation
-        * TODO This needs to be done differently
-        *  distribute the total max throughput among the
-        *  streams according to their priorities
-        */
 
         gfloat increment = 0.0f;
 
@@ -576,8 +648,10 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
         */
         gint lastBytes = MAX(0,(int)(targetBitrate/8.0/frameRate));
         gint txSizeBits = MAX(0,rtpQueue->sizeOfQueue()-lastBytes)*8;
+        
+        gfloat alpha = 0.5f;
 
-        txSizeBitsAvg = 0.5f*(txSizeBitsAvg+txSizeBits);
+        txSizeBitsAvg = txSizeBitsAvg*alpha+txSizeBits*(1.0f-alpha);
         /*
         * tmp is a local scaling factor that makes rate adaptation sligthly more 
         * aggressive when competing flows (e.g file transfers) are detected
@@ -586,7 +660,11 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
         if (parent->isCompetingFlows())
             tmp = 0.5f;
 
-        if (parent->inFastStart && txSizeBits/targetBitrate < 0.1f) {
+        if (txSizeBits/MAX(br,targetBitrate) > 1.0f) {
+            rtpQueue->clear();
+            targetBitrate = minBitrate;
+            txSizeBitsAvg = 0.0f;
+        } else if (parent->inFastStart && txSizeBits/MAX(br,targetBitrate) < 0.1f) {
             /*
             * Increment scale factor, rate can increase from min to max
             * in kRampUpTime if no congestion is detected
@@ -633,13 +711,29 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
                     * This limitation is not in effect if competing flows are detected
                     */ 
                     increment *= sclI;	
-                    increment = MIN(increment,(gfloat)(kRampUpSpeed*(kRateAdjustInterval_us/1e6)));
+                    increment = MIN(increment, (gfloat)(kRampUpSpeed*(kRateAdjustInterval_us/1e6)));
                 }
             }
             targetBitrate += increment;		
         }
         lastBitrateAdjustT_us  = time_us;	
     }
+    /*
+    * Limit target bitrate so that it is not considerably higher than the actual bitrate,
+    *  this improves stability in thorughput limited cases where video input changes a lot.
+    * A median filtered value of the recent media bitrate is used for the limitation. This
+    *  allows for a good performance in the cases where the input stimuli to the 
+    *  video coder changes from static to varying.
+    * This feature is disabled when competing (TCP) flows share the same bottleneck as it would
+    *  otherwise degrade SCReAMs ability to grab a decent share of the bottleneck bandwidth
+    */
+    if (!parent->isCompetingFlows()) {
+        gfloat rateRtpLimit;
+        rateRtpLimit = MAX(br,MAX(rateRtp, rateRtpMedian));
+        rateRtpLimit *= (2.0-1.0*parent->owdTrendMem);
+        targetBitrate = MIN(rateRtpLimit, targetBitrate);
+    }
+
     targetBitrate = MIN(maxBitrate,MAX(minBitrate,targetBitrate));
 
 }
@@ -801,6 +895,9 @@ void ScreamTx::updateCwnd(guint64 time_us) {
             owdFractionHist[owdFractionHistPtr] = getOwdFraction();
             owdFractionHistPtr = (owdFractionHistPtr+1) % kOwdFractionHistSize;
             computeOwdTrend();
+
+            owdTrendMem = MAX(owdTrendMem*0.99,owdTrend);
+
             if (kEnableSbd) {
                 /*
                 * Shared bottleneck detection, 
@@ -908,13 +1005,19 @@ void ScreamTx::updateCwnd(guint64 time_us) {
     * Congestion window validation, checks that the congestion window is
     * not considerably higher than the actual number of bytes in flight
     */ 
-    gint maxBytesInFlight = (int)(MAX(bytesInFlightMax, getMaxBytesInFlight()) *
-        kMaxBytesInFlightHeadRoom);
-
+    gint maxBytesInFlightHi = (int)(MAX(bytesInFlightMaxHi, getMaxBytesInFlightHi()));
+    gint maxBytesInFlightLo = (int)(MAX(bytesInFlight(), getMaxBytesInFlightLo()));
+    gfloat maxBytesInFlight = (maxBytesInFlightHi*(1.0-owdTrendMem)+maxBytesInFlightLo*owdTrendMem)*
+        kMaxBytesInFlightHeadRoom;
     if (maxBytesInFlight > 0) {
         cwnd = MIN(cwnd, maxBytesInFlight);
     }
 
+    if (false && getSRtt() < 0.01f && owdTrend < 0.1) {
+        guint tmp = rateTransmitted*0.01f/8;
+        tmp = MAX(tmp,maxBytesInFlight*1.5);
+        cwnd = MAX(cwnd,tmp);
+    }
     cwnd = MAX(cwndMin, cwnd);
 
     if (kOpenCwnd) {
@@ -984,16 +1087,29 @@ gint ScreamTx::bytesInFlight() {
 /*
 * Get max bytes in flight over a time window
 */
-gint ScreamTx::getMaxBytesInFlight() {
+gint ScreamTx::getMaxBytesInFlightLo() {
     /*
     * All elements in the buffer must be initialized before
     * return value > 0
     */
-    if (bytesInFlightHist[bytesInFlightHistPtr] == 0)
+    if (bytesInFlightHistLo[bytesInFlightHistPtr] == 0)
         return 0;
     guint ret = 0;
     for (int n=0; n < kBytesInFlightHistSize; n++) {
-        ret = MAX(ret,bytesInFlightHist[n]);
+        ret = MAX(ret,bytesInFlightHistLo[n]);
+    }
+    return ret;
+}
+gint ScreamTx::getMaxBytesInFlightHi() {
+    /*
+    * All elements in the buffer must be initialized before
+    * return value > 0
+    */
+    if (bytesInFlightHistHi[bytesInFlightHistPtr] == 0)
+        return 0;
+    guint ret = 0;
+    for (int n=0; n < kBytesInFlightHistSize; n++) {
+        ret = MAX(ret,bytesInFlightHistHi[n]);
     }
     return ret;
 }
