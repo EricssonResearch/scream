@@ -43,11 +43,6 @@ static const gfloat kTxQueueSizeFactor = 1.0f;
 static const gfloat kOwdGuard = 0.05f;
 // Video rate scaling due to loss events
 static const gfloat kLossEventRateScale = 0.9f;
-// Additional send window slack (if no or little congestion detected)
-// An incrased value such as 0.5 can improve transmission of Key frames
-// however with a higher risk of unstable behavior in 
-// sudden congestion situations
-static const gfloat kBytesInFlightSlack = 0.2f;
 // Rate update interval
 static const guint64 kRateAdjustInterval_us = 200000; // 200ms  
 
@@ -68,7 +63,7 @@ static const gfloat kOwdTargetMax = 0.3f; //ms
 static const gint kReOrderingLimit = 5; 
 // Congestion window validation
 static const gfloat kBytesInFlightHistInterval_us = 1000000; // Time (s) between stores 1s
-static const gfloat kMaxBytesInFlightHeadRoom = 1.5f;
+static const gfloat kMaxBytesInFlightHeadRoom = 1.0f;
 // OWD trend and shared bottleneck detection
 static const guint64 kOwdFractionHistInterval_us = 50000; // 50ms
 // Max video rate estimation update period
@@ -178,6 +173,35 @@ void ScreamTx::newMediaFrame(guint64 time_us, guint32 ssrc, gint bytesRtp) {
 }
 
 /*
+* Determine active streams
+*/
+void ScreamTx::determineActiveStreams(guint64 time_us) {
+	gfloat surplusBitrate = 0.0f;
+	gfloat sumPrio = 0.0;
+	gboolean streamSetInactive = FALSE;
+	for (int n = 0; n < nStreams; n++) {
+		if (time_us-streams[n]->lastFrameT_us > 1000000 && streams[n]->isActive) {
+			streams[n]->isActive = FALSE;
+			surplusBitrate += streams[n]->targetBitrate;
+			streams[n]->targetBitrate = streams[n]->minBitrate;
+			streamSetInactive = TRUE;
+		} else {
+			sumPrio += streams[n]->targetPriority;
+		}
+	}
+	if (streamSetInactive) {
+		for (int n = 0; n < nStreams; n++) {
+			if (streams[n]->isActive) {
+				streams[n]->targetBitrate = MIN(streams[n]->maxBitrate, 
+					streams[n]->targetBitrate + 
+					surplusBitrate*streams[n]->targetPriority / sumPrio);
+			}
+		}
+	}
+
+}
+
+/*
 * Determine if OK to transmit RTP packet
 */
 gfloat ScreamTx::isOkToTransmit(guint64 time_us, guint32 &ssrc) {
@@ -262,9 +286,7 @@ gfloat ScreamTx::isOkToTransmit(guint64 time_us, guint32 &ssrc) {
     if (owd > owdTarget) {
         exit = (bytesInFlight() + sizeOfNextRtp) > cwnd;
     } else {
-        gfloat x_cwnd = 1.0f+kBytesInFlightSlack*MAX(0.0f,MIN(1.0f,1.0f-owdTrend/0.5f));
-        gfloat max_cwnd = MAX(cwnd*x_cwnd, (gfloat)cwnd+mss);
-        exit = bytesInFlight() + sizeOfNextRtp > max_cwnd;
+        exit = (bytesInFlight() + sizeOfNextRtp) > cwnd + mss;
     }
     /*
     * A retransmission time out mechanism to avoid deadlock
@@ -513,6 +535,8 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
            rateRtpHist[n] = 0;
         rateRtpHistPtr = 0;
         rateRtpMedian = 0.0f;
+		isActive = false;
+		lastFrameT_us = 0;
 
 }
 
@@ -606,18 +630,21 @@ ScreamTx::Stream* ScreamTx::getStream(guint32 ssrc) {
 */
 void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
     if (lastBitrateAdjustT_us == 0) lastBitrateAdjustT_us = time_us;
-    /*
-    * Loss event handling
-    * Rate is reduced slightly to avoid that more frames than necessary
-    * queue up in the sender queue
-    */
+	isActive = TRUE;
+	lastFrameT_us = time_us;
 
     /*
     * Compute a maximum bitrate, this bitrates includes the RTP overhead
     */
     gfloat br = getMaxRate();
+
     if (lossEventFlag) {
-        lossEventFlag = FALSE;
+	    /*
+		* Loss event handling
+		* Rate is reduced slightly to avoid that more frames than necessary
+		* queue up in the sender queue
+		*/        
+		lossEventFlag = FALSE;
         targetBitrateI = targetBitrate;
         targetBitrate = MAX(minBitrate,
             targetBitrate*kLossEventRateScale);
@@ -694,9 +721,8 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
             /*
             * Update target rate
             */ 
-            gfloat increment = br*
-                MAX(0.5,(1.0f-kOwdGuard*scl*tmp))*
-                (1.0f-kTxQueueSizeFactor*txSizeBitsAvg/targetBitrate*tmp)-targetBitrate;
+            gfloat increment = br*(1.0f-kOwdGuard*scl*tmp)-
+                kTxQueueSizeFactor*txSizeBitsAvg*tmp-targetBitrate;
             if (increment < 0) {
                 if (wasFastStart) {
                     wasFastStart = FALSE;
@@ -738,6 +764,11 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
 
 }
 
+/*
+* Adjust (enforce) proper prioritization between active streams 
+* at regular intervals. This is a necessary addon to mitigate 
+* issues that VBR media brings
+*/
 void ScreamTx::adjustPriorities(guint64 time_us) {
     if (nStreams == 1 || time_us - lastAdjustPrioritiesT_us < 5000000) {
         return;
@@ -746,29 +777,34 @@ void ScreamTx::adjustPriorities(guint64 time_us) {
     gfloat br = 0.0f;
     gfloat tPrioSum = 0.0f;
     for (int n=0; n < nStreams; n++) {
-        if (streams[n]->targetBitrate > 0.9*streams[n]->maxBitrate) {
-            /*
-            * Don't adjust prioritites if atleast one stream runs at its
-            * highest target bitrate
-            */
-            return;
-        }
-        br += streams[n]->getMaxRate();
-        tPrioSum += streams[n]->targetPriority;
+		if (streams[n]->isActive) {
+			if (streams[n]->targetBitrate > 0.9*streams[n]->maxBitrate ||
+				streams[n]->rateRtp < streams[n]->targetBitrate*0.2) {
+				/*
+				* Don't adjust prioritites if atleast one stream runs at its
+				* highest target bitrate or if atleast one stream is idle
+				*/
+				return;
+			}
+			br += streams[n]->getMaxRate();
+			tPrioSum += streams[n]->targetPriority;
+		}
     }
     /*
     * Force down the target bitrate for streams that consume an unduly 
     * amount of the bandwidth, given the priority distribution
     */
     for (int n=0; n < nStreams; n++) {
-        gfloat brShare = br*streams[n]->targetPriority/tPrioSum; 
-        gfloat diff = (streams[n]->getMaxRate()-brShare);
-        if (diff > 0) {
-            streams[n]->targetBitrate = MAX(streams[n]->minBitrate, streams[n]->targetBitrate-diff);
-        }
+		if (streams[n]->isActive) {
+			gfloat brShare = br*streams[n]->targetPriority / tPrioSum;
+			gfloat diff = (streams[n]->getMaxRate() - brShare);
+			if (diff > 0) {
+				streams[n]->targetBitrate = MAX(streams[n]->minBitrate, streams[n]->targetBitrate - diff);
+				streams[n]->targetBitrateI = streams[n]->targetBitrate;
+			}
+		}
     }
 }
-
 
 /*
 * Get the prioritized stream
@@ -838,7 +874,7 @@ void ScreamTx::addCredit(guint64 time_us, Stream* servedStream, gint transmitted
             if (tmp->rtpQueue->sizeOfNextRtp() > 0) {
                 tmp->credit += credit;
             } else { 
-                tmp->credit = MIN((gfloat) (2*mss), tmp->credit + credit);
+				tmp->credit = MIN((gfloat)(2 * mss), tmp->credit + credit);
             }
         }
     }
@@ -856,7 +892,7 @@ void ScreamTx::subtractCredit(guint64 time_us, Stream* servedStream, gint transm
 }
 
 /*
-* Update the  congetsion window
+* Update the  congestion window
 */
 void ScreamTx::updateCwnd(guint64 time_us) {
     /*
@@ -1013,7 +1049,7 @@ void ScreamTx::updateCwnd(guint64 time_us) {
         cwnd = MIN(cwnd, maxBytesInFlight);
     }
 
-    if (false && getSRtt() < 0.01f && owdTrend < 0.1) {
+    if (getSRtt() < 0.01f && owdTrend < 0.1) {
         guint tmp = rateTransmitted*0.01f/8;
         tmp = MAX(tmp,maxBytesInFlight*1.5);
         cwnd = MAX(cwnd,tmp);

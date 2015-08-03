@@ -16,7 +16,7 @@ using namespace std;
 
 const gfloat Tmax = 100.0f;
 const gboolean testLowBitrate = FALSE;
-const gboolean isChRate = TRUE; 
+const gboolean isChRate = FALSE; 
 
 int _tmain(int argc, _TCHAR* argv[])
 {

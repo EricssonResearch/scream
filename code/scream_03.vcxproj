@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{995F8DF3-7BE9-4B48-89EA-4F64046D68C2}</ProjectGuid>
+    <ProjectGuid>{9D194C6B-DFA1-4986-98B0-918AC40FDF3B}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>scream_01</RootNamespace>
   </PropertyGroup>
@@ -51,13 +51,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\eplijoh\glib\lib\glib-2.0\include;C:\eplijoh\glib\include\glib-2.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\eplijoh\glib\lib\glib-2.0\include;C:\eplijoh\glib\include\glib-2.0</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\eplijoh\glib\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glib-2.0.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\eplijoh\glib\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glib-2.0.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -93,7 +93,7 @@
     <ClCompile Include="NetQueue.cpp" />
     <ClCompile Include="RtpQueue.cpp" />
     <ClCompile Include="ScreamRx.cpp" />
-    <ClCompile Include="scream_01.cpp" />
+    <ClCompile Include="scream_03.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="ScreamTx.cpp" />
     <ClCompile Include="VideoEnc.cpp" />

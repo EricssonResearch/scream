@@ -57,6 +57,11 @@ public:
     */ 
     void newMediaFrame(guint64 time_us, guint32 ssrc, gint bytesRtp);
 
+	/*
+	* Call this function at regular intervals to determine active streams
+	*/
+	void determineActiveStreams(guint64 time_us);
+
     /*
     * Function determines if an RTP packet with SSRC can be transmitted
     * Return values :
@@ -172,6 +177,9 @@ private:
         gfloat rateRtpHist[kRateRtpHistSize]; // History of media coder bitrates
         gint rateRtpHistPtr;     // Ptr to above
         gfloat rateRtpMedian;    // Median media bitrate
+
+		gboolean isActive;
+		guint64 lastFrameT_us;
 
     };
 

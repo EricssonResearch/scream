@@ -4,7 +4,7 @@
 class RtpQueue;
 class VideoEnc {
 public:
-    VideoEnc(RtpQueue* rtpQueue, float frameRate, float delta=0.0, bool simIr=false);
+    VideoEnc(RtpQueue* rtpQueue, float frameRate, float delta=0.0, bool simIr=false, bool simIdle=false);
 
     int encode(float time);
 
@@ -17,7 +17,9 @@ public:
     float delta;
     unsigned int seqNr;
     bool simIr;
+	bool simIdle;
     bool isIr; 
+	int ixIdle = 0;
 };
 
 
