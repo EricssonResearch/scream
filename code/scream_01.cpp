@@ -14,9 +14,9 @@
 #include <stdlib.h>
 using namespace std;
 
-const gfloat Tmax = 100.0f;
+const gfloat Tmax = 120.0f;
 const gboolean testLowBitrate = FALSE;
-const gboolean isChRate = FALSE; 
+const gboolean isChRate = TRUE; 
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -37,15 +37,15 @@ int _tmain(int argc, _TCHAR* argv[])
     ScreamRx *screamRx = new ScreamRx();
     RtpQueue *rtpQueue = new RtpQueue();
     VideoEnc *videoEnc = 0;
-    NetQueue *netQueueDelay = new NetQueue(0.001f,0.0f,0.0f);
+    NetQueue *netQueueDelay = new NetQueue(0.1f,0.0f,0.03f);
     NetQueue *netQueueRate = 0;
     if (testLowBitrate) {
         netQueueRate = new NetQueue(0.0f,50000,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f); 
         screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f,kFrameRate);
     } else {
-        netQueueRate = new NetQueue(0.0f,2e6,0.0f);
-        videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f,false);
+        netQueueRate = new NetQueue(0.0f,1000e3,0.0f);
+        videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f,true);
         screamTx->registerNewStream(rtpQueue, 10, 1.0f, 100000.0f, 5000000.0f,kFrameRate);
     }
 
@@ -134,19 +134,17 @@ int _tmain(int argc, _TCHAR* argv[])
             cout << endl;
         }
 
-        if (testLowBitrate) {
-            if ((time == 20 || time == 60) && isChRate)
-                netQueueRate->rate = 15000;
+            if ((time >= 40) && (time < 60) && isChRate)
+                netQueueRate->rate = 2000e3;
 
-            if ((time == 30 || time == 70) && isChRate)
-                netQueueRate->rate = 50000;
-        } else {
-            if ((time == 40 || time == 60) && isChRate)
-                netQueueRate->rate = 4e5;
+            if ((time >= 60) && (time < 80) && isChRate)
+                netQueueRate->rate = 600e3;
 
-            if ((time == 50 || time == 70) && isChRate)
-                netQueueRate->rate = 2e6;
-        }
+			if ((time >= 80) && (time < 100) && isChRate)
+                netQueueRate->rate = 1000e3;
+
+            if ((time >= 100) && isChRate)
+                netQueueRate->rate = 2000e3;
 
         n++;
         Sleep(0) ;
