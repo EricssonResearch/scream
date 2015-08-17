@@ -40,7 +40,7 @@ static const gfloat kTxQueueSizeFactor = 1.0f;
 // Compensation factor for detected congestion in rate computation 
 // A higher value such as 0.2 gives less jitter esp. in wireless (LTE)
 // but potentially also lower link utilization
-static const gfloat kOwdGuard = 0.1f;
+static const gfloat kOwdGuard = 0.02f;
 // Video rate scaling due to loss events
 static const gfloat kLossEventRateScale = 0.9f;
 // Rate update interval
