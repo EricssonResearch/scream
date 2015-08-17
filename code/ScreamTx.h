@@ -180,6 +180,7 @@ private:
 
 		gboolean isActive;
 		guint64 lastFrameT_us;
+		guint64 initTime_us;
 
     };
 

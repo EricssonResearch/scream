@@ -40,7 +40,7 @@ static const gfloat kTxQueueSizeFactor = 1.0f;
 // Compensation factor for detected congestion in rate computation 
 // A higher value such as 0.2 gives less jitter esp. in wireless (LTE)
 // but potentially also lower link utilization
-static const gfloat kOwdGuard = 0.05f;
+static const gfloat kOwdGuard = 0.1f;
 // Video rate scaling due to loss events
 static const gfloat kLossEventRateScale = 0.9f;
 // Rate update interval
@@ -68,6 +68,9 @@ static const gfloat kMaxBytesInFlightHeadRoom = 1.0f;
 static const guint64 kOwdFractionHistInterval_us = 50000; // 50ms
 // Max video rate estimation update period
 static const gfloat kRateUpdateInterval_us = 200000;  // 200ms
+// Max RTP queue delay, RTP queue is cleared if this value is exceeded
+static const gfloat kMaxRtpQueueDelay = 2.0;  // 2s
+
 
 // Base delay history size
 
@@ -265,7 +268,7 @@ gfloat ScreamTx::isOkToTransmit(guint64 time_us, guint32 &ssrc) {
         lastBytesInFlightT_us = time_us;
         accBytesInFlightMax = 0;
         nAccBytesInFlightMax = 0;
-        bytesInFlightMaxLo = 0;
+		bytesInFlightMaxHi = 0;
         /* 
         * In addition, reset MSS, this is useful in case for instance
         * a video stream is put on hold, leaving only audio packets to be 
@@ -537,6 +540,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
         rateRtpMedian = 0.0f;
 		isActive = false;
 		lastFrameT_us = 0;
+		initTime_us = 0;
 
 }
 
@@ -629,6 +633,13 @@ ScreamTx::Stream* ScreamTx::getStream(guint32 ssrc) {
 * Update the target bitrate, the target bitrate includes the RTP overhead
 */
 void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
+	if (initTime_us == 0) {
+		/*
+		* Initialize if the first time
+		*/
+		initTime_us = time_us;
+	}
+
     if (lastBitrateAdjustT_us == 0) lastBitrateAdjustT_us = time_us;
 	isActive = TRUE;
 	lastFrameT_us = time_us;
@@ -687,7 +698,13 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
         if (parent->isCompetingFlows())
             tmp = 0.5f;
 
-        if (txSizeBits/MAX(br,targetBitrate) > 1.0f) {
+        if (txSizeBits/MAX(br,targetBitrate) > kMaxRtpQueueDelay && 
+			(time_us - initTime_us > kMaxRtpQueueDelay*1000000)) {
+			/*
+			* RTP queue is cleared as it is becoming too large,
+			* Function is however disabled initially as there is no reliable estimate of the 
+			* thorughput in the initial phase.
+			*/
             rtpQueue->clear();
             targetBitrate = minBitrate;
             txSizeBitsAvg = 0.0f;
