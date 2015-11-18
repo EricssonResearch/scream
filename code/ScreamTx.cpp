@@ -40,7 +40,7 @@ static const gfloat kTxQueueSizeFactor = 1.0f;
 // Compensation factor for detected congestion in rate computation 
 // A higher value such as 0.2 gives less jitter esp. in wireless (LTE)
 // but potentially also lower link utilization
-static const gfloat kOwdGuard = 0.02f;
+static const gfloat kOwdGuard = 0.2f;
 // Video rate scaling due to loss events
 static const gfloat kLossEventRateScale = 0.9f;
 // Rate update interval
@@ -67,7 +67,7 @@ static const gfloat kMaxBytesInFlightHeadRoom = 1.0f;
 // OWD trend and shared bottleneck detection
 static const guint64 kOwdFractionHistInterval_us = 50000; // 50ms
 // Max video rate estimation update period
-static const gfloat kRateUpdateInterval_us = 200000;  // 200ms
+static const gfloat kRateUpdateInterval_us = 50000;  // 200ms
 // Max RTP queue delay, RTP queue is cleared if this value is exceeded
 static const gfloat kMaxRtpQueueDelay = 2.0;  // 2s
 
@@ -89,7 +89,7 @@ ScreamTx::ScreamTx()
 
     bytesNewlyAcked(0),
     mss(kInitMss),
-    cwnd(kInitMss * 2),
+    cwnd(5000),//kInitMss * 2),
     cwndMin(kInitMss * 2),
     cwndI(1),
     wasCwndIncrease(FALSE),
@@ -201,7 +201,6 @@ void ScreamTx::determineActiveStreams(guint64 time_us) {
 			}
 		}
 	}
-
 }
 
 /*
@@ -478,7 +477,7 @@ gfloat ScreamTx::getTargetBitrate(guint32 ssrc) {
 void ScreamTx::printLog(double time) {
     gint inFlightMax = MAX(bytesInFlight(),getMaxBytesInFlightHi());
 
-    /* 2- 4 */	cout <<	owd             << " " << owdTrendMem           << " " << owdTarget   << " " 
+    /* 2- 4 */	cout <<	owd             << " " << owdTrend           << " " << owdTarget   << " " 
         /* 5- 7 */		 << owdSbdVar       << " " << owdSbdSkew         << " " << getSRtt()   << " "
         /* 8-11 */		 << cwnd            << " " << cwndI              << " " << inFlightMax << " " << bytesInFlight() << " " 
         /*12-13 */		 << isInFastStart() << " " << getPacingBitrate() << " ";
@@ -529,7 +528,8 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
         txSizeBitsAvg = 0.0f;
         lastRateUpdateT_us = 0;
         lastBitrateAdjustT_us = 0;
-        nLoss = 0;
+		lastTargetBitrateIUpdateT_us = 0;
+		nLoss = 0;
         bytesRtp = 0;
         rateRtp = 0.0f;
         rateRtpSum = 0.0f;
@@ -538,10 +538,15 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
            rateRtpHist[n] = 0;
         rateRtpHistPtr = 0;
         rateRtpMedian = 0.0f;
+		for (int n = 0; n < kRateUpDateSize; n++) {
+			rateRtpHistSh[n] = 0.0f;
+			rateAckedHist[n] = 0.0f;
+			rateTransmittedHist[n] = 0.0f;
+		}
+		rateUpdateHistPtr = 0;
 		isActive = false;
 		lastFrameT_us = 0;
 		initTime_us = 0;
-
 }
 
 /*
@@ -550,16 +555,28 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 void ScreamTx::Stream::updateRate(guint64 time_us) {
     if (lastRateUpdateT_us != 0) {
         gfloat tDelta = (time_us-lastRateUpdateT_us)/1e6f;
-        rateTransmitted = 0.5f*(rateTransmitted + bytesTransmitted*8.0f/tDelta);
-        rateAcked = 0.5f*(rateAcked + bytesAcked*8.0f/tDelta);
-        rateRtp = bytesRtp * 8.0f / tDelta;
+		rateTransmittedHist[rateUpdateHistPtr] = bytesTransmitted*8.0f / tDelta;
+		rateAckedHist[rateUpdateHistPtr] = bytesAcked*8.0f / tDelta;
+		rateRtpHistSh[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
         if (rateRtpHist[0] == 0.0f) {
             /*
             * Initialize history
             */
             for (int i=0; i < kRateRtpHistSize; i++)
-                rateRtpHist[i] = rateRtp;
+				rateRtpHist[i] = rateRtpHistSh[rateUpdateHistPtr];
         }
+		rateUpdateHistPtr = (rateUpdateHistPtr + 1) % kRateUpDateSize;
+		rateTransmitted = 0.0f;
+		rateAcked = 0.0f;
+		rateRtp = 0.0f;
+		for (int n = 0; n < kRateUpDateSize; n++) {
+			rateTransmitted += rateTransmittedHist[n];
+			rateAcked += rateAckedHist[n];
+			rateRtp += rateRtpHistSh[n];
+		}
+		rateTransmitted /= kRateUpDateSize;
+		rateAcked /= kRateUpDateSize;
+		rateRtp /= kRateUpDateSize;
     }
 
     /*
@@ -570,14 +587,14 @@ void ScreamTx::Stream::updateRate(guint64 time_us) {
     */
     rateRtpSum += rateRtp;
     rateRtpSumN++;
-    if (rateRtpSumN==5) {
+	if (rateRtpSumN == 1000000 / kRateUpdateInterval_us) {
         /*
-        * An average video bitrate is stored every 5 measurement intervals
+        * An average video bitrate is stored every 1s 
         */
         gboolean isPicked[kRateRtpHistSize];
         gfloat sorted[kRateRtpHistSize];
         gint i,j;
-        rateRtpHist[rateRtpHistPtr] = rateRtpSum/5.0;
+		rateRtpHist[rateRtpHistPtr] = rateRtpSum / (1000000 / kRateUpdateInterval_us);
         rateRtpHistPtr = (rateRtpHistPtr + 1) % kRateRtpHistSize;
         rateRtpSum = 0;
         rateRtpSumN = 0;
@@ -614,7 +631,7 @@ void ScreamTx::Stream::updateRate(guint64 time_us) {
 * Get the estimated maximum media rate
 */
 gfloat ScreamTx::Stream::getMaxRate() {
-    return MAX(rateTransmitted,0*rateAcked);
+    return MAX(rateTransmitted,rateAcked);
 }
 
 /*
@@ -656,7 +673,14 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
 		* queue up in the sender queue
 		*/        
 		lossEventFlag = FALSE;
-        targetBitrateI = targetBitrate;
+		if (time_us - lastTargetBitrateIUpdateT_us > 5000000) {
+			/*
+			* Avoid that target_bitrate_i is set too low in cases where a '
+			* congestion event is prolonged
+			*/
+			targetBitrateI = rateAcked;
+			lastTargetBitrateIUpdateT_us = time_us;
+		}
         targetBitrate = MAX(minBitrate,
             targetBitrate*kLossEventRateScale);
         lastBitrateAdjustT_us  = time_us;	
@@ -698,6 +722,8 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
         if (parent->isCompetingFlows())
             tmp = 0.5f;
 
+		gfloat rampUpSpeed = MIN(kRampUpSpeed, targetBitrate);
+
         if (txSizeBits/MAX(br,targetBitrate) > kMaxRtpQueueDelay && 
 			(time_us - initTime_us > kMaxRtpQueueDelay*1000000)) {
 			/*
@@ -713,27 +739,39 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
             * Increment scale factor, rate can increase from min to max
             * in kRampUpTime if no congestion is detected
             */
-            increment = kRampUpSpeed*(kRateAdjustInterval_us/1e6)*(1.0f-MIN(1.0f, parent->owdTrend/0.2f*tmp));
-            /*
-            * Limit increase rate near the last known highest bitrate
-            */
-            increment *= sclI;
-            /*
-            * Add increment
-            */
-            targetBitrate += increment;
-            /*
+			increment = rampUpSpeed*(kRateAdjustInterval_us / 1e6)*(1.0f - MIN(1.0f, parent->getOwdTrend() / 0.2f*tmp));
+			/*
+			* Limit increase rate near the last known highest bitrate
+			*/
+			increment *= sclI;
+
+			/*
+			* Add increment
+			*/
+			targetBitrate += increment;
+			/*
             * Put an extra cap in case the OWD starts to increase
             */
-            targetBitrate *= MAX(0.5,(1.0f-kOwdGuard*parent->owdTrend*tmp));
+            targetBitrate *= MAX(0.5,(1.0f-kOwdGuard*parent->getOwdTrend()*tmp));
 
             wasFastStart = TRUE;
         } else {
-            /*
+			if (wasFastStart) {
+				wasFastStart = FALSE;
+				if (time_us - lastTargetBitrateIUpdateT_us > 5000000) {
+					/*
+					* Avoid that target_bitrate_i is set too low in cases where a
+					* congestion event is prolonged
+					*/
+					targetBitrateI = rateAcked;
+					lastTargetBitrateIUpdateT_us = time_us;
+				}
+			}
+			/*
             * scl is an an adaptive scaling to prevent overshoot
             */
             gfloat scl = MIN(1.0f,MAX(0.0f, parent->owdFractionAvg-0.3f)/0.7f);
-            scl += parent->owdTrend;
+			scl += parent->getOwdTrend();
 
             /*
             * Update target rate
@@ -743,8 +781,15 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
             if (increment < 0) {
                 if (wasFastStart) {
                     wasFastStart = FALSE;
-                    targetBitrateI = targetBitrate;
-                }
+					if (time_us - lastTargetBitrateIUpdateT_us > 5000000) {
+						/*
+						* Avoid that target_bitrate_i is set too low in cases where a
+						* congestion event is prolonged
+						*/
+						targetBitrateI = rateAcked;
+						lastTargetBitrateIUpdateT_us = time_us;
+					}
+				}
             } else {
                 wasFastStart = TRUE;
                 if (!parent->isCompetingFlows()) {
@@ -754,7 +799,7 @@ void ScreamTx::Stream::updateTargetBitrate(guint64 time_us) {
                     * This limitation is not in effect if competing flows are detected
                     */ 
                     increment *= sclI;	
-                    increment = MIN(increment, (gfloat)(kRampUpSpeed*(kRateAdjustInterval_us/1e6)));
+					increment = MIN(increment, (gfloat)(rampUpSpeed*(kRateAdjustInterval_us / 1e6)));
                 }
             }
             targetBitrate += increment;		
@@ -994,65 +1039,70 @@ void ScreamTx::updateCwnd(guint64 time_us) {
         inFastStart = FALSE;
     }
     else {
-        /*
-        * Compute a scaling dependent on the relation between CWND and the inflection point
-        * i.e the last known max value. This helps to reduce the CWND growth close to
-        * the last known congestion point
-        */
-        gfloat sclI = (cwnd-cwndI)/((gfloat)(cwndI));
-        sclI *= 4.0f;
-        sclI = MAX(0.1f, MIN(1.0f, sclI*sclI));
+			/*
+			* Compute a scaling dependent on the relation between CWND and the inflection point
+			* i.e the last known max value. This helps to reduce the CWND growth close to
+			* the last known congestion point
+			*/
+			gfloat sclI = (cwnd - cwndI) / ((gfloat)(cwndI));
+			sclI *= 4.0f;
+			sclI = MAX(0.1f, MIN(1.0f, sclI*sclI));
 
-        if (inFastStart) {
-            /*
-            * In fast start, variable exit condition depending of
-            * if it is the first fast start or a later
-            * In addition, the threshhold is more relaxed if 
-            * competing flows are detected
-            */
-            gfloat th = 0.2f;
-            if (isCompetingFlows())
-                th = 0.5f;
-            else if (nFastStart > 1)
-                th = 0.1f;
-            if (owdTrend < th) {
-                /*
-                * CWND is in principle increased by the number of ACKed bytes
-                * save for a restriction to 10*MSS. In addition the increase
-                * is limited if CWND is close to the last known max value
-                */
-                cwnd += MIN(10*mss,(int)(bytesNewlyAcked*sclI));
-            } else {
-                inFastStart = FALSE;
-                lastCongestionDetectedT_us = time_us;
-                cwndI = cwnd;
-                wasCwndIncrease = TRUE;
-            }
-        } else {
-            if (offTarget > 0.0f) {
-                /*
-                * OWD below target
-                */
-                wasCwndIncrease = TRUE;
-                /*
-                * Limit growth if OWD shows an increasing trend
-                */
-                gfloat gain = kGainUp*(1.0f+MAX(0.0f,1.0f-owdTrend/0.2f));
-                gain *= sclI;
+			if (inFastStart) {
+				/*
+				* In fast start, variable exit condition depending of
+				* if it is the first fast start or a later
+				* In addition, the threshhold is more relaxed if
+				* competing flows are detected
+				*/
+				gfloat th = 0.2f;
+				if (isCompetingFlows())
+					th = 0.5f;
+				else if (nFastStart > 1)
+					th = 0.1f;
+				if (owdTrend < th) {
+					/*
+					* CWND is in principle increased by the number of ACKed bytes
+					* save for a restriction to 10*MSS. In addition the increase
+					* is limited if CWND is close to the last known max value
+					* cwnd is not increased if less than half is used
+					*/
+					if (bytesInFlight() > cwnd / 2)
+						cwnd += MIN(10 * mss, (int)(bytesNewlyAcked*sclI));
+				}
+				else {
+					inFastStart = FALSE;
+					lastCongestionDetectedT_us = time_us;
+					cwndI = cwnd;
+					wasCwndIncrease = TRUE;
+				}
+			}
+			else {
+				if (offTarget > 0.0f) {
+					/*
+					* OWD below target
+					*/
+					wasCwndIncrease = TRUE;
+					/*
+					* Limit growth if OWD shows an increasing trend
+					*/
+					gfloat gain = kGainUp*(1.0f + MAX(0.0f, 1.0f - owdTrend / 0.2f));
+					gain *= sclI;
 
-                cwnd += (int)(gain * offTarget * bytesNewlyAcked * mss / cwnd + 0.5f);
-            } else {
-                /*
-                * OWD above target
-                */
-                if (wasCwndIncrease) {
-                    wasCwndIncrease = FALSE;
-                    cwndI = cwnd;
-                }
-                cwnd += (int)(kGainDown * offTarget * bytesNewlyAcked * mss / cwnd);
-                lastCongestionDetectedT_us = time_us;
-            }
-        }
+					cwnd += (int)(gain * offTarget * bytesNewlyAcked * mss / cwnd + 0.5f);
+				}
+				else {
+					/*
+					* OWD above target
+					*/
+					if (wasCwndIncrease) {
+						wasCwndIncrease = FALSE;
+						cwndI = cwnd;
+					}
+					cwnd += (int)(kGainDown * offTarget * bytesNewlyAcked * mss / cwnd);
+					lastCongestionDetectedT_us = time_us;
+				}
+		}
     }
     /*
     * Congestion window validation, checks that the congestion window is
@@ -1062,7 +1112,7 @@ void ScreamTx::updateCwnd(guint64 time_us) {
     gint maxBytesInFlightLo = (int)(MAX(bytesInFlight(), getMaxBytesInFlightLo()));
     gfloat maxBytesInFlight = (maxBytesInFlightHi*(1.0-owdTrendMem)+maxBytesInFlightLo*owdTrendMem)*
         kMaxBytesInFlightHeadRoom;
-    if (maxBytesInFlight > 0) {
+    if (maxBytesInFlight > 5000) {
         cwnd = MIN(cwnd, maxBytesInFlight);
     }
 
@@ -1242,4 +1292,11 @@ void ScreamTx::computeSbd() {
 */
 gboolean ScreamTx::isCompetingFlows() {
     return owdTarget > kOwdTargetMin;
+}
+
+/*
+* Get OWD trend
+*/
+gfloat ScreamTx::getOwdTrend() {
+	return owdTrend;
 }

@@ -14,9 +14,9 @@
 #include <stdlib.h>
 using namespace std;
 
-const gfloat Tmax = 120.0f;
+const gfloat Tmax = 100.0f;
 const gboolean testLowBitrate = FALSE;
-const gboolean isChRate = TRUE; 
+const gboolean isChRate = FALSE; 
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -37,16 +37,16 @@ int _tmain(int argc, _TCHAR* argv[])
     ScreamRx *screamRx = new ScreamRx();
     RtpQueue *rtpQueue = new RtpQueue();
     VideoEnc *videoEnc = 0;
-    NetQueue *netQueueDelay = new NetQueue(0.01f,0.0f,0.03f);
+    NetQueue *netQueueDelay = new NetQueue(0.1f,0.0f,0.01f);
     NetQueue *netQueueRate = 0;
     if (testLowBitrate) {
         netQueueRate = new NetQueue(0.0f,50000,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f); 
         screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f,kFrameRate);
     } else {
-        netQueueRate = new NetQueue(0.0f,1000e3,0.0f);
-        videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f,false);
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 100000.0f, 5000000.0f,kFrameRate);
+        netQueueRate = new NetQueue(0.0f,500e3,0.0f);
+        videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f,false,false,5);
+        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 5000000.0f,kFrameRate);
     }
 
 
