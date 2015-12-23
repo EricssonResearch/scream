@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <glib-object.h>
+//#include <glib-object.h>
 
 using namespace std;
 /*
@@ -46,7 +46,7 @@ void NetQueue::insert(float time,
 	items[head]->tRelease = time+delay+jitter*(rand()/float(RAND_MAX));
 	if (rate > 0)
 		items[head]->tRelease += sizeOfQueue()*8.0f/rate;
-	items[head]->tRelease = MAX(items[head]->tRelease, nextTx);
+	items[head]->tRelease = std::max(items[head]->tRelease, nextTx);
 	nextTx = items[head]->tRelease;
 }
 

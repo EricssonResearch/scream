@@ -8,29 +8,33 @@
 #include "ScreamTx.h"
 #include "ScreamRx.h"
 #include <iostream>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
+#endif
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 using namespace std;
 
-const gfloat Tmax = 100.0f;
-const gboolean testLowBitrate = FALSE;
-const gboolean isChRate = FALSE; 
+const float Tmax = 100.0f;
+const bool testLowBitrate = false;
+const bool isChRate = false; 
 
-int _tmain(int argc, _TCHAR* argv[])
+int main(int argc, char* argv[])
 {
 
-    guint64 rtcpFbInterval_us;
-    gfloat kFrameRate = 25.0f;
-    gint videoTick = (gint)(2000.0/kFrameRate);
+    uint64_t rtcpFbInterval_us;
+    float kFrameRate = 25.0f;
+    int videoTick = (int)(2000.0/kFrameRate);
     if (testLowBitrate) {
         kFrameRate = 50.0f;
-        videoTick = (gint)(2000.0/kFrameRate);
+        videoTick = (int)(2000.0/kFrameRate);
         rtcpFbInterval_us = 100000;
     } else {
         kFrameRate = 25.0f;
-        videoTick = (gint)(2000.0/kFrameRate);
+        videoTick = (int)(2000.0/kFrameRate);
         rtcpFbInterval_us = 30000;
     }
     ScreamTx *screamTx = new ScreamTx();
@@ -50,28 +54,28 @@ int _tmain(int argc, _TCHAR* argv[])
     }
 
 
-    gfloat time = 0.0f;
-    guint64 time_us = 0;
-    guint64 time_us_tx = 0;
-    guint64 time_us_rx = 0;
-    gint n = 0;
-    gint nPkt = 0;
-    guint32 ssrc;
-    guint8 pt;
+    float time = 0.0f;
+    uint64_t time_us = 0;
+    uint64_t time_us_tx = 0;
+    uint64_t time_us_rx = 0;
+    int n = 0;
+    int nPkt = 0;
+    uint32_t ssrc;
+    uint8_t pt;
     void *rtpPacket = 0;
-    gint size;
-    guint16 seqNr;
-    gint nextCallN = -1;
-    gboolean isFeedback = FALSE;
+    int size;
+    uint16_t seqNr;
+    int nextCallN = -1;
+    bool isFeedback = false;
 
     while (time <= Tmax) {
-        gfloat retVal = -1.0;
+        float retVal = -1.0;
         time = n/2000.0f;
         time_us = n*500;
         time_us_tx = time_us+000000;
         time_us_rx = time_us+000000;
 
-        gboolean isEvent = FALSE;
+        bool isEvent = false;
 
         if (n % videoTick == 0) {
             // "Encode" video frame
@@ -82,7 +86,7 @@ int _tmain(int argc, _TCHAR* argv[])
             * New RTP packets added, try if OK to transmit
             */
             retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
-            isEvent = TRUE;
+            isEvent = true;
         }
 
         if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr)) {
@@ -97,16 +101,16 @@ int _tmain(int argc, _TCHAR* argv[])
             nPkt++;
 
         }
-        guint32 rxTimestamp;
-        guint16 aseqNr;
-        guint32 aackVector;
-        guint8 anLoss;
+        uint32_t rxTimestamp;
+        uint16_t aseqNr;
+        uint32_t aackVector;
+        uint8_t anLoss;
         if (isFeedback && (time_us_rx - screamRx->getLastFeedbackT() > rtcpFbInterval_us)) {
             if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, anLoss)) {
-                screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr,  anLoss, FALSE);
+                screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr,  anLoss, false);
                 retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
-                isFeedback = FALSE;
-                isEvent = TRUE;
+                isFeedback = false;
+                isEvent = true;
             }
         }
 
@@ -114,7 +118,7 @@ int _tmain(int argc, _TCHAR* argv[])
             retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
             if (retVal > 0) {
                 nextCallN = n + max(1,(int)(1000.0*retVal));
-                isEvent = TRUE;
+                isEvent = true;
             }
         }
         if (retVal == 0) {
@@ -125,7 +129,7 @@ int _tmain(int argc, _TCHAR* argv[])
             netQueueRate->insert(time,rtpPacket, ssrc, size, seqNr);
             retVal = screamTx->addTransmitted(time_us_tx, ssrc, size, seqNr);
             nextCallN = n + max(1,(int)(1000.0*retVal));
-            isEvent = TRUE;
+            isEvent = true;
         }
 
         if (true && isEvent) {
@@ -147,7 +151,11 @@ int _tmain(int argc, _TCHAR* argv[])
                 netQueueRate->rate = 2000e3;
 
         n++;
+#ifdef _WIN32
         Sleep(0) ;
+#else
+        sleep(0);
+#endif
     }
 
     return 0;

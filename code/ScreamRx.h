@@ -1,6 +1,8 @@
 #ifndef SCREAM_RX
 #define SCREAM_RX
-#include <glib-object.h>
+#include <cstdint>
+#include <list>
+//#include <glib-object.h>
 
 class ScreamRx {
 public:
@@ -10,62 +12,63 @@ public:
     */ 
     class Stream {
     public:
-        Stream(guint32 ssrc); 
+        Stream(uint32_t ssrc); 
 
-        gboolean isMatch(guint32 ssrc_) {return ssrc==ssrc_;};
+        bool isMatch(uint32_t ssrc_) {return ssrc==ssrc_;};
 
         /*
         * Receive RTP packet 
         * return TRUE if loss detected
         */
-        void receive(guint64 time_us, 
+        void receive(uint64_t time_us, 
             void *rtpPacket, 
-            gint size, 
-            guint16 seqNr);
+            int size, 
+            uint16_t seqNr);
 
-        guint32 ssrc;                // SSRC of stream
-        guint16 highestSeqNr;        // Highest received sequence number
-        guint32 receiveTimestamp;    // Wall clock time
-        guint16 ackVector;           // List of received packets
-        guint8  nLoss;               // Ackumulated loss
+        uint32_t ssrc;                // SSRC of stream
+        uint16_t highestSeqNr;        // Highest received sequence number
+        uint32_t receiveTimestamp;    // Wall clock time
+        uint16_t ackVector;           // List of received packets
+        uint8_t  nLoss;               // Ackumulated loss
 
-        guint64 lastFeedbackT_us;    // Last time feedback transmitted for
+        uint64_t lastFeedbackT_us;    // Last time feedback transmitted for
                                      //  this SSRC
-        gboolean pendingFeedback;    // TRUE if new feedback pending
+        bool pendingFeedback;    // TRUE if new feedback pending
     };
 
     /*
     * Function is called each time an RTP packet is received
     */
-    void receive(guint64 time_us, 
-        gpointer rtpPacket, 
-        guint32 ssrc,
-        gint size, 
-        guint16 seqNr);
+    void receive(uint64_t time_us, 
+        void* rtpPacket, 
+        uint32_t ssrc,
+        int size, 
+        uint16_t seqNr);
 
     /*
     * Return TRUE if an RTP packet has been received and there is
     * pending feedback
     */
-    gboolean isFeedback();
+    bool isFeedback();
 
     /*
     * Get SCReAM RTCP feedback elements
     * return FALSE if no pending feedback available
     */
-    gboolean getFeedback(guint64 time_us,
-        guint32 &ssrc,
-        guint32 &receiveTimestamp,
-        guint16 &highestSeqNr,
-        guint8 &nLoss);
+    bool getFeedback(uint64_t time_us,
+        uint32_t &ssrc,
+        uint32_t &receiveTimestamp,
+        uint16_t &highestSeqNr,
+        uint8_t &nLoss);
 
-    guint64 getLastFeedbackT() {return lastFeedbackT_us;};
+    uint64_t getLastFeedbackT() {return lastFeedbackT_us;};
 
-    guint64 lastFeedbackT_us;
+    uint64_t lastFeedbackT_us;
     /*
     * Variables for multiple steams handling
     */
-    GSList *streams;
+    //GSList *streams;
+    std::list<Stream*> streams;
 };
 
 #endif
