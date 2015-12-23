@@ -16,17 +16,17 @@ VideoEnc.h
 )
 
 SET(SRC_1
-${SRCS}
+#${SRCS}
 scream_01.cpp
 )
 
 SET(SRC_2
-${SRCS}
+#${SRCS}
 scream_02.cpp
 )
 
 SET(SRC_3
-${SRCS}
+#${SRCS}
 scream_03.cpp
 )
 
@@ -40,22 +40,27 @@ LINK_DIRECTORIES(
 ${screamLink}
 )
 
+ADD_LIBRARY( scream STATIC ${SRCS} ${HEADERS})
+
 ADD_EXECUTABLE(scream_01 ${SRC_1} ${HEADERS})
 ADD_EXECUTABLE(scream_02 ${SRC_2} ${HEADERS})
 ADD_EXECUTABLE(scream_03 ${SRC_3} ${HEADERS})
 
 TARGET_LINK_LIBRARIES (
 scream_01
+scream
 ${screamLibs}
 )
 
 TARGET_LINK_LIBRARIES (
 scream_02
+scream
 ${screamLibs}
 )
 
 TARGET_LINK_LIBRARIES (
 scream_03
+scream
 ${screamLibs}
 )
 
