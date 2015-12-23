@@ -26,6 +26,13 @@ int main(int argc, char* argv[])
 {
 
     uint64_t rtcpFbInterval_us;
+    uint32_t our_ssrc = 10;
+    float priority = 1.0f;
+    float FIVE_KBPS = 5000.0f;
+    float FIFTY_KBPS = 50000.0f;
+    float SIXTY_FOUR_KBPS = 64000.0f;
+    float FIVE_MBPS = 5000000.0f;
+
     float kFrameRate = 25.0f;
     int videoTick = (int)(2000.0/kFrameRate);
     if (testLowBitrate) {
@@ -46,11 +53,11 @@ int main(int argc, char* argv[])
     if (testLowBitrate) {
         netQueueRate = new NetQueue(0.0f,50000,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.3f); 
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f,kFrameRate);
+        screamTx->registerNewStream(rtpQueue, our_ssrc, priority, FIVE_KBPS, FIFTY_KBPS, kFrameRate);
     } else {
         netQueueRate = new NetQueue(0.0f,500e3,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f,false,false,5);
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 5000000.0f,kFrameRate);
+        screamTx->registerNewStream(rtpQueue, our_ssrc, priority, SIXTY_FOUR_KBPS, FIVE_MBPS, kFrameRate);
     }
 
 
@@ -81,7 +88,7 @@ int main(int argc, char* argv[])
             // "Encode" video frame
             videoEnc->setTargetBitrate(screamTx->getTargetBitrate(10));
             int bytes = videoEnc->encode(time);
-            screamTx->newMediaFrame(time_us_tx, 10, bytes);
+            screamTx->newMediaFrame(time_us_tx, our_ssrc, bytes);
             /*
             * New RTP packets added, try if OK to transmit
             */
