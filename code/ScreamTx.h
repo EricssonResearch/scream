@@ -48,8 +48,8 @@ public:
     void registerNewStream(RtpQueue *rtpQueue,
         uint32_t ssrc, 
         float priority,
-        float minBitrate,
-        float maxBitrate,
+        float minBitrateBps,
+        float maxBitrateBps,
         float frameRate);
 
     /*
@@ -148,7 +148,7 @@ private:
 
         void updateTargetBitrate(uint64_t time_us);
 
-        bool isMatch(uint32_t ssrc_) {return ssrc==ssrc_;};
+        bool isMatch(uint32_t ssrc_) {return ssrc==ssrc_;}
         ScreamTx *parent;
         RtpQueue *rtpQueue;      // RTP Packet queue
         uint32_t ssrc;            // SSRC of stream
