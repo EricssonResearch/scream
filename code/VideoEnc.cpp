@@ -4,7 +4,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <glib-object.h>
+//#include <glib-object.h>
 
 using namespace std;
 
@@ -52,7 +52,7 @@ int VideoEnc::encode(float time) {
 	int ix = targetRateI - 1 - delayIx;
 	//cerr << delayIx << endl;
 	if (ix < 0) ix += TARGET_RATE;
-	float rtpPktPerSec = MAX(frameRate, targetRate[ix] / (1200 * 8));
+	float rtpPktPerSec = std::max(frameRate, targetRate[ix] / (1200 * 8));
 
 
     float rtpOverHead = 0*rtpPktPerSec*(kRtpOverHead*8);
@@ -61,7 +61,7 @@ int VideoEnc::encode(float time) {
 	float tbr = targetRate[ix];
     //if (time > 20 && time < 25)
     //   tbr = 100000;
-    float tmp = MAX(5000.0f,tbr-rtpOverHead);
+    float tmp = std::max(5000.0f,tbr-rtpOverHead);
     int bytes = (int)((tmp/frameRate/8.0)*rnd);
     if (isIr) {
 		bytes = 40000;// *= 20;
@@ -75,7 +75,7 @@ int VideoEnc::encode(float time) {
 	}
 
     while (bytes > 0) {
-        int rtpSize = MIN(kMaxRtpSize,bytes);
+        int rtpSize = std::min(kMaxRtpSize,bytes);
         bytes -= rtpSize;
         rtpSize += kRtpOverHead; 
         rtpBytes += rtpSize;
