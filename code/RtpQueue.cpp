@@ -22,6 +22,7 @@ RtpQueue::RtpQueue() {
     head = -1;
     tail = 0;
     nItems = 0;
+	sizeOfLastFrame = 0;
 }
 
 void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {

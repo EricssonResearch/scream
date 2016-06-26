@@ -74,14 +74,17 @@ int VideoEnc::encode(float time) {
 		bytes *= scale[ixIdle];
 	}
 
+	int sizeOfFrame = 0;
     while (bytes > 0) {
         int rtpSize = std::min(kMaxRtpSize,bytes);
         bytes -= rtpSize;
         rtpSize += kRtpOverHead; 
         rtpBytes += rtpSize;
         rtpQueue->push(0,rtpSize,seqNr,time);
+		sizeOfFrame += rtpSize;
         seqNr++;
     }
+	rtpQueue->setSizeOfLastFrame(sizeOfFrame);
     return rtpBytes;
 }
 

@@ -42,11 +42,11 @@ int _tmain(int argc, _TCHAR* argv[])
     if (testLowBitrate) {
         netQueueRate = new NetQueue(0.0f,50000,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f); 
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f,kFrameRate);
+        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f);
     } else {
         netQueueRate = new NetQueue(0.0f,2000e3,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f,false,false,0);
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 5000000.0f,kFrameRate);
+        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 5000000.0f);
     }
 
 

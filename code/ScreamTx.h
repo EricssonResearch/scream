@@ -88,7 +88,6 @@ public:
 		float priority,
 		float minBitrate,
 		float maxBitrate,
-		float frameRate,
 		float rampUpSpeed = kRampUpSpeed,
 		float maxRtpQueueDelay = kMaxRtpQueueDelay,
 		float txQueueSizeFactor = kTxQueueSizeFactor,
@@ -186,7 +185,6 @@ private:
 			float priority,
 			float minBitrate,
 			float maxBitrate,
-			float frameRate,
 			float rampUpSpeed,
 			float maxRtpQueueDelay,
 			float txQueueSizeFactor,
@@ -219,7 +217,6 @@ private:
 		float minBitrate;       // Min bitrate
 		float maxBitrate;       // Max bitrate
 		float targetBitrate;    // Target bitrate
-		float frameRate;        // Frame rate
 		float targetBitrateI;   // Target bitrate inflection point
 		bool wasFastStart;      // Was fast start
 		bool lossEventFlag;     // Was loss event
@@ -255,9 +252,9 @@ private:
 	void initialize(uint64_t time_us);
 
 	/*
-	* Compute 1st order prediction coefficient of OWD multiplied by the owd fraction
-	* A value [0.0..1.0] indicates if OWD is increasing
-	* This gives a rough estimate of how the one way delay evolves
+	* Compute 1st order prediction coefficient of queue delay multiplied by the queue delay fraction
+	* A value [0.0..1.0] indicates if queue delay is increasing
+	* This gives a rough estimate of how the queuing delay delay evolves
 	*/
 	void computeQueueDelayTrend();
 
@@ -328,7 +325,7 @@ private:
 	* Variables for network congestion control
 	*/
 	/*
-	* Related to computation of OWD and target OWD
+	* Related to computation of queue delay and target queuing delay
 	*/
 
 	float lossBeta;
@@ -440,7 +437,7 @@ private:
 	float getPacingBitrate() { return pacingBitrate; };
 
 	/*
-	* Get the fraction between OWD and the OWD target
+	* Get the fraction between queue delay and the queue delay target
 	*/
 	float getQueueDelayFraction();
 

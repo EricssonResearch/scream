@@ -18,7 +18,6 @@ public:
 
         /*
         * Receive RTP packet 
-        * return TRUE if loss detected
         */
         void receive(uint64_t time_us, 
             void *rtpPacket, 

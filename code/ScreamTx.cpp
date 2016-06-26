@@ -138,7 +138,6 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
 	float priority,
 	float minBitrate,
 	float maxBitrate,
-	float frameRate,
 	float rampUpSpeed,
 	float maxRtpQueueDelay,
 	float txQueueSizeFactor,
@@ -150,7 +149,6 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
 		priority,
 		minBitrate,
 		maxBitrate,
-		frameRate,
 		rampUpSpeed,
 		maxRtpQueueDelay,
 		txQueueSizeFactor,
@@ -553,7 +551,6 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	float priority_,
 	float minBitrate_,
 	float maxBitrate_,
-	float frameRate_,
 	float rampUpSpeed_,
 	float maxRtpQueueDelay_,
 	float txQueueSizeFactor_,
@@ -566,7 +563,6 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	minBitrate = minBitrate_;
 	maxBitrate = maxBitrate_;
 	targetBitrate = minBitrate;
-	frameRate = frameRate_;
 	rampUpSpeed = rampUpSpeed_;
 	maxRtpQueueDelay = maxRtpQueueDelay_;
 	txQueueSizeFactor = txQueueSizeFactor_;
@@ -757,13 +753,11 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		* Size of RTP queue [bits]
 		* As this function is called immediately after a
 		* video frame is produced, we need to accept the new
-		* RTP packets in the queue, we subtract a number of bytes
-		* corresponding to the current bitrate and the best current understanding of the
-		* frame rate.
-		* Ideally the txSizeBits value should ignore the last inserted frame
-		* (RTP packets), this lastBytes approximation is the most simple
+		* RTP packets in the queue, we subtract a number of bytes correspoding to the size 
+		* of the last frame (including RTP overhead), this is simply the aggregated size 
+		* of the RTP packets with the highest RTP timestamp
 		*/
-		int lastBytes = std::max(0, (int)(targetBitrate / 8.0 / frameRate));
+		int lastBytes = rtpQueue->getSizeOfLastFrame();
 		int txSizeBits = std::max(0, rtpQueue->sizeOfQueue() - lastBytes) * 8;
 
 		float alpha = 0.5f;
@@ -1017,7 +1011,7 @@ void ScreamTx::subtractCredit(uint64_t time_us, Stream* servedStream, int transm
 */
 void ScreamTx::updateCwnd(uint64_t time_us) {
 	/*
-	* Compute the OWD
+	* Compute the queuing delay
 	*/
 	uint64_t tmp = estimateOwd(time_us) - getBaseOwd();
 	/*
@@ -1063,13 +1057,13 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 			queueDelayNormHist[queueDelayNormHistPtr] = queueDelayNorm;
 			queueDelayNormHistPtr = (queueDelayNormHistPtr + 1) % kQueueDelayNormHistSize;
 			/*
-			* Compute shared bottleneck detection and update OWD target
-			* if OWD variance is sufficienctly low
+			* Compute shared bottleneck detection and update queue delay target
+			* if queue dela variance is sufficienctly low
 			*/
 			computeSbd();
 			/*
-			* This function avoids the adjustment of owdTarget when
-			* congestion occurs (indicated by high owdSbdVar and owdSbdSkew)
+			* This function avoids the adjustment of queueDelayTarget when
+			* congestion occurs (indicated by high queueDelaydSbdVar and queueDelaySbdSkew)
 			*/
 			float oh = queueDelayTargetMin*(queueDelaySbdMeanSh + sqrt(queueDelaySbdVar));
 			if (lossEventRate > 0.002 && queueDelaySbdMeanSh > 0.5 && queueDelaySbdVar < 0.2) {
@@ -1131,13 +1125,12 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 			}
 			else {
 				inFastStart = false;
-				//lastCongestionDetectedT_us = time_us;
 			}
 		}
 		else {
 			if (offTarget > 0.0f) {
 				/*
-				* OWD below target, increase CWND if window
+				* queue delay below target, increase CWND if window
 				* is used to 1/1.25 = 80%
 				*/
 				if (bytesInFlight()*1.25 > cwnd) {
@@ -1147,7 +1140,7 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 			}
 			else {
 				/*
-				* OWD above target
+				* queue delay above target
 				*/
 				cwnd += (int)(kGainDown * offTarget * bytesNewlyAcked * mss / cwnd);
 				lastCongestionDetectedT_us = time_us;
@@ -1188,7 +1181,7 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 	else if (time_us - lastCongestionDetectedT_us > 5000000 &&
 		!inFastStart && kEnableConsecutiveFastStart) {
 		/*
-		* The OWD trend has been low for more than 1.0s, resume fast start
+		* The queue delay trend has been low for more than 5.0s, resume fast start
 		*/
 		inFastStart = true;
 		lastCongestionDetectedT_us = time_us;
@@ -1264,7 +1257,7 @@ int ScreamTx::getMaxBytesInFlightHi() {
 }
 
 /*
-* Get the OWD fraction
+* Get the queue delay fraction
 */
 float ScreamTx::getQueueDelayFraction() {
 	return queueDelay / queueDelayTarget;
@@ -1333,7 +1326,7 @@ void ScreamTx::computeSbd() {
 }
 
 /*
-* true if the owdTarget is increased due to
+* true if the queueDelayTarget is increased due to
 * detected competing flows
 */
 bool ScreamTx::isCompetingFlows() {
@@ -1341,7 +1334,7 @@ bool ScreamTx::isCompetingFlows() {
 }
 
 /*
-* Get OWD trend
+* Get queue delay trend
 */
 float ScreamTx::getQueueDelayTrend() {
 	return queueDelayTrend;
