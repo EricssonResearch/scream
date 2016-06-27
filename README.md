@@ -44,7 +44,7 @@ A few support classes for experimental use are implemented in:
 
 - NetQueue : Simple delay and bandwidth limitation
 
-For more information on how to use the experimental code, please see [https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf](https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf?raw=true) 
+For more information on how to use the code in multimedia clients or in experimental platforms, please see [https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf](https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf?raw=true) 
 
 
 ## References
