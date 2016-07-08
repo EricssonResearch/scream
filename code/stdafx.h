@@ -5,11 +5,17 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include "targetver.h"
-
-#include <stdio.h>
 #include <tchar.h>
-
-
+#include <windows.h>
+#else
+#include "unistd.h" // for sleep
+#endif
 
 // TODO: reference additional headers your program requires here
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+
