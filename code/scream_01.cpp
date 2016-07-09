@@ -7,18 +7,14 @@
 #include "NetQueue.h"
 #include "ScreamTx.h"
 #include "ScreamRx.h"
-#include <iostream>
-#include <windows.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
+
 using namespace std;
 
 const float Tmax = 50.0f;
 const bool testLowBitrate = false;
 const bool isChRate = false;
 
-int _tmain(int argc, _TCHAR* argv[])
+int main(int argc, char* argv[])
 {
 
     uint64_t rtcpFbInterval_us;
@@ -61,7 +57,7 @@ int _tmain(int argc, _TCHAR* argv[])
     int size;
     uint16_t seqNr;
     int nextCallN = -1;
-    bool isFeedback = FALSE;
+    bool isFeedback = false;
 
     while (time <= Tmax) {
         float retVal = -1.0;
@@ -70,7 +66,7 @@ int _tmain(int argc, _TCHAR* argv[])
         time_us_tx = time_us+000000;
         time_us_rx = time_us+000000;
 
-        bool isEvent = FALSE;
+        bool isEvent = false;
 
         if (n % videoTick == 0) {
             // "Encode" video frame
@@ -81,7 +77,7 @@ int _tmain(int argc, _TCHAR* argv[])
             * New RTP packets added, try if OK to transmit
             */
             retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
-            isEvent = TRUE;
+            isEvent = true;
         }
 
         if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr)) {
@@ -103,10 +99,10 @@ int _tmain(int argc, _TCHAR* argv[])
         if (isFeedback && (time_us_rx - screamRx->getLastFeedbackT() > rtcpFbInterval_us)) {
 			if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector)) {
 				//cerr << rxTimestamp << " " << aseqNr << endl;
-				screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, FALSE);
+				screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, false);
                 retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
-                isFeedback = FALSE;
-                isEvent = TRUE;
+                isFeedback = false;
+                isEvent = true;
             }
         }
 
@@ -114,7 +110,7 @@ int _tmain(int argc, _TCHAR* argv[])
             retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
             if (retVal > 0) {
                 nextCallN = n + max(1,(int)(1000.0*retVal));
-                isEvent = TRUE;
+                isEvent = true;
             }
         }
         if (retVal == 0) {
@@ -125,7 +121,7 @@ int _tmain(int argc, _TCHAR* argv[])
             netQueueRate->insert(time,rtpPacket, ssrc, size, seqNr);
             retVal = screamTx->addTransmitted(time_us_tx, ssrc, size, seqNr);
             nextCallN = n + max(1,(int)(1000.0*retVal));
-            isEvent = TRUE;
+            isEvent = true;
         }
 
         if (true && isEvent) {
@@ -147,7 +143,11 @@ int _tmain(int argc, _TCHAR* argv[])
                 netQueueRate->rate = 2000e3;
 
         n++;
+#ifdef _WIN32
         Sleep(0) ;
+#else
+        sleep(0);
+#endif
     }
 
     return 0;

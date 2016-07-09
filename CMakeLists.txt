@@ -10,10 +10,6 @@ SET(RUNTIME_OUTPUT_DIRECTORY ${scream_SOURCE_DIR}/bin)
 
 SET(scream_BIN ${scream_SOURCE_DIR}/bin)
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
-SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
-SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
-
 message("scream_SOURCE_DIR directories:" ${scream_SOURCE_DIR})
 
 IF(UNIX)
@@ -30,6 +26,9 @@ set(MSVC_VER VC11)
 ELSEIF(MSVC10)
 message("Detected MSVC10 compiler")
 set(MSVC_VER VC10)
+ELSEIF(MSVC14)
+message("Detected MSVC14 compiler")
+set(MSVC_VER VC14)
 ELSE(MSVC12)
 message("WARNING: Unknown/unsupported MSVC version")
 ENDIF(MSVC12)
