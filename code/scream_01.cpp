@@ -10,7 +10,7 @@
 
 using namespace std;
 
-const float Tmax = 50.0f;
+const float Tmax = 200.0f;
 const bool testLowBitrate = false;
 const bool isChRate = false;
 
@@ -23,26 +23,26 @@ int main(int argc, char* argv[])
     if (testLowBitrate) {
         kFrameRate = 50.0f;
         videoTick = (int)(2000.0/kFrameRate);
-        rtcpFbInterval_us = 100000;
+        rtcpFbInterval_us = 1000;
     } else {
         kFrameRate = 25.0f;
         videoTick = (int)(2000.0/kFrameRate);
-        rtcpFbInterval_us = 5000;
+        rtcpFbInterval_us = 1000;
     }
     ScreamTx *screamTx = new ScreamTx();
     ScreamRx *screamRx = new ScreamRx();
     RtpQueue *rtpQueue = new RtpQueue();
     VideoEnc *videoEnc = 0;
-    NetQueue *netQueueDelay = new NetQueue(0.05f,0.0f,0.01f);
+    NetQueue *netQueueDelay = new NetQueue(0.04f,0.0f,0.01f);
     NetQueue *netQueueRate = 0;
     if (testLowBitrate) {
-        netQueueRate = new NetQueue(0.0f,50000,0.0f);
-        videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f); 
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f);
+        netQueueRate = new NetQueue(0.0f,20000,0.0f);
+		videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.0f, false, false, 0);
+        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f,500.0f, 2.0f, 1.0f, 0.1f);
     } else {
-        netQueueRate = new NetQueue(0.0f,2000e3,0.0f);
+        netQueueRate = new NetQueue(0.0f,9000e3,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f,false,false,0);
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 5000000.0f);
+		screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 10000000.0f, 500000.0f, 2.0f, 0.5f, 0.3f);
     }
 
 
@@ -88,12 +88,11 @@ int main(int argc, char* argv[])
 				cerr << "lost " << seqNr << endl;
             } else {
                 screamRx->receive(time_us_rx, 0, ssrc, size, seqNr);
-                isFeedback |= screamRx->isFeedback();
             }
             nPkt++;
-
         }
-        uint32_t rxTimestamp;
+		isFeedback |= screamRx->isFeedback(time_us);
+		uint32_t rxTimestamp;
         uint16_t aseqNr;
         uint64_t aackVector;
         if (isFeedback && (time_us_rx - screamRx->getLastFeedbackT() > rtcpFbInterval_us)) {

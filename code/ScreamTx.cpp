@@ -76,7 +76,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 
 	bytesNewlyAcked(0),
 	mss(kInitMss),
-	cwnd(5000),//kInitMss * 2),
+	cwnd(kInitMss * 2),
 	cwndMin(kInitMss * 2),
 	lastBytesInFlightT_us(0),
 	bytesInFlightMaxLo(0),
@@ -173,6 +173,7 @@ void ScreamTx::newMediaFrame(uint64_t time_us, uint32_t ssrc, int bytesRtp) {
 	int sizeOfNextRtp = stream->rtpQueue->sizeOfNextRtp();
 	mss = std::max(mss, sizeOfNextRtp);
 	cwndMin = 2 * mss;
+	cwnd = max(cwnd, cwndMin);
 }
 
 /*
@@ -276,6 +277,7 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
 		*/
 		mss = kInitMss;
 		cwndMin = 2 * mss;
+		cwnd = max(cwnd, cwndMin);
 	}
 
 	int sizeOfNextRtp = stream->rtpQueue->sizeOfNextRtp();
@@ -376,6 +378,8 @@ float ScreamTx::addTransmitted(uint64_t time_us,
 	*/
 	mss = std::max(mss, size);
 	cwndMin = 2 * mss;
+	cwnd = max(cwnd, cwndMin);
+
 
 	/*
 	* Determine when next RTP packet can be transmitted
@@ -804,7 +808,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		else {
 			if (wasFastStart) {
 				wasFastStart = false;
-				if (time_us - lastTargetBitrateIUpdateT_us > 5000000) {
+				if (time_us - lastTargetBitrateIUpdateT_us > 10000000) {
 					/*
 					* Avoid that target_bitrate_i is set too low in cases where a
 					* congestion event is prolonged
@@ -847,7 +851,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 			if (br > 1e5)
 				rtpQueueDelay = txSizeBits / br;
 			if (rtpQueueDelay > 0.02) {
-				if (time_us - lastTargetBitrateIUpdateT_us > 5000000) {
+				if (time_us - lastTargetBitrateIUpdateT_us > 10000000) {
 					targetBitrateI = std::min(rateAcked, targetBitrate);
 					lastTargetBitrateIUpdateT_us = time_us;
 				}
@@ -1119,8 +1123,10 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 				/*
 				* CWND is increased by the number of ACKed bytes if
 				* window is used to 1/1.5 = 67%
+				* We need to relax the rule a bit for the case that 
+				* feedback may be sparse due to limited RTCP report interval
 				*/
-				if (bytesInFlight()*1.5 > cwnd)
+				if (bytesInFlight()*1.5 + bytesNewlyAcked > cwnd)
 					cwnd += bytesNewlyAcked;
 			}
 			else {

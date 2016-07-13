@@ -31,7 +31,7 @@ public:
 
         uint64_t lastFeedbackT_us;    // Last time feedback transmitted for
                                      //  this SSRC
-        bool pendingFeedback;    // TRUE if new feedback pending
+		int nRtpSinceLastRtcp;       // Number of RTP packets since last transmitted RTCP
     };
 
     /*
@@ -47,7 +47,7 @@ public:
     * Return TRUE if an RTP packet has been received and there is
     * pending feedback
     */
-    bool isFeedback();
+	bool isFeedback(uint64_t time_us);
 
     /*
     * Get SCReAM RTCP feedback elements

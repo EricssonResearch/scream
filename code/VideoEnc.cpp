@@ -55,13 +55,13 @@ int VideoEnc::encode(float time) {
 	float rtpPktPerSec = std::max(frameRate, targetRate[ix] / (1200 * 8));
 
 
-    float rtpOverHead = 0*rtpPktPerSec*(kRtpOverHead*8);
+    float rtpOverHead = 1*rtpPktPerSec*(kRtpOverHead*8);
     //cerr << rtpOverHead << endl;
 
 	float tbr = targetRate[ix];
     //if (time > 20 && time < 25)
     //   tbr = 100000;
-    float tmp = std::max(5000.0f,tbr-rtpOverHead);
+    float tmp = std::max(1000.0f,tbr-rtpOverHead);
     int bytes = (int)((tmp/frameRate/8.0)*rnd);
     if (isIr) {
 		bytes = 40000;// *= 20;

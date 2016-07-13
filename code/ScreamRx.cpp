@@ -5,19 +5,25 @@
 #include <iostream>
 using namespace std;
 
+const int kRtcpIntervalPackets = 5;
+const int kRtcpIntervalMin_us = 20000;
+const int kRtcpIntervalMax_us = 200000;
+
 ScreamRx::Stream::Stream(uint32_t ssrc_) {
 	ssrc = ssrc_;
 	ackVector = 0;
 	receiveTimestamp = 0x0;
 	highestSeqNr = 0x0;
 	lastFeedbackT_us = 0;
-	pendingFeedback = false;
+	nRtpSinceLastRtcp = 0;  
 }
 
 void ScreamRx::Stream::receive(uint64_t time_us,
 	void* rtpPacket,
 	int size,
 	uint16_t seqNr) {
+	nRtpSinceLastRtcp++;
+
 	/*
 	* Make things wrap-around safe
 	*/
@@ -68,7 +74,6 @@ void ScreamRx::Stream::receive(uint64_t time_us,
 	}
 
 	receiveTimestamp = (uint32_t)(time_us / kTimestampRate);
-	pendingFeedback = true;
 }
 
 ScreamRx::ScreamRx() {
@@ -104,11 +109,12 @@ void ScreamRx::receive(uint64_t time_us,
 	streams.push_back(stream);
 }
 
-
-bool ScreamRx::isFeedback() {
+bool ScreamRx::isFeedback(uint64_t time_us) {
 	if (!streams.empty()) {
 		for (auto it = streams.begin(); it != streams.end(); ++it) {
-			if ((*it)->pendingFeedback) {
+			Stream *stream = (*it);
+			uint64_t delta = time_us - stream->lastFeedbackT_us;
+			if (stream->nRtpSinceLastRtcp >= kRtcpIntervalPackets && delta > kRtcpIntervalMin_us || delta > kRtcpIntervalMax_us) {
 				return true;
 			}
 		}
@@ -126,7 +132,7 @@ bool ScreamRx::getFeedback(uint64_t time_us,
 	Stream *stream = NULL;
 	uint64_t minT_us = ULONG_MAX;
 	for (auto it = streams.begin(); it != streams.end(); ++it) {
-		if ((*it)->pendingFeedback && (*it)->lastFeedbackT_us < minT_us) {
+		if ((*it)->nRtpSinceLastRtcp > 0 && (*it)->lastFeedbackT_us < minT_us) {
 			stream = *it;
 			minT_us = (*it)->lastFeedbackT_us;
 
@@ -141,9 +147,11 @@ bool ScreamRx::getFeedback(uint64_t time_us,
 	ssrc = stream->ssrc;
 	ackVector = stream->ackVector;
 
+	//cerr << (time_us - stream->lastFeedbackT_us) / 1e3 << " " << stream->nRtpSinceLastRtcp << endl;
 	stream->lastFeedbackT_us = time_us;
-	stream->pendingFeedback = false;
+	stream->nRtpSinceLastRtcp = 0;
 	lastFeedbackT_us = time_us;
+
 
 	return true;
 }
