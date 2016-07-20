@@ -33,16 +33,16 @@ int main(int argc, char* argv[])
     ScreamRx *screamRx = new ScreamRx();
     RtpQueue *rtpQueue = new RtpQueue();
     VideoEnc *videoEnc = 0;
-    NetQueue *netQueueDelay = new NetQueue(0.04f,0.0f,0.01f);
+    NetQueue *netQueueDelay = new NetQueue(0.1f,0.0f,0.01f);
     NetQueue *netQueueRate = 0;
     if (testLowBitrate) {
         netQueueRate = new NetQueue(0.0f,20000,0.0f);
 		videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.0f, false, false, 0);
         screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 50000.0f,500.0f, 2.0f, 1.0f, 0.1f);
     } else {
-        netQueueRate = new NetQueue(0.0f,9000e3,0.0f);
+        netQueueRate = new NetQueue(0.0f,900e3,0.0f);
         videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f,false,false,0);
-		screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 10000000.0f, 500000.0f, 2.0f, 0.5f, 0.3f);
+		screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 10000000.0f, 100000.0f, 2.0f, 0.5f, 0.3f);
     }
 
 

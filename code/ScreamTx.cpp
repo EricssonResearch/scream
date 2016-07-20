@@ -249,7 +249,7 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
 	* Enforce packet pacing
 	*/
 	if (nextTransmitT_us - time_us > 1000 && nextTransmitT_us > time_us)
-		return (nextTransmitT_us - time_us) / 1e6;
+		return (nextTransmitT_us - time_us) / 1e6f;
 
 	float paceInterval = kMinPaceInterval;
 
@@ -417,7 +417,7 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
 			if (stream->isMatch(tmp->ssrc)) {
 
 				for (int k = 0; k < kAckVectorBits; k++) {
-					if (ackVector & (1 << k)) { // SN marked as received
+					if (ackVector & (1i64 << k)) { // SN marked as received
 						uint16_t seqNr = highestSeqNr - (k + 1);
 						if (tmp->seqNr == seqNr) {
 							/*
@@ -518,7 +518,7 @@ float ScreamTx::getTargetBitrate(uint32_t ssrc) {
 	return getStream(ssrc)->targetBitrate;
 }
 
-void ScreamTx::printLog(double time) {
+void ScreamTx::printLog(float time) {
 	int inFlightMax = std::max(bytesInFlight(), getMaxBytesInFlightHi());
 
 	cout <<
@@ -792,7 +792,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 			* Increment scale factor, rate can increase from min to std::max
 			* in kRampUpTime if no congestion is detected
 			*/
-			increment = rampUpSpeedTmp*(kRateAdjustInterval_us / 1e6);
+			increment = rampUpSpeedTmp*(kRateAdjustInterval_us / 1e6f);
 			/*
 			* Limit increase rate near the last known highest bitrate
 			*/
@@ -820,9 +820,9 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 			/*
 			* scl is based on the queue delay trend
 			*/
-			double scl = queueDelayGuard*parent->getQueueDelayTrend();
+			float scl = queueDelayGuard*parent->getQueueDelayTrend();
 			if (parent->isCompetingFlows())
-				scl *= 0.05;
+				scl *= 0.05f;
 
 			/*
 			* Update target rate
@@ -842,6 +842,13 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 					increment *= sclI;
 					increment = std::min(increment, (float)(rampUpSpeedTmp*(kRateAdjustInterval_us / 1e6)));
 				}
+			} else {
+				/*
+				* Avoid that the target bitrate is reduced if it actually is the media 
+				* coder that limits the output rate e.g due to inactivity
+				*/
+				if (rateRtp < targetBitrate*0.9)
+					increment = 0.0f;
 			}
 			targetBitrate += increment;
 			float rtpQueueDelay = 0;
@@ -850,12 +857,12 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 			*/
 			if (br > 1e5)
 				rtpQueueDelay = txSizeBits / br;
-			if (rtpQueueDelay > 0.02) {
+			if (rtpQueueDelay > 0.02f) {
 				if (time_us - lastTargetBitrateIUpdateT_us > 10000000) {
 					targetBitrateI = std::min(rateAcked, targetBitrate);
 					lastTargetBitrateIUpdateT_us = time_us;
 				}
-				targetBitrate *= 0.95;
+				targetBitrate *= 0.95f;
 			}
 
 		}
@@ -873,7 +880,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 	if (!parent->isCompetingFlows()) {
 		float rateRtpLimit;
 		rateRtpLimit = std::max(br, std::max(rateRtp, rateRtpMedian));
-		rateRtpLimit *= (2.0 - 1.0*parent->queueDelayTrendMem);
+		rateRtpLimit *= (2.0f - 1.0f*parent->queueDelayTrendMem);
 		targetBitrate = std::min(rateRtpLimit, targetBitrate);
 	}
 
@@ -965,7 +972,7 @@ ScreamTx::Stream* ScreamTx::getPrioritizedStream(uint64_t time_us) {
 	* Pick the stream with the highest priority that also
 	* has at least one RTP packet in queue.
 	*/
-	double maxPrio = 0.0;
+	float maxPrio = 0.0;
 	for (int n = 0; n < nStreams; n++) {
 		Stream *tmp = streams[n];
 		float priority = tmp->targetPriority;
@@ -1108,9 +1115,9 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 
 		if (time_us - lastRttT_us > getSRtt()*1e6) {
 			if (wasLossEvent)
-				lossEventRate = 0.99*lossEventRate + 0.01;
+				lossEventRate = 0.99f*lossEventRate + 0.01f;
 			else
-				lossEventRate *= 0.99;
+				lossEventRate *= 0.99f;
 			wasLossEvent = false;
 			lastRttT_us = time_us;
 		}
@@ -1159,14 +1166,14 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 	*/
 	int maxBytesInFlightHi = (int)(std::max(bytesInFlightMaxHi, getMaxBytesInFlightHi()));
 	int maxBytesInFlightLo = (int)(std::max(bytesInFlight(), getMaxBytesInFlightLo()));
-	float maxBytesInFlight = (maxBytesInFlightHi*(1.0 - queueDelayTrendMem) + maxBytesInFlightLo*queueDelayTrendMem)*
+	float maxBytesInFlight = (maxBytesInFlightHi*(1.0f - queueDelayTrendMem) + maxBytesInFlightLo*queueDelayTrendMem)*
 		kMaxBytesInFlightHeadRoom;
 	if (maxBytesInFlight > 5000) {
 		cwnd = std::min(cwnd, (int)maxBytesInFlight);
 	}
 
 	if (getSRtt() < 0.01f && queueDelayTrend < 0.1) {
-		int tmp = rateTransmitted*0.01f / 8;
+		int tmp = int (rateTransmitted*0.01f / 8);
 		tmp = std::max(tmp, (int)(maxBytesInFlight*1.5f));
 		cwnd = std::max(cwnd, tmp);
 	}

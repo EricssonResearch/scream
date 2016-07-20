@@ -156,7 +156,7 @@ public:
 	/*
 	* Print logs
 	*/
-	void printLog(double time);
+	void printLog(float time);
 
 private:
 	/*

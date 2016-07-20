@@ -10,7 +10,7 @@ using namespace std;
 
 static const int kMaxRtpSize = 1200;
 static const int kRtpOverHead = 20; // 12 byte RTP header + PL format framing
-static const float scale[] = { 1.0, 1.0, 1.0, 0.1, 1.0, 1.0, 1.0, 1.0, 0.1, 1.0 };
+static const float scale[] = { 1.0f, 1.0f, 1.0f, 0.1f, 1.0f, 1.0f, 1.0f, 1.0f, 0.1f, 1.0f};
 
 VideoEnc::VideoEnc(RtpQueue* rtpQueue_, float frameRate_, float delta_, bool simIr_, bool simIdle_, int delayIx_) {
     rtpQueue = rtpQueue_;
@@ -47,7 +47,7 @@ int VideoEnc::encode(float time) {
 	if (isIr) {
 		// Adjust slighly to compensate for IRs
 		//
-		rnd *= 1.0 - 1.0 / (frameRate*2.0);
+		rnd *= 1.0f - 1.0f / (frameRate*2.0f);
 	}
 	int ix = targetRateI - 1 - delayIx;
 	//cerr << delayIx << endl;
@@ -71,7 +71,7 @@ int VideoEnc::encode(float time) {
 		if ((t_ms % 10000) < 25) {
 			ixIdle = (ixIdle + 1) % 10;
 		}
-		bytes *= scale[ixIdle];
+		bytes = (int) (bytes*scale[ixIdle]);
 	}
 
 	int sizeOfFrame = 0;

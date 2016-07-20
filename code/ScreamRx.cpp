@@ -58,7 +58,7 @@ void ScreamRx::Stream::receive(uint64_t time_us,
 				// Fill with potential zeros
 				ackVector = ackVector << diff;
 				// Add previous highest seq nr to ack vector
-				ackVector = ackVector | (1 << (diff - 1));
+				ackVector |= (1i64 << (diff - 1));
 			}
 		}
 		highestSeqNr = seqNr;
@@ -69,7 +69,7 @@ void ScreamRx::Stream::receive(uint64_t time_us,
 		*/
 		uint16_t diff = highestSeqNrExt - seqNrExt;
 		if (diff < kAckVectorBits) {
-			ackVector = ackVector | (1 << (diff - 1));
+			ackVector = ackVector | (1i64 << (diff - 1));
 		}
 	}
 
