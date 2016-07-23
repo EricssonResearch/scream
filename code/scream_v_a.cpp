@@ -10,40 +10,34 @@
 
 using namespace std;
 
-const float Tmax = 200.0f;
-const bool testLowBitrate = true;
-const bool isChRate = false;
+const float Tmax = 100.0f;
+const bool isChRate = true;
+
+/*
+* Mode determines how many streams should be run
+* 1 = audio, 2 = video, 3 = 1+2
+*/
+ 
+const int mode = 0x03; 
 
 int main(int argc, char* argv[])
 {
-
-    uint64_t rtcpFbInterval_us;
-    float kFrameRate = 25.0f;
-    int videoTick = (int)(2000.0/kFrameRate);
-    if (testLowBitrate) {
-        kFrameRate = 50.0f;
-        videoTick = (int)(2000.0/kFrameRate);
-        rtcpFbInterval_us = 1000;
-    } else {
-        kFrameRate = 25.0f;
-        videoTick = (int)(2000.0/kFrameRate);
-        rtcpFbInterval_us = 1000;
-    }
-    ScreamTx *screamTx = new ScreamTx();
-    ScreamRx *screamRx = new ScreamRx();
-    RtpQueue *rtpQueue = new RtpQueue();
-    VideoEnc *videoEnc = 0;
-    NetQueue *netQueueDelay = new NetQueue(0.04f,0.0f,0.01f);
-    NetQueue *netQueueRate = 0;
-    if (testLowBitrate) {
-        netQueueRate = new NetQueue(0.0f,50000,0.0f);
-		videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.0f, false, false, 0);
-        screamTx->registerNewStream(rtpQueue, 10, 1.0f, 5000.0f, 100000.0f,5000.0f, 2.0f, 1.0f, 0.1f);
-    } else {
-        netQueueRate = new NetQueue(0.0f,9000e3,0.0f);
-        videoEnc = new VideoEnc(rtpQueue, kFrameRate, 0.1f,false,false,0);
-		screamTx->registerNewStream(rtpQueue, 10, 1.0f, 64000.0f, 10000000.0f, 200000.0f, 2.0f, 0.5f, 0.3f);
-    }
+	int tick = (int)(2000.0 / 25.0);
+	ScreamTx *screamTx = new ScreamTx(0.6f,0.1f,false);
+	ScreamRx *screamRx = new ScreamRx();
+	RtpQueue *rtpQueue[2] = { new RtpQueue(), new RtpQueue() };
+	VideoEnc *videoEnc[2] = { 0, 0 };
+	NetQueue *netQueueDelay = new NetQueue(0.05f, 0.0f, 0.03f);
+	NetQueue *netQueueRate = new NetQueue(0.0f, 500e3, 0.0f);
+	videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.1f, false, false, 0);
+	videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.1f, false, false, 0);
+	if (mode & 0x01)
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 6000.0f, 50e3f, 5000.0f, 2.0f, 1.0f, 0.1f);
+		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 64000.0f, 10000000.0f, 50000.0f, 2.0f, 1.0f, 0.3f);
+	    //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 5000.0f, 100000.0f, 5000.0f, 2.0f, 1.0f, 0.3f);
+	if (mode & 0x02)
+		screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 64000.0f, 10e6f, 200000.0f, 2.0f, 1.0f, 0.2f);
+	    //screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 64000.0f, 10000000.0f, 50000.0f, 2.0f, 1.0f, 0.3f);
 
 
     float time = 0.0f;
@@ -68,12 +62,19 @@ int main(int argc, char* argv[])
 
         bool isEvent = false;
 
-        if (n % videoTick == 0) {
-            // "Encode" video frame
-            videoEnc->setTargetBitrate(screamTx->getTargetBitrate(10));
-            int bytes = videoEnc->encode(time);
-            screamTx->newMediaFrame(time_us_tx, 10, bytes);
-            /*
+        if (n % tick == 0) {
+            // "Encode" audio + video frame
+			if (mode & 0x01) {
+				videoEnc[0]->setTargetBitrate(screamTx->getTargetBitrate(10));
+				int bytes = videoEnc[0]->encode(time);
+				screamTx->newMediaFrame(time_us_tx, 10, bytes);
+			}
+			if (mode & 0x02) {
+				videoEnc[1]->setTargetBitrate(screamTx->getTargetBitrate(11));
+				int bytes = videoEnc[1]->encode(time);
+				screamTx->newMediaFrame(time_us_tx, 11, bytes);
+			}
+			/*
             * New RTP packets added, try if OK to transmit
             */
             retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
@@ -95,15 +96,24 @@ int main(int argc, char* argv[])
 		uint32_t rxTimestamp;
         uint16_t aseqNr;
         uint64_t aackVector;
+		uint64_t rtcpFbInterval_us = screamRx->getRtcpFbInterval();
         if (isFeedback && (time_us_rx - screamRx->getLastFeedbackT() > rtcpFbInterval_us)) {
 			if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector)) {
-				//cerr << rxTimestamp << " " << aseqNr << endl;
 				screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, false);
                 retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
                 isFeedback = false;
                 isEvent = true;
             }
-        }
+			/*
+			* Fetch both at the same time if there is any,  more efficient
+			*/
+			if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector)) {
+				screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, false);
+				retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
+				isFeedback = false;
+				isEvent = true;
+			}
+		}
 
         if (n==nextCallN && retVal != 0.0f) {
             retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
@@ -116,8 +126,11 @@ int main(int argc, char* argv[])
             /*
             * RTP packet can be transmitted
             */ 
-            rtpQueue->sendPacket(rtpPacket, size, seqNr);
-            netQueueRate->insert(time,rtpPacket, ssrc, size, seqNr);
+			if (ssrc == 10)
+				rtpQueue[0]->sendPacket(rtpPacket, size, seqNr);
+			else
+				rtpQueue[1]->sendPacket(rtpPacket, size, seqNr);
+			netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr);
             retVal = screamTx->addTransmitted(time_us_tx, ssrc, size, seqNr);
             nextCallN = n + max(1,(int)(1000.0*retVal));
             isEvent = true;
@@ -129,8 +142,10 @@ int main(int argc, char* argv[])
             cout << endl;
         }
 
-            if ((time >= 40) && (time < 60) && isChRate)
-                netQueueRate->rate = 2000e3;
+		if ((time >= 40) && (time < 60) && isChRate) {
+			netQueueRate->rate = 2000e3;
+		}
+     
 
             if ((time >= 60) && (time < 80) && isChRate)
                 netQueueRate->rate = 600e3;

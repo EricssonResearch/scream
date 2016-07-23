@@ -49,6 +49,12 @@ public:
     */
 	bool isFeedback(uint64_t time_us);
 
+	int bytesReceived;
+	uint64_t lastRateComputeT_us;
+	float averageReceivedRate;
+
+	uint64_t getRtcpFbInterval();
+
     /*
     * Get SCReAM RTCP feedback elements
     * return FALSE if no pending feedback available

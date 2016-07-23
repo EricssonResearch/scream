@@ -93,7 +93,7 @@
     <ClCompile Include="NetQueue.cpp" />
     <ClCompile Include="RtpQueue.cpp" />
     <ClCompile Include="ScreamRx.cpp" />
-    <ClCompile Include="scream_01.cpp" />
+    <ClCompile Include="scream_v_a.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="ScreamTx.cpp" />
     <ClCompile Include="VideoEnc.cpp" />

@@ -56,7 +56,7 @@ int VideoEnc::encode(float time) {
 
 
     float rtpOverHead = 1*rtpPktPerSec*(kRtpOverHead*8);
-    //cerr << rtpOverHead << endl;
+	//cerr << rtpOverHead << " " << rtpPktPerSec << endl;
 
 	float tbr = targetRate[ix];
     //if (time > 20 && time < 25)

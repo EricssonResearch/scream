@@ -2,12 +2,15 @@
 #include "ScreamTx.h"
 #include <string.h>
 #include <climits>
+#include <algorithm>
 #include <iostream>
 using namespace std;
 
-const int kRtcpIntervalPackets = 5;
+const int kRtcpIntervalPackets = 1;
 const int kRtcpIntervalMin_us = 20000;
 const int kRtcpIntervalMax_us = 200000;
+
+
 
 ScreamRx::Stream::Stream(uint32_t ssrc_) {
 	ssrc = ssrc_;
@@ -78,6 +81,9 @@ void ScreamRx::Stream::receive(uint64_t time_us,
 
 ScreamRx::ScreamRx() {
 	lastFeedbackT_us = 0;
+	bytesReceived = 0;
+	lastRateComputeT_us = 0;
+	averageReceivedRate = 1e5;
 }
 
 void ScreamRx::receive(uint64_t time_us,
@@ -85,6 +91,15 @@ void ScreamRx::receive(uint64_t time_us,
 	uint32_t ssrc,
 	int size,
 	uint16_t seqNr) {
+	bytesReceived += size;
+	if (lastRateComputeT_us == 0)
+		lastRateComputeT_us = time_us;
+	if (time_us - lastRateComputeT_us > 200000) {
+		float delta = (time_us - lastRateComputeT_us)/1e6f;
+		lastRateComputeT_us = time_us;
+		averageReceivedRate = std::max(0.95f*averageReceivedRate, bytesReceived * 8 / delta);
+		bytesReceived = 0;
+	}
 
 	if (!streams.empty()) {
 		for (auto it = streams.begin(); it != streams.end(); ++it) {
@@ -109,12 +124,19 @@ void ScreamRx::receive(uint64_t time_us,
 	streams.push_back(stream);
 }
 
+
+uint64_t ScreamRx::getRtcpFbInterval() {
+	float res = 1000000 / std::min(50.0f, std::max(5.0f, averageReceivedRate / 10000.0f));
+	//cerr << res / 1000 << endl;
+	return uint64_t(res);
+}
+
 bool ScreamRx::isFeedback(uint64_t time_us) {
 	if (!streams.empty()) {
 		for (auto it = streams.begin(); it != streams.end(); ++it) {
 			Stream *stream = (*it);
 			uint64_t delta = time_us - stream->lastFeedbackT_us;
-			if (stream->nRtpSinceLastRtcp >= kRtcpIntervalPackets && delta > kRtcpIntervalMin_us || delta > kRtcpIntervalMax_us) {
+			if (stream->nRtpSinceLastRtcp >= kRtcpIntervalPackets) {//&& delta > kRtcpIntervalMin_us || delta > kRtcpIntervalMax_us) {
 				return true;
 			}
 		}
@@ -147,7 +169,7 @@ bool ScreamRx::getFeedback(uint64_t time_us,
 	ssrc = stream->ssrc;
 	ackVector = stream->ackVector;
 
-	//cerr << (time_us - stream->lastFeedbackT_us) / 1e3 << " " << stream->nRtpSinceLastRtcp << endl;
+	//cerr << (time_us - stream->lastFeedbackT_us) / 1e3 << " " << stream->nRtpSinceLastRtcp << " " << stream->ssrc << endl;
 	stream->lastFeedbackT_us = time_us;
 	stream->nRtpSinceLastRtcp = 0;
 	lastFeedbackT_us = time_us;

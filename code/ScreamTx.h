@@ -18,6 +18,9 @@ static const float kQueueDelayTargetMin = 0.1f; //ms
 // Can in some cases cause self-inflicted congestion
 //  i.e the e2e delay can become large even though
 //  there is no competing traffic present
+//  For some reason, self-inflicted congestion is easily triggered
+//  when an audio + video stream is run, so bottomline is that
+//  this feature is a bit shaky
 static const bool kEnableSbd = true;
 
 // Stream related default parameters 
@@ -61,7 +64,8 @@ static const int kQueueDelayNormHistSizeSh = 50;
 static const int kQueueDelayFractionHistSize = 20;
 static const int kBytesInFlightHistSize = 5;
 static const int kRateRtpHistSize = 21;
-static const int kRateUpDateSize = 4;
+static const int kRateUpDateSize = 2;
+static const int kTargetBitrateHistSize = 2;
 
 class RtpQueue;
 class ScreamTx {
@@ -195,6 +199,8 @@ private:
 
 		void updateRate(uint64_t time_us);
 
+		void updateTargetBitrateI(float br);
+
 		void updateTargetBitrate(uint64_t time_us);
 
 		bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
@@ -238,6 +244,9 @@ private:
 		float rateAckedHist[kRateUpDateSize];
 		float rateTransmittedHist[kRateUpDateSize];
 		int rateUpdateHistPtr;
+		float targetBitrateHist[kTargetBitrateHistSize];
+		int targetBitrateHistPtr;
+		uint64_t targetBitrateHistUpdateT_us;
 
 		bool isActive;
 		uint64_t lastFrameT_us;
@@ -315,6 +324,7 @@ private:
 		Stream* servedStream,
 		int transmittedBytes);
 
+
 	/*
 	* Variables for multiple steams handling
 	*/
@@ -369,6 +379,7 @@ private:
 	int nAccBytesInFlightMax;
 	float rateTransmitted;
 	float queueDelayTrendMem;
+	int lastAckedBytes;
 
 
 	/*
