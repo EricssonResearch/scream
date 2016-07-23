@@ -11,13 +11,12 @@
 using namespace std;
 
 const float Tmax = 100.0f;
-const bool isChRate = true;
+const bool isChRate = false;
 
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2
 */
- 
 const int mode = 0x03; 
 
 int main(int argc, char* argv[])
@@ -28,7 +27,7 @@ int main(int argc, char* argv[])
 	RtpQueue *rtpQueue[2] = { new RtpQueue(), new RtpQueue() };
 	VideoEnc *videoEnc[2] = { 0, 0 };
 	NetQueue *netQueueDelay = new NetQueue(0.05f, 0.0f, 0.03f);
-	NetQueue *netQueueRate = new NetQueue(0.0f, 500e3, 0.0f);
+	NetQueue *netQueueRate = new NetQueue(0.0f, 5000e3, 0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.1f, false, false, 0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.1f, false, false, 0);
 	if (mode & 0x01)
@@ -36,7 +35,7 @@ int main(int argc, char* argv[])
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 64000.0f, 10000000.0f, 50000.0f, 2.0f, 1.0f, 0.3f);
 	    //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 5000.0f, 100000.0f, 5000.0f, 2.0f, 1.0f, 0.3f);
 	if (mode & 0x02)
-		screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 64000.0f, 10e6f, 200000.0f, 2.0f, 1.0f, 0.2f);
+		screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 64000.0f, 10e6f, 1000000.0f, 2.0f, 1.0f, 0.2f);
 	    //screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 64000.0f, 10000000.0f, 50000.0f, 2.0f, 1.0f, 0.3f);
 
 

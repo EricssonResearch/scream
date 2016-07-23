@@ -707,10 +707,13 @@ ScreamTx::Stream* ScreamTx::getStream(uint32_t ssrc) {
 	return NULL;
 }
 
+/*
+* A small history of past max bitrates is maintained and the max value is picked.
+* This solves a problem where consequtive rate decreases can give too low 
+*  targetBitrateI values. 
+*/
 void ScreamTx::Stream::updateTargetBitrateI(float br) {
-	//targetBitrateI = std::min(br, targetBitrate);
-	
-	targetBitrateHist[targetBitrateHistPtr] = targetBitrate;
+	targetBitrateHist[targetBitrateHistPtr] = std::min(br, targetBitrate);;
 	targetBitrateHistPtr = (targetBitrateHistPtr + 1) % kTargetBitrateHistSize;
 	targetBitrateI = std::min(br, targetBitrate);
 	for (int n = 0; n < kTargetBitrateHistSize; n++) {
@@ -737,7 +740,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 	/*
 	* Compute a maximum bitrate, this bitrates includes the RTP overhead
 	*/
-	float br = getMaxRate();// rateTransmitted;// 0.5*(rateTransmitted + rateAcked);// getMaxRate();
+	float br = getMaxRate();
 
 	if (lossEventFlag) {
 		/*
@@ -748,8 +751,11 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		lossEventFlag = false;
 		if (time_us - lastTargetBitrateIUpdateT_us > 2000000) {
 			/*
-			* Avoid that target_bitrate_i is set too low in cases where a '
-			* congestion event is prolonged
+			* The timing constraint avoids that targetBitrateI
+			*  is set too low in cases where a congestion event is prolonged. 
+			* An accurate targetBitrateI is not of extreme importance 
+			*  but helps to avoid jitter spikes when SCReAM operates 
+			*  over fixed bandwidth or slowly varying links.
 			*/
 			updateTargetBitrateI(br);
 			lastTargetBitrateIUpdateT_us = time_us;
@@ -789,9 +795,9 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		* tmp is a local scaling factor that makes rate adaptation sligthly more
 		* aggressive when competing flows (e.g file transfers) are detected
 		*/
-		float rampUpSpeedTmp = std::min(rampUpSpeed, targetBitrate / 2);
+		float rampUpSpeedTmp = std::min(rampUpSpeed, targetBitrate*0.2f);
 		if (parent->isCompetingFlows()) {
-			rampUpSpeedTmp *= 2.0f;
+			rampUpSpeedTmp *= std::min(rampUpSpeed, targetBitrate);
 		}
 
 		if (txSizeBits / std::max(br, targetBitrate) > maxRtpQueueDelay &&
@@ -807,8 +813,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		}
 		else if (parent->inFastStart && txSizeBits / std::max(br, targetBitrate) < 0.1f) {
 			/*
-			* Increment scale factor, rate can increase from min to std::max
-			* in kRampUpTime if no congestion is detected
+			* Increment bitrate, limited by the rampUpSpeed
 			*/
 			increment = rampUpSpeedTmp*(kRateAdjustInterval_us / 1e6f);
 			/*
@@ -828,11 +833,11 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 				wasFastStart = false;
 				if (time_us - lastTargetBitrateIUpdateT_us > 2000000) {
 					/*
-					* Avoid that target_bitrate_i is set too low in cases where a
+					* The timing constraint avoids that targetBitrateI 
+					* is set too low in cases where a
 					* congestion event is prolonged
 					*/
 					updateTargetBitrateI(br);
-					//targetBitrateI = std::min(br, targetBitrate);
 					lastTargetBitrateIUpdateT_us = time_us;
 				}
 			}
@@ -857,8 +862,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 				wasFastStart = true;
 				if (!parent->isCompetingFlows()) {
 					/*
-					* Limit the bitrate increase so that it takes atleast kRampUpTime to reach
-					* from lowest to highest bitrate.
+					* Limit the bitrate increase so that it does not go faster than rampUpSpeedTmp
 					* This limitation is not in effect if competing flows are detected
 					*/
 					increment *= sclI;
@@ -1189,12 +1193,19 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 				/*
 				* queue delay above target
 				*/
-				double delta = (kGainDown * offTarget * bytesNewlyAcked * mss / cwnd);
+				float delta = (kGainDown * offTarget * bytesNewlyAcked * mss / cwnd);
 				cwnd += (int)(delta);
+
+				/*
+				* Especially when running over low bitrate bottlenecks, it is
+				*  beneficial to reduce the target bitrate a little, it limits
+				*  possible RTP queue delay spikes when congestion window is reduced
+				*/
 				delta = -delta / cwnd;
+				float rateAdjustFactor = (1.0 - delta);
 				for (int n = 0; n < nStreams; n++) {
 					Stream *tmp = streams[n];
-					tmp->targetBitrate *= (1.0 - delta);
+					tmp->targetBitrate *= rateAdjustFactor;
 				}
 				lastCongestionDetectedT_us = time_us;
 

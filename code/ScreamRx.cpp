@@ -6,11 +6,6 @@
 #include <iostream>
 using namespace std;
 
-const int kRtcpIntervalPackets = 1;
-const int kRtcpIntervalMin_us = 20000;
-const int kRtcpIntervalMax_us = 200000;
-
-
 
 ScreamRx::Stream::Stream(uint32_t ssrc_) {
 	ssrc = ssrc_;
@@ -94,7 +89,12 @@ void ScreamRx::receive(uint64_t time_us,
 	bytesReceived += size;
 	if (lastRateComputeT_us == 0)
 		lastRateComputeT_us = time_us;
+
 	if (time_us - lastRateComputeT_us > 200000) {
+		/*
+		* Media rate computation (for all medias) is done at least every 200ms
+		* This is used for RTCP feedback rate calculation
+		*/
 		float delta = (time_us - lastRateComputeT_us)/1e6f;
 		lastRateComputeT_us = time_us;
 		averageReceivedRate = std::max(0.95f*averageReceivedRate, bytesReceived * 8 / delta);
@@ -126,8 +126,12 @@ void ScreamRx::receive(uint64_t time_us,
 
 
 uint64_t ScreamRx::getRtcpFbInterval() {
+	/*
+	* The RTCP feedback rate depends on the received media date
+	*  at very low bitrates (<50kbps) an RTCP feedback interval of ~200ms is sufficient
+	*  while higher rates (>2Mbps) a feedback interval of ~20ms is sufficient
+	*/
 	float res = 1000000 / std::min(50.0f, std::max(5.0f, averageReceivedRate / 10000.0f));
-	//cerr << res / 1000 << endl;
 	return uint64_t(res);
 }
 
@@ -136,7 +140,7 @@ bool ScreamRx::isFeedback(uint64_t time_us) {
 		for (auto it = streams.begin(); it != streams.end(); ++it) {
 			Stream *stream = (*it);
 			uint64_t delta = time_us - stream->lastFeedbackT_us;
-			if (stream->nRtpSinceLastRtcp >= kRtcpIntervalPackets) {//&& delta > kRtcpIntervalMin_us || delta > kRtcpIntervalMax_us) {
+			if (stream->nRtpSinceLastRtcp >= 1) {
 				return true;
 			}
 		}
@@ -149,7 +153,6 @@ bool ScreamRx::getFeedback(uint64_t time_us,
 	uint32_t &receiveTimestamp,
 	uint16_t &highestSeqNr,
 	uint64_t &ackVector) {
-
 
 	Stream *stream = NULL;
 	uint64_t minT_us = ULONG_MAX;
@@ -169,11 +172,8 @@ bool ScreamRx::getFeedback(uint64_t time_us,
 	ssrc = stream->ssrc;
 	ackVector = stream->ackVector;
 
-	//cerr << (time_us - stream->lastFeedbackT_us) / 1e3 << " " << stream->nRtpSinceLastRtcp << " " << stream->ssrc << endl;
 	stream->lastFeedbackT_us = time_us;
 	stream->nRtpSinceLastRtcp = 0;
 	lastFeedbackT_us = time_us;
-
-
 	return true;
 }

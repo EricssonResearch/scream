@@ -4,6 +4,22 @@
 #include <list>
 const int kAckVectorBits = 64;
 
+/*
+* This module implements the receiver side of SCReAM. 
+* As SCReAM is a sender based congestion control, the receiver side is 
+*  actually dumber than dumb. In essense the only thing that it does is to 
+*  + Record receive time stamps and RTP sequence numbers for incoming RTP packets
+*  + Generate RTCP feedback elements
+*  + Calculate an appropriate RTCP feedback interval
+* See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf
+*  for details on how it is integrated in audio/video platforms.
+* A full implementation needs the additional code for
+*  + RTCP feedback (e.g using RFC3611 XR elements)
+*  + Other obvious stuff such as RTP payload depacketizer, video+audio deoders, rendering, dejitterbuffers
+* It is recommended that RTCP feedback for multiple streams are bundled in one RTCP packet. 
+*  However as low bitrate media (e.g audio) requires a lower feedback rate than high bitrate media (e.g video)
+*  it is possible to include RTCP feedback for the audio stream more seldom. The code for this is T.B.D
+*/
 class ScreamRx {
 public:
     ScreamRx();
@@ -49,10 +65,6 @@ public:
     */
 	bool isFeedback(uint64_t time_us);
 
-	int bytesReceived;
-	uint64_t lastRateComputeT_us;
-	float averageReceivedRate;
-
 	uint64_t getRtcpFbInterval();
 
     /*
@@ -68,7 +80,12 @@ public:
     uint64_t getLastFeedbackT() {return lastFeedbackT_us;};
 
     uint64_t lastFeedbackT_us;
-    /*
+	int bytesReceived;
+	uint64_t lastRateComputeT_us;
+	float averageReceivedRate;
+
+	
+	/*
     * Variables for multiple steams handling
     */
 	std::list<Stream*> streams;

@@ -6,6 +6,16 @@
 #include <cstdint>
 using namespace std;
 
+/*
+* This module implements the sender side of SCReAM, 
+*  see https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf 
+*  for details on how it is integrated in audio/video platforms
+* A full implementation needs the additional code for
+*  + RTCP feedback (e.g using RFC3611 XR elements)
+*  + RTP queue(s), one queue per stream, see SCReAM description for interface description
+*  + Other obvious stuff such as RTP payload packetizer, video+audio capture, coders....
+*
+*/
 
 // ==== Default parameters (if tuning necessary) ====
 // Connection related default parameters 
@@ -65,7 +75,7 @@ static const int kQueueDelayFractionHistSize = 20;
 static const int kBytesInFlightHistSize = 5;
 static const int kRateRtpHistSize = 21;
 static const int kRateUpDateSize = 2;
-static const int kTargetBitrateHistSize = 2;
+static const int kTargetBitrateHistSize = 3;
 
 class RtpQueue;
 class ScreamTx {
