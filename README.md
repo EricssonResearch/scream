@@ -6,7 +6,7 @@ SCReAM (**S**elf-**C**locked **R**at**e** **A**daptation for **M**ultimedia) is 
 Congestion control for WebRTC media is currently being standardized in the IETF RMCAT WG, the scope of the working group is to define requirements for congestion control and also to standardize a few candidate solutions. 
 SCReAM is a congestion control candidate solution for WebRTC developed at Ericsson Research and optimized for good performance in wireless access. 
 
-The algorithm is submitted to the RMCAT WG [1], a Sigcomm paper [2] and [3] explains the rationale behind the design of the algorithm in more detail. A comparison against GCC (Google Congestion Control) is shown in [4].
+The algorithm is submitted to the RMCAT WG [1], a Sigcomm paper [2] and [3] explains the rationale behind the design of the algorithm in more detail. A comparison against GCC (Google Congestion Control) is shown in [4]. A final presentation is found in [5].
 Unlike many other congestion control algorithms that are rate based i.e. they estimate the network throughput and adjust the media bitrate accordingly, SCReAM is self-clocked which essentially means that the algorithm does not send in more data into a network than what actually exits the network. 
 
 To achieve this, SCReAM implements a feedback protocol over RTCP that acknowledges received RTP packets. 
@@ -55,3 +55,46 @@ For more information on how to use the code in multimedia clients or in experime
 [3] Sigcomm presentation http://conferences.sigcomm.org/sigcomm/2014/doc/slides/150.pdf
 
 [4] IETF RMCAT presentation, comparison against Google Congestion Control (GCC) http://www.ietf.org/proceedings/90/slides/slides-90-rmcat-3.pdf 
+
+[5] IETF RMCAT presentation (final for WGLC) : https://www.ietf.org/proceedings/96/slides/slides-96-rmcat-0.pdf
+
+## Feedback format
+It is recommended that the experimental feedback format below is used with SCReAM until a dedicated feedback packet format is devised. 
+
+The format is based on RTCP XR (RFC3611) and use the (reserved for future use) format tag = 255.
+The feedback elements are:
+
+- Highest received sequence number (16b): Indicates the highest (possibly wrapped around) sequence number for the given source.
+- n_ECN (8b): Accumulated number of received RTP packets for teh given source that have the ECN-CE code point set.
+- Q (1b): The fraction of RTCP feedback packets for the given source with this bit set, dictates how much the SCReAM sender should reduce the sending rate
+- ACK vector (32b): Indicates successful receipt indication of the last 32 RTCP packets, preceeding the RTP packet with the highest RTP sequence number.
+- Timestamp (32b): Indicates the (wallclock) receive time (in milliseconds) when the RTP packet with the highest sequence number was received, truncated to 32bits.    
+
+Handling of n_ECN and Q bits is currently not implemented in the SCReAM code.  
+
+The feedback format is 28bytes and gives a reasonably low RTCP overhead that makes it possible to use SCReAM also for low bitrate applications.
+The RTCP feedback interval calculation in the code gives av feedback interval between 200ms, at low media bitrates, and 20ms at high media bitrates 
+Given an IP+UDP overhead of 20+8 bytes and with the used of reduced size RTCP (RFC5506), the RTCP feedback overhead at low media rates then become 
+RTCP_bw = 8*(28+28)/0.200 = 2.3kbps
+which should be acceptably low even at low media bitrates. 
+
+
+
+        0                   1                   2                   3
+        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       |V=2|P|reserved |   PT=XR=207   |           length=6            |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       |                              SSRC                             |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       |     BT=255    |    reserved   |         block length=4        |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       |                        SSRC of source                         |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       | Highest recv. seq. nr. (16b)  |   n_ECN       |Q|  reserved   |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       |                     Ack vector (32b)                          |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       |                    Timestamp (32bits)                         |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
