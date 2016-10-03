@@ -131,7 +131,7 @@ uint64_t ScreamRx::getRtcpFbInterval() {
 	*  at very low bitrates (<50kbps) an RTCP feedback interval of ~200ms is sufficient
 	*  while higher rates (>2Mbps) a feedback interval of ~20ms is sufficient
 	*/
-	float res = 1000000 / std::min(50.0f, std::max(5.0f, averageReceivedRate / 10000.0f));
+	float res = 1000000 / std::min(50.0f, std::max(2.5f, averageReceivedRate / 10000.0f));
 	return uint64_t(res);
 }
 

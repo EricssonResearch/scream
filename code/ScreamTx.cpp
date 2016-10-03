@@ -214,9 +214,20 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
 	if (!isInitialized) initialize(time_us);
 	/*
 	* Update rateTransmitted and rateAcked if time for it
-	* this is used in video rate computation
+	* This is used in video rate computation
+	* The update interval is doubled at very low bitrates,
+	* the reason is that the feedback interval is very low then and
+	* a longer window is needed to avoid aliasing effects
 	*/
-	if (true && time_us - lastRateUpdateT_us > kRateUpdateInterval_us) {
+	uint64_t tmp = kRateUpdateInterval_us;
+	float rateAcked = 0.0f;
+	for (int n = 0; n < nStreams; n++) {
+		rateAcked += streams[n]->rateAcked;
+	}
+	if (rateAcked < 50000.0f) {
+		tmp *= 2;
+	}
+	if (time_us - lastRateUpdateT_us > tmp) {
 		rateTransmitted = 0.0;
 		for (int n = 0; n < nStreams; n++) {
 			streams[n]->updateRate(time_us);
