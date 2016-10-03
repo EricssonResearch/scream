@@ -73,9 +73,9 @@ The feedback elements are:
 Handling of n_ECN and Q bits is currently not implemented in the SCReAM code.  
 
 The feedback format is 28bytes and gives a reasonably low RTCP overhead that makes it possible to use SCReAM also for low bitrate applications.
-The RTCP feedback interval calculation in the code gives av feedback interval between 200ms, at low media bitrates, and 20ms at high media bitrates 
+The RTCP feedback interval calculation in the code gives av feedback interval between 400ms, at low media bitrates, and 20ms at high media bitrates 
 Given an IP+UDP overhead of 20+8 bytes and with the used of reduced size RTCP (RFC5506), the RTCP feedback overhead at low media rates then become 
-RTCP_bw = 8*(28+28)/0.200 = 2.3kbps
+RTCP_bw = 8*(28+28)/0.400 = 1.1kbps
 which should be acceptably low even at low media bitrates. 
 
 
