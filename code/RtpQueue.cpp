@@ -63,13 +63,22 @@ int RtpQueue::seqNrOfNextRtp() {
     }
 }
 
+int RtpQueue::bytesInQueue() {
+	int size = 0;
+	for (int n = 0; n < RtpQueueSize; n++) {
+		if (items[n]->used)
+			size += items[n]->size;
+	}
+	return size;
+}
+
 int RtpQueue::sizeOfQueue() {
-    int size = 0;
-    for (int n=0; n < RtpQueueSize; n++) {
-        if (items[n]->used)  
-            size += items[n]->size;
-    }
-    return size;
+	int size = 0;
+	for (int n = 0; n < RtpQueueSize; n++) {
+		if (items[n]->used)
+			size += 1;
+	}
+	return size;
 }
 
 float RtpQueue::getDelay(float currTs) {

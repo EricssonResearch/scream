@@ -25,8 +25,9 @@ public:
     bool pop(void *rtpPacket, int &size, unsigned short &seqNr);
     int sizeOfNextRtp();
     int seqNrOfNextRtp();
-    int sizeOfQueue();
-    float getDelay(float currTs);
+	int bytesInQueue(); // Number of bytes in queue
+	int sizeOfQueue();  // Number of items in queue
+	float getDelay(float currTs);
     bool sendPacket(void *rtpPacket, int &size, unsigned short &seqNr);
     void clear();
 	void setSizeOfLastFrame(int aSize) { sizeOfLastFrame = aSize;};

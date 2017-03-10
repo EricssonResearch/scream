@@ -21,7 +21,7 @@ const int mode = 0x03;
 
 int main(int argc, char* argv[])
 {
-	int tick = (int)(2000.0 / 25.0);
+	int tick = (int)(10000.0 / 25.0);
 	ScreamTx *screamTx = new ScreamTx(0.6f,0.1f,false);
 	ScreamRx *screamRx = new ScreamRx();
 	RtpQueue *rtpQueue[2] = { new RtpQueue(), new RtpQueue() };
@@ -32,6 +32,7 @@ int main(int argc, char* argv[])
 	videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.1f, false, false, 0);
 	if (mode & 0x01)
 		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 6000.0f, 50e3f, 5000.0f, 2.0f, 1.0f, 0.1f);
+		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 64000.0f, 10e6f, 1000000.0f, 2.0f, 1.0f, 0.2f);
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 64000.0f, 10000000.0f, 50000.0f, 2.0f, 1.0f, 0.3f);
 	    //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 5000.0f, 100000.0f, 5000.0f, 2.0f, 1.0f, 0.3f);
 	if (mode & 0x02)
@@ -54,8 +55,8 @@ int main(int argc, char* argv[])
 
     while (time <= Tmax) {
         float retVal = -1.0;
-        time = n/2000.0f;
-        time_us = n*500;
+        time = n/10000.0f;
+        time_us = n*100;
         time_us_tx = time_us+000000;
         time_us_rx = time_us+000000;
 
@@ -141,10 +142,18 @@ int main(int argc, char* argv[])
             cout << endl;
         }
 
-		if ((time >= 40) && (time < 60) && isChRate) {
-			netQueueRate->rate = 2000e3;
+		/*
+		* Test the set traget priority feature
+		if (time > 30 && time < 100) 
+			screamTx->setTargetPriority(11, 0.1);
+		else if (time > 50)
+			screamTx->setTargetPriority(11, 0.5);
+		*/
+
+		if ((time >= 30) && (time < 50) && isChRate) {
+			netQueueRate->rate = 1000e3;
 		}
-     
+		/*
 
             if ((time >= 60) && (time < 80) && isChRate)
                 netQueueRate->rate = 600e3;
@@ -154,7 +163,7 @@ int main(int argc, char* argv[])
 
             if ((time >= 100) && isChRate)
                 netQueueRate->rate = 2000e3;
-
+				*/
         n++;
 #ifdef _WIN32
         Sleep(0) ;

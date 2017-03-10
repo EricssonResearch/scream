@@ -32,6 +32,7 @@ public:
 
         bool isMatch(uint32_t ssrc_) {return ssrc==ssrc_;};
 
+		bool checkIfFlushAck(int seqNr);
         /*
         * Receive RTP packet 
         */
@@ -48,7 +49,19 @@ public:
         uint64_t lastFeedbackT_us;    // Last time feedback transmitted for
                                      //  this SSRC
 		int nRtpSinceLastRtcp;       // Number of RTP packets since last transmitted RTCP
+
+		bool firstReceived;
     };
+
+	/*
+	* Check to ensure that ACK vector can cover also large holes in
+	*  in the received sequence number space. These cases can frequently occur when
+	*  SCReAM is used in frame discard mode i.e. when real video rate control is
+	*  not possible
+	*/
+	bool checkIfFlushAck(
+		uint32_t ssrc,
+		uint16_t seqNr);
 
     /*
     * Function is called each time an RTP packet is received

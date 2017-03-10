@@ -39,16 +39,17 @@ void VideoEnc::setTargetBitrate(float targetBitrate_) {
 int VideoEnc::encode(float time) {
 	int rtpBytes = 0;
 	int t_ms = (int)(time * 1000);
-	//if ((t_ms % 5000) < 1 && simIr) 
-	//    isIr = true;
-	if ((t_ms == 1000) && simIr && false)
-		isIr = true;
+    if ((t_ms % 5000) < 1 && simIr) 
+	    isIr = true;
+	//if ((t_ms == 1000) && simIr && false)
+//		isIr = true;
 	float rnd = 1.0f + delta*2.0f*(((float)(rand())) / RAND_MAX - 0.5f);
 	if (isIr) {
 		// Adjust slighly to compensate for IRs
 		//
 		rnd *= 1.0f - 1.0f / (frameRate*2.0f);
 	}
+	//rnd *= 0.8;
 	int ix = targetRateI - 1 - delayIx;
 	//cerr << delayIx << endl;
 	if (ix < 0) ix += TARGET_RATE;
@@ -64,7 +65,7 @@ int VideoEnc::encode(float time) {
     float tmp = std::max(1000.0f,tbr-rtpOverHead);
     int bytes = (int)((tmp/frameRate/8.0)*rnd);
     if (isIr) {
-		bytes = 40000;// *= 20;
+		bytes *= 4;
         isIr = false;
     }
 	if (simIdle) {

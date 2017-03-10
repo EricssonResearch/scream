@@ -23,6 +23,7 @@ const bool kOpenCwnd = false;
 static const bool kEnableConsecutiveFastStart = true;
 // Packet pacing reduces jitter
 static const bool kEnablePacketPacing = true;
+static const float kPacketPacingHeadRoom = 1.5f;
 
 
 // Rate update interval
@@ -43,17 +44,19 @@ static const float kQueueDelayTargetMax = 0.3f; //ms
 
 // Congestion window validation
 static const float kBytesInFlightHistInterval_us = 1000000; // Time (s) between stores 1s
-static const float kMaxBytesInFlightHeadRoom = 1.0f;
+static const float kMaxBytesInFlightHeadRoom = 1.1f;
 // Queue delay trend and shared bottleneck detection
 static const uint64_t kQueueDelayFractionHistInterval_us = 50000; // 50ms
 // video rate estimation update period
-static const float kRateUpdateInterval_us = 200000;  // 50ms
+static const uint64_t kRateUpdateInterval_us = 50000;  // 50ms
 
 // Packet reordering margin (us)
 static const uint64_t kReorderTime_us = 20000;
 
+static const uint64_t kMinRtpQueueDiscardInterval_us = 1000000;
 
-// Base delay history size
+// Min CWND in MSS
+static int kMinCwndMss = 3;
 
 ScreamTx::ScreamTx(float lossBeta_,
 	float queueDelayTargetMin_,
@@ -103,7 +106,10 @@ ScreamTx::ScreamTx(float lossBeta_,
 	nAccBytesInFlightMax(0),
 	rateTransmitted(0),
 	queueDelayTrendMem(0.0f),
-	lastAckedBytes(kInitMss)
+	lastAckedBytes(kInitMss),
+	lastCwndUpdateT_us(0),
+	bytesInFlight(0)
+
 {
 	for (int n = 0; n < kBaseOwdHistSize; n++)
 		baseOwdHist[n] = UINT32_MAX;
@@ -124,6 +130,10 @@ ScreamTx::ScreamTx(float lossBeta_,
 	nStreams = 0;
 	for (int n = 0; n < kMaxStreams; n++)
 		streams[n] = NULL;
+
+	queueDelayMax = 0.0f;
+	queueDelayMinAvg = 0.0f;
+	queueDelayMin = 1000.0;
 }
 
 ScreamTx::~ScreamTx() {
@@ -143,7 +153,8 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
 	float maxRtpQueueDelay,
 	float txQueueSizeFactor,
 	float queueDelayGuard,
-	float lossEventRateScale) {
+	float lossEventRateScale,
+	bool rateBoost) {
 	Stream *stream = new Stream(this,
 		rtpQueue,
 		ssrc,
@@ -154,7 +165,8 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
 		maxRtpQueueDelay,
 		txQueueSizeFactor,
 		queueDelayGuard,
-		lossEventRateScale);
+		lossEventRateScale,
+		rateBoost);
 	streams[nStreams++] = stream;
 }
 
@@ -252,25 +264,21 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
 		return -1.0f;
 	ssrc = stream->ssrc;
 
-	if (kBypassTxSheduling) {
-		/*
-		* Transmission scheduling is bypassed
-		*/
-		return 0;
-	}
+
 	/*
 	* Enforce packet pacing
 	*/
-	if (nextTransmitT_us - time_us > 1000 && nextTransmitT_us > time_us)
-		return (nextTransmitT_us - time_us) / 1e6f;
+	float retVal = 0.0f;
+	if (kEnablePacketPacing && nextTransmitT_us > time_us){
+		retVal = (nextTransmitT_us - time_us) / 1e6f;
+	}
 
-	float paceInterval = kMinPaceInterval;
 
 	bytesInFlightMaxLo = 0;
 	if (nAccBytesInFlightMax > 0) {
 		bytesInFlightMaxLo = accBytesInFlightMax / nAccBytesInFlightMax;
 	}
-	bytesInFlightMaxHi = std::max(bytesInFlight(), bytesInFlightMaxHi);
+	bytesInFlightMaxHi = std::max(bytesInFlight, bytesInFlightMaxHi);
 
 	/*
 	* Update bytes in flight history for congestion window validation
@@ -289,22 +297,23 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
 		* transmitted
 		*/
 		mss = kInitMss;
-		cwndMin = 2 * mss;
+		cwndMin = kMinCwndMss * mss;
 		cwnd = max(cwnd, cwndMin);
 	}
 
 	int sizeOfNextRtp = stream->rtpQueue->sizeOfNextRtp();
-	if (sizeOfNextRtp == -1)
+	if (sizeOfNextRtp == -1){
 		return -1.0f;
+	}
 	/*
 	* Determine if window is large enough to transmit
 	* an RTP packet
 	*/
 	bool exit = false;
 	if (queueDelay < queueDelayTarget)
-		exit = (bytesInFlight() + sizeOfNextRtp) > cwnd + mss;// lastAckedBytes / 2;
+		exit = (bytesInFlight + sizeOfNextRtp) > cwnd + mss;// lastAckedBytes / 2;
 	else
-		exit = (bytesInFlight() + sizeOfNextRtp) > cwnd;// lastAckedBytes / 2;
+		exit = (bytesInFlight + sizeOfNextRtp) > cwnd;// lastAckedBytes / 2;
 	/*
 	* A retransmission time out mechanism to avoid deadlock
 	*/
@@ -315,7 +324,7 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
 		/*
 		* Return value 0.0 = RTP packet can be immediately transmitted
 		*/
-		return 0.0f;
+		return retVal;
 	}
 
 	return -1.0f;
@@ -374,15 +383,12 @@ float ScreamTx::addTransmitted(uint64_t time_us,
 	* this function implements the packet pacing
 	*/
 	float paceInterval = kMinPaceInterval;
-	pacingBitrate = std::max(kMinimumBandwidth, cwnd * 8.0f / std::max(0.001f, getSRtt()));
+	pacingBitrate = kPacketPacingHeadRoom*std::max(kMinimumBandwidth, cwnd * 8.0f / std::max(0.001f, getSRtt()));
 	float tp = (size * 8.0f) / pacingBitrate;
 	if (queueDelayFractionAvg > 0.1f && kEnablePacketPacing) {
 		paceInterval = std::max(kMinPaceInterval, tp);
 	}
-	if (kBypassTxSheduling) {
-		paceInterval = 0.0;
-	}
-	//cerr << pacingBitrate << " " << size << " " << paceInterval << endl;
+
 	uint64_t paceInterval_us = (uint64_t)(paceInterval * 1000000);
 
 	/*
@@ -396,7 +402,10 @@ float ScreamTx::addTransmitted(uint64_t time_us,
 	/*
 	* Determine when next RTP packet can be transmitted
 	*/
-	nextTransmitT_us = time_us + paceInterval_us;
+	if (kEnablePacketPacing)
+		nextTransmitT_us = time_us + paceInterval_us;
+	else
+		nextTransmitT_us = time_us;
 
 	return paceInterval;
 }
@@ -412,11 +421,8 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
 	bool qBit) {
 	if (!isInitialized) initialize(time_us);
 	Stream *stream = getStream(ssrc);
-	accBytesInFlightMax += bytesInFlight();
+	accBytesInFlightMax += bytesInFlight;
 	nAccBytesInFlightMax++;
-	uint32_t tmp1 = (ackVector >> 32);
-	uint32_t tmp2 = (ackVector & 0xFFFFFFFF);
-	//fprintf(stderr, "SN %5d  %x%x \n", highestSeqNr, tmp1, tmp2);
 	for (int n = 0; n < kMaxTxPackets; n++) {
 		/*
 		* Loop through TX packets with matching SSRC
@@ -429,7 +435,7 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
 			if (stream->isMatch(tmp->ssrc)) {
 
 				for (int k = 0; k < kAckVectorBits; k++) {
-					if (ackVector & (1i64 << k)) { // SN marked as received
+					if (ackVector & (INT64_C(1) << k)) { // SN marked as received
 						uint16_t seqNr = highestSeqNr - (k + 1);
 						if (tmp->seqNr == seqNr) {
 							/*
@@ -442,6 +448,7 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
 
 				if (tmp->seqNr == highestSeqNr) {
 					tmp->isAcked = true;
+					stream->hiSeqAck = highestSeqNr;
 					ackedOwd = timestamp - tmp->timestamp;
 					uint64_t rtt = time_us - tmp->timeTx_us;
 
@@ -501,18 +508,16 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
 					if (time_us - lastLossEventT_us > sRtt_us) {
 						lossEvent = true;
 					}
-					cerr << "LOST " << tmp->seqNr;
+					stream->bytesLost += tmp->size;
 					tmp->isUsed = false;
+					stream->repairLoss = true;
 				}
 				else if (tmp->isAcked) {
 					tmp->isUsed = false;
 				}
 			}
 		}
-
-
 	}
-
 
 	if (lossEvent) {
 		lastLossEventT_us = time_us;
@@ -521,29 +526,34 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
 			tmp->lossEventFlag = true;
 		}
 	}
-
+	computeBytesInFlight();
 	updateCwnd(time_us);
 }
 
 
 float ScreamTx::getTargetBitrate(uint32_t ssrc) {
-	return getStream(ssrc)->targetBitrate;
+	return  getStream(ssrc)->getTargetBitrate();
+}
+
+void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
+	getStream(ssrc)->targetPriority = priority;
 }
 
 void ScreamTx::printLog(float time) {
-	int inFlightMax = std::max(bytesInFlight(), getMaxBytesInFlightHi());
+	int inFlightMax = std::max(bytesInFlight, getMaxBytesInFlightHi());
+	printf("%4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %1d, ",
+		queueDelay, queueDelayMax, queueDelayMinAvg, getSRtt(),
+		cwnd, bytesInFlight, isInFastStart());
 
-	cout <<
-		/* 2- 4 */	queueDelay << " " << queueDelayTrend << " " << queueDelayTarget << " "
-		/* 5- 7 */ << queueDelaySbdVar << " " << queueDelaySbdSkew << " " << getSRtt() << " "
-		/* 8-10 */ << cwnd << " " << inFlightMax << " " << bytesInFlight() << " "
-		/*11-12 */ << isInFastStart() << " " << getPacingBitrate() << " ";
-
+	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
 		Stream *tmp = streams[n];
-		/*13-19 */		 	    cout << tmp->txSizeBitsAvg / 8 << " " << tmp->rtpQueue->getDelay(time) << " "
-			<< tmp->targetBitrate << " " << tmp->targetBitrateI << " " << tmp->getMaxRate() << " " << tmp->rateTransmitted << " " << tmp->rateAcked << " ";
-		/*20-26 */
+		printf("%4.3f, %5.0f, %5.0f, %5.0f, %5.0f, %5.0f, %5d, ",
+			tmp->rtpQueue->getDelay(time),
+			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
+			tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
+			tmp->rateLost / 1000.0f,
+			tmp->hiSeqAck);
 	}
 }
 
@@ -571,7 +581,8 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	float maxRtpQueueDelay_,
 	float txQueueSizeFactor_,
 	float queueDelayGuard_,
-	float lossEventRateScale_) {
+	float lossEventRateScale_,
+	bool rateBoost_) {
 	parent = parent_;
 	rtpQueue = rtpQueue_;
 	ssrc = ssrc_;
@@ -584,13 +595,17 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	txQueueSizeFactor = txQueueSizeFactor_;
 	queueDelayGuard = queueDelayGuard_;
 	lossEventRateScale = lossEventRateScale_;
+	rateBoost = rateBoost_;
 	targetBitrateHistUpdateT_us = 0;
 	targetBitrateI = 1.0f;
 	credit = 0.0f;
 	bytesTransmitted = 0;
 	bytesAcked = 0;
+	bytesLost = 0;
+	hiSeqAck = 0;
 	rateTransmitted = 0.0f;
 	rateAcked = 0.0f;
+	rateLost = 0.0f;
 	lossEventFlag = false;
 	txSizeBitsAvg = 0.0f;
 	lastRateUpdateT_us = 0;
@@ -598,15 +613,17 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	lastTargetBitrateIUpdateT_us = 0;
 	bytesRtp = 0;
 	rateRtp = 0.0f;
-	rateRtpSum = 0.0f;
-	rateRtpSumN = 0;
-	for (int n = 0; n < kRateRtpHistSize; n++)
-		rateRtpHist[n] = 0;
+	for (int n = 0; n < kRateRtpHistSize; n++) {
+		rateRtpMaxHist[n] = 0;
+	}
 	rateRtpHistPtr = 0;
-	rateRtpMedian = 0.0f;
+	rateRtpMax = 0.0f;
+	rateRtpMaxTmp = 0.0f;
+	rateRtpSumN = 0;
 	for (int n = 0; n < kRateUpDateSize; n++) {
-		rateRtpHistSh[n] = 0.0f;
+		rateRtpHist[n] = 0.0f;
 		rateAckedHist[n] = 0.0f;
+		rateLostHist[n] = 0.0f;
 		rateTransmittedHist[n] = 0.0f;
 	}
 	rateUpdateHistPtr = 0;
@@ -614,9 +631,17 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 		targetBitrateHist[n] = 0;
 	}
 	targetBitrateHistPtr = 0;
+	targetRateScale = 1.0;
 	isActive = false;
 	lastFrameT_us = 0;
 	initTime_us = 0;
+	rtpQueueDiscard = false;
+	lastRtpQueueDiscardT_us = 0;
+	rateLast = 0.0;
+	rateLost = 0.0;
+	bytesLost = 0;
+	wasRepairLoss = false;
+	repairLoss = false;
 }
 
 /*
@@ -625,77 +650,59 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 void ScreamTx::Stream::updateRate(uint64_t time_us) {
 	if (lastRateUpdateT_us != 0) {
 		float tDelta = (time_us - lastRateUpdateT_us) / 1e6f;
-		//cerr << tDelta << " " << bytesRtp << " " << bytesAcked << " " << bytesTransmitted << endl;
 
 		rateTransmittedHist[rateUpdateHistPtr] = bytesTransmitted*8.0f / tDelta;
 		rateAckedHist[rateUpdateHistPtr] = bytesAcked*8.0f / tDelta;
-		rateRtpHistSh[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
-		if (rateRtpHist[0] == 0.0f) {
-			/*
-			* Initialize history
-			*/
-			for (int i = 0; i < kRateRtpHistSize; i++)
-				rateRtpHist[i] = rateRtpHistSh[rateUpdateHistPtr];
-		}
+		rateLostHist[rateUpdateHistPtr] = bytesLost*8.0f / tDelta;
+		rateRtpHist[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
 		rateUpdateHistPtr = (rateUpdateHistPtr + 1) % kRateUpDateSize;
 		rateTransmitted = 0.0f;
 		rateAcked = 0.0f;
+		rateLost = 0.0f;
 		rateRtp = 0.0f;
 		for (int n = 0; n < kRateUpDateSize; n++) {
 			rateTransmitted += rateTransmittedHist[n];
 			rateAcked += rateAckedHist[n];
-			rateRtp += rateRtpHistSh[n];
+			rateLost += rateLostHist[n];
+			rateRtp += rateRtpHist[n];
 		}
 		rateTransmitted /= kRateUpDateSize;
 		rateAcked /= kRateUpDateSize;
+		rateLost /= kRateUpDateSize;
 		rateRtp /= kRateUpDateSize;
 	}
 
 	/*
-	* Generate a median RTP bitrate value, this serves to set a reasonably safe
+	* Generate a windowed RTP max bitrate value, this serves to set a reasonably safe
 	* upper bound to the target bitrate. This limit is useful for stability purposes
 	* in cases where the link thoughput is limited and the input stimuli to e.g
 	* a video coder changes between static and varying
 	*/
-	rateRtpSum += rateRtp;
 	rateRtpSumN++;
-	if (rateRtpSumN == 1000000 / kRateUpdateInterval_us) {
+	rateRtpMaxTmp = std::max(rateRtp, rateRtpMaxTmp);
+	if (rateRtpSumN >= 1000000 / kRateUpdateInterval_us) {
 		/*
 		* An average video bitrate is stored every 1s
 		*/
-		bool isPicked[kRateRtpHistSize];
-		float sorted[kRateRtpHistSize];
-		int i, j;
-		rateRtpHist[rateRtpHistPtr] = rateRtpSum / (1000000 / kRateUpdateInterval_us);
+		int i;
+		rateRtpMaxHist[rateRtpHistPtr] = rateRtpMaxTmp;
 		rateRtpHistPtr = (rateRtpHistPtr + 1) % kRateRtpHistSize;
-		rateRtpSum = 0;
+		rateRtpMaxTmp = 0;
 		rateRtpSumN = 0;
 		/*
-		* Create a sorted list
+		* Compute max value
 		*/
-		for (i = 0; i < kRateRtpHistSize; i++)
-			isPicked[i] = false;
+		rateRtpMax = 0;
+
 		for (i = 0; i < kRateRtpHistSize; i++) {
-			float minR = 1.0e8;
-			int minI;
-			for (j = 0; j < kRateRtpHistSize; j++) {
-				if (rateRtpHist[j] < minR && !isPicked[j]) {
-					minR = rateRtpHist[j];
-					minI = j;
-				}
-			}
-			sorted[i] = minR;
-			isPicked[minI] = true;
+			rateRtpMax = std::max(rateRtpMax, rateRtpMaxHist[i]);
 		}
-		/*
-		* Get median value
-		*/
-		rateRtpMedian = sorted[kRateRtpHistSize / 2];
 	}
 
 	bytesTransmitted = 0;
 	bytesAcked = 0;
 	bytesRtp = 0;
+	bytesLost = 0;
 	lastRateUpdateT_us = time_us;
 }
 
@@ -719,6 +726,48 @@ ScreamTx::Stream* ScreamTx::getStream(uint32_t ssrc) {
 }
 
 /*
+* Get the target bitrate. 
+* This function returns a value -1 of loss of RTP packets is detected
+* A return value of 0 indicates that the target rate has not changed sufficiently or that no 
+*  loss of RTP packets is detected
+*/
+float ScreamTx::Stream::getTargetBitrate() {
+
+	bool requestRefresh = isRtpQueueDiscard() || repairLoss;
+	repairLoss = false;
+	if (requestRefresh  && !wasRepairLoss) {
+		wasRepairLoss = true;
+		return -1.0;
+	}
+	if (rateRtp > 0) {
+		/*
+		* Video coders are strange animals.. In certain cases the average bitarte is 
+		* consistently lower or higher than the target bitare. This additonal scaling compensates 
+		* for this anomaly.
+		*/
+		targetRateScale += 0.01f*(targetBitrate-rateRtp) / targetBitrate;
+		targetRateScale = std::min(2.0f, std::max(0.5f, targetRateScale));
+
+	}
+	float rate = targetRateScale*targetBitrate;
+	bool doSend = wasRepairLoss || rate - rateLast > rate*0.05;
+	doSend |= rateLast - rate > rate*0.05;
+	doSend = true;
+	if (doSend) {
+		/*
+		* Video coders are strange animals.. In certain cases a very frequent rate requests can confuse the 
+		* rate control logic in the coder
+		*/
+		rateLast = rate;
+		wasRepairLoss = false;
+		return rate;
+	}
+	else
+		return 0.0;
+}
+
+
+/*
 * A small history of past max bitrates is maintained and the max value is picked.
 * This solves a problem where consequtive rate decreases can give too low 
 *  targetBitrateI values. 
@@ -737,21 +786,33 @@ void ScreamTx::Stream::updateTargetBitrateI(float br) {
 * Update the target bitrate, the target bitrate includes the RTP overhead
 */
 void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
+	/*
+	* Compute a maximum bitrate, this bitrates includes the RTP overhead
+	*/
+	float br = getMaxRate();
+	float rateRtpLimit = br;
+	if (rateBoost) {
+		/*
+		* Video coders are strange animals.. 
+		* In certain cases the rate control logic is tuned such that the rate peaks 
+		* rate peaks should match the target rate, this gives the odd effect that the average
+		* is much lower than the target rate. This is not dead wrong but we need to handle this to 
+		* be able to make the target rate incresase.
+		*/
+		rateRtpLimit = std::max(br, std::max(rateRtpMax,rateRtpMaxTmp)*std::max(0.0f, 1.0f - 1.0f*parent->queueDelayTrendMem));
+	}
+
 	if (initTime_us == 0) {
 		/*
 		* Initialize if the first time
 		*/
 		initTime_us = time_us;
+		lastRtpQueueDiscardT_us = time_us;
 	}
 
 	if (lastBitrateAdjustT_us == 0) lastBitrateAdjustT_us = time_us;
 	isActive = true;
 	lastFrameT_us = time_us;
-
-	/*
-	* Compute a maximum bitrate, this bitrates includes the RTP overhead
-	*/
-	float br = getMaxRate();
 
 	if (lossEventFlag) {
 		/*
@@ -763,9 +824,9 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		if (time_us - lastTargetBitrateIUpdateT_us > 2000000) {
 			/*
 			* The timing constraint avoids that targetBitrateI
-			*  is set too low in cases where a congestion event is prolonged. 
-			* An accurate targetBitrateI is not of extreme importance 
-			*  but helps to avoid jitter spikes when SCReAM operates 
+			*  is set too low in cases where a congestion event is prolonged.
+			* An accurate targetBitrateI is not of extreme importance
+			*  but helps to avoid jitter spikes when SCReAM operates
 			*  over fixed bandwidth or slowly varying links.
 			*/
 			updateTargetBitrateI(br);
@@ -778,12 +839,11 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 	else {
 		if (time_us - lastBitrateAdjustT_us < kRateAdjustInterval_us)
 			return;
-
 		/*
 		* A scale factor that is dependent on the inflection point
 		* i.e the last known highest video bitrate
 		*/
-		float sclI = (targetBitrate - targetBitrateI) /	targetBitrateI;
+		float sclI = (targetBitrate - targetBitrateI) / targetBitrateI;
 		sclI *= 4;
 		sclI = std::max(0.2f, std::min(1.0f, sclI*sclI));
 		float increment = 0.0f;
@@ -792,12 +852,12 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		* Size of RTP queue [bits]
 		* As this function is called immediately after a
 		* video frame is produced, we need to accept the new
-		* RTP packets in the queue, we subtract a number of bytes correspoding to the size 
-		* of the last frame (including RTP overhead), this is simply the aggregated size 
+		* RTP packets in the queue, we subtract a number of bytes correspoding to the size
+		* of the last frame (including RTP overhead), this is simply the aggregated size
 		* of the RTP packets with the highest RTP timestamp
 		*/
 		int lastBytes = rtpQueue->getSizeOfLastFrame();
-		int txSizeBits = std::max(0, rtpQueue->sizeOfQueue() - lastBytes) * 8;
+		int txSizeBits = std::max(0, rtpQueue->bytesInQueue() - lastBytes) * 8;
 
 		float alpha = 0.5f;
 
@@ -806,20 +866,22 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 		* tmp is a local scaling factor that makes rate adaptation sligthly more
 		* aggressive when competing flows (e.g file transfers) are detected
 		*/
-		float rampUpSpeedTmp = std::min(rampUpSpeed, targetBitrate*0.2f);
+		float rampUpSpeedTmp = std::min(rampUpSpeed, targetBitrate*0.5f);
 		if (parent->isCompetingFlows()) {
-			rampUpSpeedTmp *= std::min(rampUpSpeed, targetBitrate);
+			rampUpSpeedTmp *= 2.0f;
 		}
 
-		if (txSizeBits / std::max(br, targetBitrate) > maxRtpQueueDelay &&
-			(time_us - initTime_us > maxRtpQueueDelay * 1000000)) {
+		if (rtpQueue->getDelay(time_us / 1e6f) > maxRtpQueueDelay &&
+			(time_us - lastRtpQueueDiscardT_us > kMinRtpQueueDiscardInterval_us)) {
 			/*
 			* RTP queue is cleared as it is becoming too large,
 			* Function is however disabled initially as there is no reliable estimate of the
-			* thorughput in the initial phase.
+			* throughput in the initial phase.
 			*/
 			rtpQueue->clear();
-			targetBitrate = minBitrate;
+			rtpQueueDiscard = true;
+			lastRtpQueueDiscardT_us = time_us;
+			targetRateScale = 1.0;
 			txSizeBitsAvg = 0.0f;
 		}
 		else if (parent->inFastStart && txSizeBits / std::max(br, targetBitrate) < 0.1f) {
@@ -833,10 +895,14 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 			increment *= sclI;
 
 			/*
+			* No increase if the actual coder rate is lower than the target
+			*/
+			if (targetBitrate > rateRtpLimit*1.2f)
+				increment = 0;
+			/*
 			* Add increment
 			*/
 			targetBitrate += increment;
-
 			wasFastStart = true;
 		}
 		else {
@@ -844,7 +910,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 				wasFastStart = false;
 				if (time_us - lastTargetBitrateIUpdateT_us > 2000000) {
 					/*
-					* The timing constraint avoids that targetBitrateI 
+					* The timing constraint avoids that targetBitrateI
 					* is set too low in cases where a
 					* congestion event is prolonged
 					*/
@@ -861,10 +927,10 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 
 			/*
 			* Update target rate
-			* At very low bitrates it is necessary to actively try to push the 
+			* At very low bitrates it is necessary to actively try to push the
 			*  the bitrate up some extra
 			*/
-			float incrementScale = 1.0 + 0.05*std::min(1.0f, 50000.0f / targetBitrate);
+			float incrementScale = 1.0f + 0.05f*std::min(1.0f, 50000.0f / targetBitrate);
 			float increment = incrementScale*br*(1.0f - scl) -
 				txQueueSizeFactor*txSizeBitsAvg - targetBitrate;
 			if (txSizeBits > 12000 && increment > 0)
@@ -879,50 +945,36 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 					increment *= sclI;
 					increment = std::min(increment, (float)(rampUpSpeedTmp*(kRateAdjustInterval_us / 1e6)));
 				}
-			} else {
+				if (targetBitrate > rateRtpLimit)
+					increment = 0;
+			}
+			else {
 				/*
-				* Avoid that the target bitrate is reduced if it actually is the media 
+				* Avoid that the target bitrate is reduced if it actually is the media
 				* coder that limits the output rate e.g due to inactivity
 				*/
-				if (rateRtp < targetBitrate*0.9)
+				if (rateRtp < targetBitrate*0.9f)
+					increment = 0.0f;
+				/*
+				* Also avoid that the target bitrate is reduced if
+				* the coder bitrate is higher
+				* than the target
+				*/
+				if (rateRtp > targetBitrate*2.0f)
 					increment = 0.0f;
 			}
 			targetBitrate += increment;
-			float rtpQueueDelay = 0;
-			/*
-			* Apply additional rate decrease in case RTP queue delay is greater than 20ms
-			*/
-			if (br > 1e5)
-				rtpQueueDelay = txSizeBits / br;
-			if (rtpQueueDelay > 0.02f) {
-				if (time_us - lastTargetBitrateIUpdateT_us > 2000000) {
-					updateTargetBitrateI(br);
-					lastTargetBitrateIUpdateT_us = time_us;
-				}
-				targetBitrate *= 0.95f;
-			}
-
 		}
 		lastBitrateAdjustT_us = time_us;
 	}
-	/*
-	* Limit target bitrate so that it is not considerably higher than the actual bitrate,
-	*  this improves stability in thorughput limited cases where video input changes a lot.
-	* A median filtered value of the recent media bitrate is used for the limitation. This
-	*  allows for a good performance in the cases where the input stimuli to the
-	*  video coder changes from static to varying.
-	* This feature is disabled when competing (TCP) flows share the same bottleneck as it would
-	*  otherwise degrade SCReAMs ability to grab a decent share of the bottleneck bandwidth
-	*/
-	if (!parent->isCompetingFlows()) {
-		float rateRtpLimit;
-		rateRtpLimit = std::max(br, std::max(rateRtp, rateRtpMedian));
-		rateRtpLimit *= (2.0f - 1.0f*parent->queueDelayTrendMem);
-		targetBitrate = std::min(rateRtpLimit, targetBitrate);
-	}
 
 	targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate));
+}
 
+bool ScreamTx::Stream::isRtpQueueDiscard() {
+	bool tmp = rtpQueueDiscard;
+	rtpQueueDiscard = false;
+	return tmp;
 }
 
 /*
@@ -961,7 +1013,7 @@ void ScreamTx::adjustPriorities(uint64_t time_us) {
 			float diff = (streams[n]->getMaxRate() - brShare);
 			if (diff > 0) {
 				float newBitrate = std::max(streams[n]->minBitrate, streams[n]->targetBitrate - diff);
-				streams[n]->targetBitrate = std::max(streams[n]->targetBitrate*0.95f, newBitrate);
+				streams[n]->targetBitrate = std::max(streams[n]->targetBitrate*0.8f, newBitrate);
 			}
 		}
 	}
@@ -1058,7 +1110,8 @@ void ScreamTx::subtractCredit(uint64_t time_us, Stream* servedStream, int transm
 * Update the  congestion window
 */
 void ScreamTx::updateCwnd(uint64_t time_us) {
-
+	if (lastCwndUpdateT_us == 0)
+		lastCwndUpdateT_us = time_us;
 	/*
 	* bytesNewlyAcked is used to give some extra headroom in the transmission scheduler for the
 	* case that feedback is sparse
@@ -1073,12 +1126,17 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 	*/
 	queueDelay = tmp / kTimestampRate;
 
+	queueDelayMin = std::min(queueDelayMin, queueDelay);
 
-	if (queueDelay > std::max(0.2f, 2 * getSRtt()) && time_us - baseOwdResetT_us > 10000000) {
+	queueDelayMax = std::max(queueDelayMax, queueDelay);
+
+	if (queueDelayMinAvg > 2 * std::max(0.02f, getSRtt()) && time_us - baseOwdResetT_us > 20000000) {
 		/*
 		* The base OWD is likely wrong, for instance due to
 		* a channel change, reset base OWD history
 		*/
+		queueDelayMinAvg = 0.0f;
+		queueDelay = 0.0f;
 		for (int n = 0; n < kBaseOwdHistSize; n++)
 			baseOwdHist[n] = UINT32_MAX;
 		baseOwd = UINT32_MAX;
@@ -1097,17 +1155,19 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 	*/
 	if ((time_us - lastAddToQueueDelayFractionHistT_us) >
 		kQueueDelayFractionHistInterval_us) {
+		queueDelayMinAvg = 0.9f*queueDelayMinAvg + 0.1f*queueDelayMin;
+		queueDelayMin = 1000.0f;
 		/*
 		* Need to duplicate insertion incase the feedback is sparse
 		*/
-		int nIter = (time_us - lastAddToQueueDelayFractionHistT_us) / kQueueDelayFractionHistInterval_us;
+		int nIter = (int)(time_us - lastAddToQueueDelayFractionHistT_us) / kQueueDelayFractionHistInterval_us;
 		for (int n = 0; n < nIter; n++) {
 			queueDelayFractionHist[queueDelayFractionHistPtr] = getQueueDelayFraction();
 			queueDelayFractionHistPtr = (queueDelayFractionHistPtr + 1) % kQueueDelayFractionHistSize;
 		}
 		computeQueueDelayTrend();
 
-		queueDelayTrendMem = std::max(queueDelayTrendMem*0.99f, queueDelayTrend);
+		queueDelayTrendMem = std::max(queueDelayTrendMem*0.98f, queueDelayTrend);
 
 		if (enableSbd) {
 			/*
@@ -1148,7 +1208,6 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 	*/
 	float offTarget = (queueDelayTarget - queueDelay) / float(queueDelayTarget);
 
-
 	if (lossEvent) {
 		/*
 		* loss event detected, decrease congestion window
@@ -1179,11 +1238,16 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 				/*
 				* CWND is increased by the number of ACKed bytes if
 				* window is used to 1/1.5 = 67%
-				* We need to relax the rule a bit for the case that 
+				* We need to relax the rule a bit for the case that
 				* feedback may be sparse due to limited RTCP report interval
+				* In addition we put a limit for the cases where feedback becomes 
+				* piled up (sometimes happens with e.g LTE)
 				*/
-				if (bytesInFlight()*1.5 + bytesNewlyAcked > cwnd)
-					cwnd += bytesNewlyAcked;
+				if (bytesInFlight*1.5 + bytesNewlyAcked > cwnd) {
+					if (time_us - lastCwndUpdateT_us > 10000) {
+						cwnd += std::min(mss * 2, bytesNewlyAcked);
+					}
+				}
 			}
 			else {
 				inFastStart = false;
@@ -1193,9 +1257,9 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 			if (offTarget > 0.0f) {
 				/*
 				* queue delay below target, increase CWND if window
-				* is used to 1/1.25 = 80%
+				* is used to 1/1.2 = 83%
 				*/
-				if (bytesInFlight()*1.25 + bytesNewlyAcked  > cwnd) {
+				if (bytesInFlight*1.2 + bytesNewlyAcked  > cwnd) {
 					float increment = kGainUp * offTarget * bytesNewlyAcked * mss / cwnd;
 					cwnd += (int)(increment + 0.5f);
 				}
@@ -1212,11 +1276,18 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 				*  beneficial to reduce the target bitrate a little, it limits
 				*  possible RTP queue delay spikes when congestion window is reduced
 				*/
-				delta = -delta / cwnd;
-				float rateAdjustFactor = (1.0 - delta);
-				for (int n = 0; n < nStreams; n++) {
-					Stream *tmp = streams[n];
-					tmp->targetBitrate *= rateAdjustFactor;
+				float rateTotal = 0.0f;
+				for (int n = 0; n < nStreams; n++)
+					rateTotal += streams[n]->getMaxRate();
+				if (rateTotal < 1.0e5f) {
+					delta = -delta / cwnd;
+					float rateAdjustFactor = (1.0f - delta);
+					for (int n = 0; n < nStreams; n++) {
+						Stream *tmp = streams[n];
+						tmp->targetBitrate = std::max(tmp->minBitrate,
+							std::min(tmp->maxBitrate,
+							tmp->targetBitrate*rateAdjustFactor));
+					}
 				}
 				lastCongestionDetectedT_us = time_us;
 
@@ -1228,33 +1299,29 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 	* not considerably higher than the actual number of bytes in flight
 	*/
 	int maxBytesInFlightHi = (int)(std::max(bytesInFlightMaxHi, getMaxBytesInFlightHi()));
-	int maxBytesInFlightLo = (int)(std::max(bytesInFlight(), getMaxBytesInFlightLo()));
-	float maxBytesInFlight = (maxBytesInFlightHi*(1.0f - queueDelayTrendMem) + maxBytesInFlightLo*queueDelayTrendMem)*
+	int maxBytesInFlightLo = (int)(std::max(bytesInFlight, getMaxBytesInFlightLo()));
+
+	float maxBytesInFlight = //maxBytesInFlightHi*kMaxBytesInFlightHeadRoom;
+		(maxBytesInFlightHi*(1.0f - queueDelayTrend) + maxBytesInFlightLo*queueDelayTrend)*
 		kMaxBytesInFlightHeadRoom;
 	if (maxBytesInFlight > 5000) {
 		cwnd = std::min(cwnd, (int)maxBytesInFlight);
 	}
 
 	if (getSRtt() < 0.01f && queueDelayTrend < 0.1) {
-		int tmp = int (rateTransmitted*0.01f / 8);
+		int tmp = int(rateTransmitted*0.01f / 8);
 		tmp = std::max(tmp, (int)(maxBytesInFlight*1.5f));
 		cwnd = std::max(cwnd, tmp);
 	}
 	cwnd = std::max(cwndMin, cwnd);
 
-	if (kOpenCwnd) {
-		/*
-		*
-		*/
-		cwnd = 1000000;
-	}
 	/*
 	* Make possible to enter fast start if OWD has been low for a while
 	*/
 	if (queueDelayTrend > 0.2) {
 		lastCongestionDetectedT_us = time_us;
 	}
-	else if (true && time_us - lastCongestionDetectedT_us > 5000000 &&
+	else if (true && time_us - lastCongestionDetectedT_us > 2000000 &&
 		!inFastStart && kEnableConsecutiveFastStart) {
 		/*
 		* The queue delay trend has been low for more than 5.0s, resume fast start
@@ -1263,6 +1330,8 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 		lastCongestionDetectedT_us = time_us;
 	}
 	bytesNewlyAcked = 0;
+
+	lastCwndUpdateT_us = time_us;
 }
 
 /*
@@ -1271,7 +1340,7 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 */
 uint32_t ScreamTx::estimateOwd(uint64_t time_us) {
 	baseOwd = std::min(baseOwd, ackedOwd);
-	if (time_us - lastBaseOwdAddT_us >= 1000000) {
+	if (time_us - lastBaseOwdAddT_us >= 10000000) { // Update every 10s
 		baseOwdHist[baseOwdHistPtr] = baseOwd;
 		baseOwdHistPtr = (baseOwdHistPtr + 1) % kBaseOwdHistSize;
 		lastBaseOwdAddT_us = time_us;
@@ -1293,13 +1362,12 @@ uint32_t ScreamTx::getBaseOwd() {
 /*
 * Compute current number of bytes in flight
 */
-int ScreamTx::bytesInFlight() {
-	int ret = 0;
+void ScreamTx::computeBytesInFlight() {
+	bytesInFlight = 0;
 	for (int n = 0; n < kMaxTxPackets; n++) {
 		if (txPackets[n].isUsed == true)
-			ret += txPackets[n].size;
+			bytesInFlight += txPackets[n].size;
 	}
-	return ret;
 }
 
 /*

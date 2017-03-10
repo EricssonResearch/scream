@@ -31,7 +31,7 @@ static const float kQueueDelayTargetMin = 0.1f; //ms
 //  For some reason, self-inflicted congestion is easily triggered
 //  when an audio + video stream is run, so bottomline is that
 //  this feature is a bit shaky
-static const bool kEnableSbd = true;
+static const bool kEnableSbd = false;
 
 // Stream related default parameters 
 // Max video rampup speed in bps/s (bits per second increase per second) 
@@ -73,8 +73,8 @@ static const int kQueueDelayNormHistSize = 200;
 static const int kQueueDelayNormHistSizeSh = 50;
 static const int kQueueDelayFractionHistSize = 20;
 static const int kBytesInFlightHistSize = 5;
-static const int kRateRtpHistSize = 21;
-static const int kRateUpDateSize = 2;
+static const int kRateRtpHistSize = 3;
+static const int kRateUpDateSize = 4;
 static const int kTargetBitrateHistSize = 3;
 
 class RtpQueue;
@@ -94,8 +94,9 @@ public:
 	* with a priority value in the range [0.0..1.0]
 	* where 1.0 denotes the highest priority
 	* bitrates in bps
-	* frame rate is the expected value for this stream
 	* Constructor, see constant definitions above for an explanation of other default parameters
+	* rateBoost = true may be needed for certain video coders that are overly defensive in their ambitions 
+	*  to reach the target bitrates
 	*/
 	void registerNewStream(RtpQueue *rtpQueue,
 		uint32_t ssrc,
@@ -106,7 +107,8 @@ public:
 		float maxRtpQueueDelay = kMaxRtpQueueDelay,
 		float txQueueSizeFactor = kTxQueueSizeFactor,
 		float queueDelayGuard = kQueueDelayGuard,
-		float lossEventRateScale = kLossEventRateScale);
+		float lossEventRateScale = kLossEventRateScale,
+		bool rateBoost = false);
 
 	/*
 	* Call this function for each new video frame
@@ -164,8 +166,15 @@ public:
 	*  media coder target bitrate must subtract an estimate of the RTP + framing
 	*  overhead. This is not critical for Video bitrates but can be important
 	*  when SCReAM is used to congestion control e.g low bitrate audio streams
+	* Function returns -1 if a loss is detected, this signal can be used to 
+	*  request a new key frame from a video encoder
 	*/
 	float getTargetBitrate(uint32_t ssrc);
+
+	/*
+	* Set target priority for a given stream, priority value should be in range ]0.0..1.0]
+	*/
+	void setTargetPriority(uint32_t ssrc, float aPriority);
 
 	/*
 	* Print logs
@@ -203,15 +212,20 @@ private:
 			float maxRtpQueueDelay,
 			float txQueueSizeFactor,
 			float queueDelayGuard,
-			float lossEventRateScale);
+			float lossEventRateScale,
+			bool rateBoost);
 
 		float getMaxRate();
+
+		float getTargetBitrate();
 
 		void updateRate(uint64_t time_us);
 
 		void updateTargetBitrateI(float br);
 
 		void updateTargetBitrate(uint64_t time_us);
+
+		bool isRtpQueueDiscard();
 
 		bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 		ScreamTx *parent;
@@ -222,14 +236,18 @@ private:
 		float txQueueSizeFactor;
 		float queueDelayGuard;
 		float lossEventRateScale;
+		bool rateBoost;
 
 		float credit;           // Credit that is received if another stream gets priority 
 		                        //  to transmit
 		float targetPriority;   // Stream target priority
 		int bytesTransmitted;   // Number of bytes transmitted
 		int bytesAcked;         // Number of ACKed bytes
+		int bytesLost;          // Number of lost bytes
 		float rateTransmitted;  // Transmitted rate
 		float rateAcked;        // ACKed rate
+		float rateLost;         // Lost packets (bit)rate
+		int hiSeqAck;           // Highest sequence number ACKed
 		float minBitrate;       // Min bitrate
 		float maxBitrate;       // Max bitrate
 		float targetBitrate;    // Target bitrate
@@ -245,23 +263,29 @@ private:
 
 		int bytesRtp;           // Number of RTP bytes from media coder
 		float rateRtp;          // Media bitrate
-		float rateRtpSum;       // Temp accumulated rtpRate
-		int rateRtpSumN;        //
-		float rateRtpHist[kRateRtpHistSize]; // History of media coder bitrates
+		float rateRtpMaxHist[kRateRtpHistSize]; // History of media coder max bitrates
 		int rateRtpHistPtr;     // Ptr to above
-		float rateRtpMedian;    // Median media bitrate
-		float rateRtpHistSh[kRateUpDateSize];
+		int rateRtpSumN;
+		float rateRtpMax;    // Max media bitrate
+		float rateRtpMaxTmp;    // Max media bitrate
+		float rateRtpHist[kRateUpDateSize];
 		float rateAckedHist[kRateUpDateSize];
+		float rateLostHist[kRateUpDateSize];
 		float rateTransmittedHist[kRateUpDateSize];
 		int rateUpdateHistPtr;
 		float targetBitrateHist[kTargetBitrateHistSize];
 		int targetBitrateHistPtr;
+		float rateLast;
 		uint64_t targetBitrateHistUpdateT_us;
+		float targetRateScale;
 
 		bool isActive;
 		uint64_t lastFrameT_us;
 		uint64_t initTime_us;
-
+		bool rtpQueueDiscard;
+		uint64_t lastRtpQueueDiscardT_us;
+		bool wasRepairLoss;
+		bool repairLoss;
 	};
 
 	/*
@@ -299,7 +323,7 @@ private:
 	void computeSbd();
 
 	/*
-	* TRUE if competing (TCP)flows detected
+	* True if competing (TCP)flows detected
 	*/
 	bool isCompetingFlows();
 
@@ -373,6 +397,7 @@ private:
 	float queueDelaySbdSkew;
 	float queueDelaySbdMeanSh;
 
+	float queueDelayMax;
 	/*
 	* CWND management
 	*/
@@ -380,6 +405,7 @@ private:
 	int mss; // Maximum Segment Size
 	int cwnd; // congestion window
 	int cwndMin;
+	int bytesInFlight;
 	int bytesInFlightHistLo[kBytesInFlightHistSize];
 	int bytesInFlightHistHi[kBytesInFlightHistSize];
 	int bytesInFlightHistPtr;
@@ -390,6 +416,7 @@ private:
 	float rateTransmitted;
 	float queueDelayTrendMem;
 	int lastAckedBytes;
+	uint64_t lastCwndUpdateT_us;
 
 
 	/*
@@ -425,6 +452,8 @@ private:
 	uint64_t lastRateUpdateT_us;
 	uint64_t lastAdjustPrioritiesT_us;
 	uint64_t lastRttT_us;
+	float queueDelayMin;
+	float queueDelayMinAvg;
 
 	/*
 	* Methods
@@ -448,9 +477,9 @@ private:
 	int getMaxBytesInFlightLo();
 
 	/*
-	* Returns the number of bytes currently in flight.
+	* Compute the number pof bytes in flight
 	*/
-	int bytesInFlight();
+	void computeBytesInFlight();
 
 	/*
 	* Get pacing bitrate
@@ -466,5 +495,7 @@ private:
 	* Get the queuing delay trend
 	*/
 	float getQueueDelayTrend();
+
+
 };
 #endif
