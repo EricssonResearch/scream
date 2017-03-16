@@ -7,8 +7,8 @@
 using namespace std;
 
 /*
-* This module implements the sender side of SCReAM, 
-*  see https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf 
+* This module implements the sender side of SCReAM,
+*  see https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf
 *  for details on how it is integrated in audio/video platforms
 * A full implementation needs the additional code for
 *  + RTCP feedback (e.g using RFC3611 XR elements)
@@ -18,13 +18,13 @@ using namespace std;
 */
 
 // ==== Default parameters (if tuning necessary) ====
-// Connection related default parameters 
+// Connection related default parameters
 // CWND scale factor upon loss event
 static const float kLossBeta = 0.6f;
 // Min and max queue delay target
 static const float kQueueDelayTargetMin = 0.1f; //ms
 // Enable shared botleneck detection and queue delay target adjustement
-// good if SCReAM needs to compete with e.g FTP but 
+// good if SCReAM needs to compete with e.g FTP but
 // Can in some cases cause self-inflicted congestion
 //  i.e the e2e delay can become large even though
 //  there is no competing traffic present
@@ -33,19 +33,19 @@ static const float kQueueDelayTargetMin = 0.1f; //ms
 //  this feature is a bit shaky
 static const bool kEnableSbd = false;
 
-// Stream related default parameters 
-// Max video rampup speed in bps/s (bits per second increase per second) 
+// Stream related default parameters
+// Max video rampup speed in bps/s (bits per second increase per second)
 static const float kRampUpSpeed = 200000.0f; // bps/s
 // Max RTP queue delay, RTP queue is cleared if this value is exceeded
 static const float kMaxRtpQueueDelay = 2.0;  // 2s
 // Compensation factor for RTP queue size
 // A higher value such as 0.2 gives less jitter esp. in wireless (LTE)
 // but potentially also lower link utilization
-static const float kTxQueueSizeFactor = 1.0f;
-// Compensation factor for detected congestion in rate computation 
+static const float kTxQueueSizeFactor = 0.2f;
+// Compensation factor for detected congestion in rate computation
 // A higher value such as 0.5 gives less jitter esp. in wireless (LTE)
 // but potentially also lower link utilization
-static const float kQueueDelayGuard = 0.3f;
+static const float kQueueDelayGuard = 0.05f;
 // Video rate scaling due to loss events
 static const float kLossEventRateScale = 0.8f;
 
@@ -95,7 +95,7 @@ public:
 	* where 1.0 denotes the highest priority
 	* bitrates in bps
 	* Constructor, see constant definitions above for an explanation of other default parameters
-	* rateBoost = true may be needed for certain video coders that are overly defensive in their ambitions 
+	* rateBoost = true may be needed for certain video coders that are overly defensive in their ambitions
 	*  to reach the target bitrates
 	*/
 	void registerNewStream(RtpQueue *rtpQueue,
@@ -107,8 +107,7 @@ public:
 		float maxRtpQueueDelay = kMaxRtpQueueDelay,
 		float txQueueSizeFactor = kTxQueueSizeFactor,
 		float queueDelayGuard = kQueueDelayGuard,
-		float lossEventRateScale = kLossEventRateScale,
-		bool rateBoost = false);
+		float lossEventRateScale = kLossEventRateScale);
 
 	/*
 	* Call this function for each new video frame
@@ -166,7 +165,7 @@ public:
 	*  media coder target bitrate must subtract an estimate of the RTP + framing
 	*  overhead. This is not critical for Video bitrates but can be important
 	*  when SCReAM is used to congestion control e.g low bitrate audio streams
-	* Function returns -1 if a loss is detected, this signal can be used to 
+	* Function returns -1 if a loss is detected, this signal can be used to
 	*  request a new key frame from a video encoder
 	*/
 	float getTargetBitrate(uint32_t ssrc);
@@ -212,8 +211,7 @@ private:
 			float maxRtpQueueDelay,
 			float txQueueSizeFactor,
 			float queueDelayGuard,
-			float lossEventRateScale,
-			bool rateBoost);
+			float lossEventRateScale);
 
 		float getMaxRate();
 
@@ -236,9 +234,8 @@ private:
 		float txQueueSizeFactor;
 		float queueDelayGuard;
 		float lossEventRateScale;
-		bool rateBoost;
 
-		float credit;           // Credit that is received if another stream gets priority 
+		float credit;           // Credit that is received if another stream gets priority
 		                        //  to transmit
 		float targetPriority;   // Stream target priority
 		int bytesTransmitted;   // Number of bytes transmitted
@@ -263,11 +260,6 @@ private:
 
 		int bytesRtp;           // Number of RTP bytes from media coder
 		float rateRtp;          // Media bitrate
-		float rateRtpMaxHist[kRateRtpHistSize]; // History of media coder max bitrates
-		int rateRtpHistPtr;     // Ptr to above
-		int rateRtpSumN;
-		float rateRtpMax;    // Max media bitrate
-		float rateRtpMaxTmp;    // Max media bitrate
 		float rateRtpHist[kRateUpDateSize];
 		float rateAckedHist[kRateUpDateSize];
 		float rateLostHist[kRateUpDateSize];
@@ -275,7 +267,6 @@ private:
 		int rateUpdateHistPtr;
 		float targetBitrateHist[kTargetBitrateHistSize];
 		int targetBitrateHistPtr;
-		float rateLast;
 		uint64_t targetBitrateHistUpdateT_us;
 		float targetRateScale;
 
