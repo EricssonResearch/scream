@@ -185,7 +185,7 @@ bool ScreamRx::getFeedback(uint64_t time_us,
 	uint64_t &ackVector) {
 
 	Stream *stream = NULL;
-	uint64_t minT_us = ULONG_MAX;
+	uint64_t minT_us = ULLONG_MAX;
 	for (auto it = streams.begin(); it != streams.end(); ++it) {
 		if ((*it)->nRtpSinceLastRtcp > 0 && (*it)->lastFeedbackT_us < minT_us) {
 			stream = *it;
