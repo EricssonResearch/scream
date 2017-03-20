@@ -832,7 +832,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 			/*
 			* No increase if the actual coder rate is lower than the target
 			*/
-			if (targetBitrate > rateRtpLimit*1.2f)
+			if (targetBitrate > rateRtpLimit*1.5f)
 				increment = 0;
 			/*
 			* Add increment
@@ -880,7 +880,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
 					increment *= sclI;
 					increment = std::min(increment, (float)(rampUpSpeedTmp*(kRateAdjustInterval_us / 1e6)));
 				}
-				if (targetBitrate > rateRtpLimit)
+				if (targetBitrate > rateRtpLimit*1.5f)
 					increment = 0;
 			}
 			else {
