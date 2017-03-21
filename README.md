@@ -1,5 +1,5 @@
 # SCReAM
-A mobile optimised congestion control algorithm
+This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## Algorithm
 SCReAM (**S**elf-**C**locked **R**at**e** **A**daptation for **M**ultimedia) is a congestion control algorithm devised mainly for Video.
