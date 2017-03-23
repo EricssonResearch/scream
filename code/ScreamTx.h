@@ -47,7 +47,7 @@ static const float kTxQueueSizeFactor = 0.2f;
 // but potentially also lower link utilization
 static const float kQueueDelayGuard = 0.05f;
 // Video rate scaling due to loss events
-static const float kLossEventRateScale = 0.8f;
+static const float kLossEventRateScale = 0.9f;
 
 
 
@@ -187,7 +187,6 @@ private:
 	struct Transmitted {
 		uint64_t timeTx_us;
 		uint32_t timestamp;
-		uint32_t ssrc;
 		int size;
 		uint16_t seqNr;
 		bool isUsed;
@@ -235,9 +234,10 @@ private:
 		float queueDelayGuard;
 		float lossEventRateScale;
 
-		float credit;           // Credit that is received if another stream gets priority
+		int credit;             // Credit that is received if another stream gets priority
 		                        //  to transmit
 		float targetPriority;   // Stream target priority
+		float targetPriorityInv;// Stream target priority invers
 		int bytesTransmitted;   // Number of bytes transmitted
 		int bytesAcked;         // Number of ACKed bytes
 		int bytesLost;          // Number of lost bytes
@@ -277,6 +277,10 @@ private:
 		uint64_t lastRtpQueueDiscardT_us;
 		bool wasRepairLoss;
 		bool repairLoss;
+
+		Transmitted txPackets[kMaxTxPackets];
+		int txPacketsPtr;
+
 	};
 
 	/*
@@ -367,7 +371,6 @@ private:
 	float queueDelayTargetMin;
 	bool enableSbd;
 
-	Transmitted txPackets[kMaxTxPackets];
 	uint64_t sRttSh_us;
 	uint64_t sRtt_us;
 	uint32_t ackedOwd;
@@ -425,7 +428,8 @@ private:
 	/*
 	* Transmission scheduling
 	*/
-	float pacingBitrate;
+	uint64_t paceInterval_us;
+	float paceInterval;
 
 	/*
 	* Update control variables
@@ -443,6 +447,7 @@ private:
 	uint64_t lastRateUpdateT_us;
 	uint64_t lastAdjustPrioritiesT_us;
 	uint64_t lastRttT_us;
+	uint64_t lastBaseDelayRefreshT_us;
 	float queueDelayMin;
 	float queueDelayMinAvg;
 
@@ -471,11 +476,6 @@ private:
 	* Compute the number pof bytes in flight
 	*/
 	void computeBytesInFlight();
-
-	/*
-	* Get pacing bitrate
-	*/
-	float getPacingBitrate() { return pacingBitrate; };
 
 	/*
 	* Get the fraction between queue delay and the queue delay target
