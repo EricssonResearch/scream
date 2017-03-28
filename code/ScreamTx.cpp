@@ -1248,10 +1248,15 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 			}
 			else {
 				/*
-				* queue delay above target
+				* Queue delay above target. 
+				* Limit the CWND reduction to at most a quarter window
+				*  this avoids unduly large reductions for the cases
+				*  where data is queued up e.g because of retransmissions
+				*  on lower protocol layers.
 				*/
-				float delta = (kGainDown * offTarget * bytesNewlyAcked * mss / cwnd);
-				cwnd += (int)(delta);
+				float delta = -(kGainDown * offTarget * bytesNewlyAcked * mss / cwnd);
+				delta = std::min((int) delta, cwnd / 4);
+				cwnd -= (int)(delta);
 
 				/*
 				* Especially when running over low bitrate bottlenecks, it is
@@ -1262,7 +1267,7 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 				for (int n = 0; n < nStreams; n++)
 					rateTotal += streams[n]->getMaxRate();
 				if (rateTotal < 1.0e5f) {
-					delta = -delta / cwnd;
+					delta = delta / cwnd;
 					float rateAdjustFactor = (1.0f - delta);
 					for (int n = 0; n < nStreams; n++) {
 						Stream *tmp = streams[n];
