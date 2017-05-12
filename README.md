@@ -25,7 +25,7 @@ Figure 1 : Simple bottleneck simulation GCC, the link bandwidth is outlined in r
 Figure 2 : Simple bottleneck simulation SCReAM
 
 ## Real life test
-The SCReAM congestion control algorithm is implemented to rate control an Antrica ANT-35000A video encoder. The Encoder runs in 1080p50 mode and has a bitrate range of 1000-8000kbps. The video traffic is in LTE uplink, a Sony Xperia phone is used in tethering mode. 
+The SCReAM congestion control algorithm is implemented to rate control an Antrica ANT-35000A video encoder. The Encoder runs in 1080p50 mode and has a bitrate range of 1000-8000kbps. The video traffic is in LTE uplink, a Sony Xperia phone is used in tethering mode.  
 
 The video material is pre-recorded content played out from a Sony Camcorder. In short, the camcorder was placed on  dash-board during a lunch tour in Luleå, Sweden. 
 
