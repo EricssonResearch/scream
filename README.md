@@ -32,16 +32,17 @@ A real life test of SCReAM is performed with the following setup in a car:
 - Laptop with a SCReAM sender running
 - Sony Xperia phone in WiFi tethering mode 
 
-A SCReAM receiver was running in an office. THe video traffic was thus transmitted in LTE uplink.
+A SCReAM receiver that logged the performance and stored the received RTP packets was running in an office. The video traffic was thus transmitted in LTE uplink.The video was played out to file with GStreamer, the jitter buffer was disabled to allow for the visibility of the delay jitter artifacts,
 
 Below is a graph that shows the bitrate, the congestion window and the queue delay. 
-
-The graph shows that SCReAM manages high bitrate video streaming with low e2e delay despite demanding conditions both in terms of variable throughput and in a changing output bitrate from the video encoder. Packet losses occur frequently. The exact reason to these is unknown but seem to be related to handover events. The delay increases between 1730 and 1800s, the reason here is that the available throughput was lower than the lowest possible coder bitrate. An encoder with a wider rate range would be able to make it possible to keep the delay low also in this case.
  
 ![Log from ](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM_LTE_UL.png)
 
-A video from the experiment is found at the link below. The artifacts and overall video quality can be correlated aginst the graph above
-[https://youtu.be/RYgH51QdJOk](https://youtu.be/RYgH51QdJOk "SCReAM Live demo")
+The graph shows that SCReAM manages high bitrate video streaming with low e2e delay despite demanding conditions both in terms of variable throughput and in a changing output bitrate from the video encoder. Packet losses occur frequently. The exact reason to these is unknown but seem to be related to handover events. The delay increases between 1730 and 1800s, the reason here is that the available throughput was lower than the lowest possible coder bitrate. An encoder with a wider rate range would be able to make it possible to keep the delay low also in this case.
+
+A video from the experiment is found at the link below. The artifacts and overall video quality can be correlated aginst the graph above.
+
+Link to video : [SCReAM live demo](https://youtu.be/YYaox26WhKo "SCReAM Live demo")
 
 ## The code
 The main SCReAM algorithm components are found in the C++ classes:
