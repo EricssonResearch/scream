@@ -25,19 +25,23 @@ Figure 1 : Simple bottleneck simulation GCC, the link bandwidth is outlined in r
 Figure 2 : Simple bottleneck simulation SCReAM
 
 ## Real life test
-The SCReAM congestion control algorithm is implemented to rate control an Antrica ANT-35000A video encoder. The Encoder runs in 1080p50 mode and has a bitrate range of 1000-8000kbps. The video traffic is in LTE uplink, a Sony Xperia phone is used in tethering mode.  
+A real life test of SCReAM is performed with the following setup in a car:
 
-The video material is pre-recorded content played out from a Sony Camcorder. In short, the camcorder was placed on  dash-board during a lunch tour in Luleå, Sweden. 
+- Sony Camcorder placed on a dashboard, HDMI output used
+- Antrica ANT-35000A video encoder with 1000-8000kbps encoding range and 1080p50 mode
+- Laptop with a SCReAM sender running
+- Sony Xperia phone in WiFi tethering mode 
 
-The actual test that was recorded in the video below was with the LTE modem (Sony Xperia) taped against a window in the office. No handover occured but competing traffic in the cell caused the uplink thorughput to vary. 
+A SCReAM receiver was running in an office. THe video traffic was thus transmitted in LTE uplink.
 
-The example shows that SCReAM promplty responds to changes in throughput with the result that the network queue delay is kept low. The example shows that SCReAM can congestion control even complex video.
+Below is a graph that shows the bitrate, the congestion window and the queue delay. 
 
+The graph shows that SCReAM manages high bitrate video streaming with low e2e delay despite demanding conditions both in terms of variable throughput and in a changing output bitrate from the video encoder. Packet losses occur frequently. The exact reason to these is unknown but seem to be related to handover events. The delay increases between 1730 and 1800s, the reason here is that the available throughput was lower than the lowest possible coder bitrate. An encoder with a wider rate range would be able to make it possible to keep the delay low also in this case.
+ 
+![Log from ](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM_LTE_UL.png)
 
-See video at: 
-[https://youtu.be/MUHnjA2YERQ](https://youtu.be/MUHnjA2YERQ "SCReAM Live demo")
-
-The quality is somewhat degraded with 50/60Hz flicker because the screen was captured with a camcorder. 
+A video from the experiment is found at the link below. The artifacts and overall video quality can be correlated aginst the graph above
+[https://youtu.be/RYgH51QdJOk](https://youtu.be/RYgH51QdJOk "SCReAM Live demo")
 
 ## The code
 The main SCReAM algorithm components are found in the C++ classes:
