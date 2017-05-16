@@ -27,7 +27,7 @@ Figure 2 : Simple bottleneck simulation SCReAM
 ## Real life test
 A real life test of SCReAM is performed with the following setup in a car:
 
-- Sony Camcorder placed on a dashboard, HDMI output used
+- Sony Camcorder placed on dashboard, HDMI output used
 - Antrica ANT-35000A video encoder with 1000-8000kbps encoding range and 1080p50 mode
 - Laptop with a SCReAM sender running
 - Sony Xperia phone in WiFi tethering mode 
