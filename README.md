@@ -18,7 +18,7 @@ A comparison against GCC (**G**oogle **C**ongestion **C**ontrol) is shown below.
 
 ![Simple bottleneck simulation GCC](https://github.com/EricssonResearch/scream/blob/master/images/image_1.png)
 
-Figure 1 : Simple bottleneck simulation GCC, the link bandwidth is outlined in red
+Figure 1 : Simple bottleneck simulation GCC, the link bandwidth is outlined in red 
 
 ![Simple bottleneck simulation SCReAM](https://github.com/EricssonResearch/scream/blob/master/images/image_2.png)
 
