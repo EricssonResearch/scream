@@ -143,6 +143,7 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
 	uint32_t ssrc,
 	float priority,
 	float minBitrate,
+	float startBitrate,
 	float maxBitrate,
 	float rampUpSpeed,
 	float maxRtpQueueDelay,
@@ -154,6 +155,7 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
 		ssrc,
 		priority,
 		minBitrate,
+		startBitrate,
 		maxBitrate,
 		rampUpSpeed,
 		maxRtpQueueDelay,
@@ -575,6 +577,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	uint32_t ssrc_,
 	float priority_,
 	float minBitrate_,
+	float startBitrate_,
 	float maxBitrate_,
 	float rampUpSpeed_,
 	float maxRtpQueueDelay_,
@@ -588,7 +591,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	targetPriorityInv = 1.0f / targetPriority;
 	minBitrate = minBitrate_;
 	maxBitrate = maxBitrate_;
-	targetBitrate = minBitrate;
+	targetBitrate = std::min(maxBitrate, std::max(minBitrate, startBitrate_));
 	rampUpSpeed = rampUpSpeed_;
 	maxRtpQueueDelay = maxRtpQueueDelay_;
 	txQueueSizeFactor = txQueueSizeFactor_;
