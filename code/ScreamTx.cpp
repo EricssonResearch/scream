@@ -668,15 +668,14 @@ void ScreamTx::Stream::updateRate(uint64_t time_us) {
 		rateRtp /= kRateUpDateSize;
 		if (rateRtp > 0) {
 			/*
-			* Video coders are strange animals.. In certain cases the average bitarte is
+			* Video coders are strange animals.. In certain cases the average bitrate is
 			* consistently lower or higher than the target bitare. This additonal scaling compensates
 			* for this anomaly.
 			*/
 			const float alpha = 0.05f;
 			targetRateScale *= (1.0f - alpha);
 			targetRateScale += alpha*targetBitrate / rateRtp;
-			targetRateScale = std::min(4.0f, std::max(0.25f, targetRateScale));
-			//fprintf(stderr,"%7.0f  %7.0f   %7.3f \n",targetBitrate/1000,rateRtp/1000,targetRateScale);
+			targetRateScale = std::min(1.25f, std::max(0.8f, targetRateScale));
 		}
 	}
 
