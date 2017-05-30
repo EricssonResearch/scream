@@ -32,12 +32,15 @@ static const float kQueueDelayTargetMin = 0.1f; //ms
 //  when an audio + video stream is run, so bottomline is that
 //  this feature is a bit shaky
 static const bool kEnableSbd = false;
+// CWND up and down gain factors
+static const float kGainUp = 1.0f;
+static const float kGainDown = 2.0f;
 
 // Stream related default parameters
 // Max video rampup speed in bps/s (bits per second increase per second)
 static const float kRampUpSpeed = 200000.0f; // bps/s
 // Max RTP queue delay, RTP queue is cleared if this value is exceeded
-static const float kMaxRtpQueueDelay = 2.0;  // 2s
+static const float kMaxRtpQueueDelay = 0.1;  // 0.1s
 // Compensation factor for RTP queue size
 // A higher value such as 0.2 gives less jitter esp. in wireless (LTE)
 // but potentially also lower link utilization
@@ -45,7 +48,7 @@ static const float kTxQueueSizeFactor = 0.2f;
 // Compensation factor for detected congestion in rate computation
 // A higher value such as 0.5 gives less jitter esp. in wireless (LTE)
 // but potentially also lower link utilization
-static const float kQueueDelayGuard = 0.05f;
+static const float kQueueDelayGuard = 0.1f;
 // Video rate scaling due to loss events
 static const float kLossEventRateScale = 0.9f;
 
@@ -85,7 +88,9 @@ public:
 	*/
 	ScreamTx(float lossBeta = kLossBeta,
 		float queueDelayTargetMin = kQueueDelayTargetMin,
-		bool enableSbd = kEnableSbd);
+		bool enableSbd = kEnableSbd,
+		float gainUp = kGainUp,
+		float gainDown = kGainDown);
 
 	~ScreamTx();
 
@@ -179,7 +184,7 @@ public:
 	/*
 	* Print logs
 	*/
-	void printLog(float time);
+	void printLog(float time, char *s);
 
 private:
 	/*
@@ -372,6 +377,8 @@ private:
 	float lossBeta;
 	float queueDelayTargetMin;
 	bool enableSbd;
+	float gainUp;
+	float gainDown;
 
 	uint64_t sRttSh_us;
 	uint64_t sRtt_us;
@@ -411,7 +418,7 @@ private:
 	int nAccBytesInFlightMax;
 	float rateTransmitted;
 	float queueDelayTrendMem;
-	int lastAckedBytes;
+	float maxRate;
 	uint64_t lastCwndUpdateT_us;
 
 
