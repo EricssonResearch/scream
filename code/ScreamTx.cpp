@@ -54,7 +54,8 @@ ScreamTx::ScreamTx(float lossBeta_,
     float queueDelayTargetMin_,
     bool enableSbd_,
     float gainUp_,
-    float gainDown_
+    float gainDown_,
+    int cwnd_
     )
     : sRttSh_us(0),
     lossBeta(lossBeta_),
@@ -110,6 +111,13 @@ ScreamTx::ScreamTx(float lossBeta_,
     maxRate(0.0f)
 
 {
+    if (cwnd_ == 0) {
+        cwnd = kInitMss * 2;
+    }
+    else {
+        cwnd = cwnd_;
+    }
+
     for (int n = 0; n < kBaseOwdHistSize; n++)
         baseOwdHist[n] = UINT32_MAX;
     baseOwdHistPtr = 0;
@@ -387,6 +395,10 @@ float ScreamTx::addTransmitted(uint64_t time_us,
     txPacket->isUsed = true;
     txPacket->isAcked = false;
     txPacket->isAfterReceivedEdge = false;
+    /*
+    * Update bytesInFlight
+    */
+    computeBytesInFlight();
 
     stream->bytesTransmitted += size;
     lastTransmitT_us = time_us;
@@ -1123,10 +1135,10 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
 
     queueDelayMax = std::max(queueDelayMax, queueDelay);
 
-    if (queueDelayMinAvg > std::max(0.02f, getSRtt()) && time_us - baseOwdResetT_us > 20000000) {
+    if (queueDelayMinAvg > 0.25f*queueDelayTarget && time_us - baseOwdResetT_us > 20000000) {
         /*
         * The base OWD is likely wrong, for instance due to
-        * a channel change, reset base OWD history
+        * a channel change or clock drift, reset base OWD history
         */
         queueDelayMinAvg = 0.0f;
         queueDelay = 0.0f;
@@ -1165,7 +1177,10 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
         }
         paceInterval_us = (uint64_t)(paceInterval * 1000000);
 
-        queueDelayMinAvg = 0.99f*queueDelayMinAvg + 0.01f*queueDelayMin;
+        if (queueDelayMin < queueDelayMinAvg)
+            queueDelayMinAvg = queueDelayMin;
+        else 
+            queueDelayMinAvg = 0.001f*queueDelayMin + 0.999f*queueDelayMinAvg;
         queueDelayMin = 1000.0f;
         /*
         * Need to duplicate insertion incase the feedback is sparse

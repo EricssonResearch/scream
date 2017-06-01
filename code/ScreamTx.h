@@ -90,7 +90,8 @@ public:
 		float queueDelayTargetMin = kQueueDelayTargetMin,
 		bool enableSbd = kEnableSbd,
 		float gainUp = kGainUp,
-		float gainDown = kGainDown);
+		float gainDown = kGainDown,
+        int cwnd = 0); // An initial cwnd larger than 2*mss
 
 	~ScreamTx();
 
