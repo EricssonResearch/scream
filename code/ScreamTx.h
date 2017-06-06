@@ -80,7 +80,7 @@ static const int kRateRtpHistSize = 3;
 static const int kRateUpDateSize = 4;
 static const int kTargetBitrateHistSize = 3;
 
-class RtpQueue;
+class RtpQueueIface;
 class ScreamTx {
 public:
 	/*
@@ -104,7 +104,7 @@ public:
 	* rateBoost = true may be needed for certain video coders that are overly defensive in their ambitions
 	*  to reach the target bitrates
 	*/
-	void registerNewStream(RtpQueue *rtpQueue,
+	void registerNewStream(RtpQueueIface *rtpQueue,
 		uint32_t ssrc,
 		float priority,
 		float minBitrate,
@@ -115,6 +115,18 @@ public:
 		float txQueueSizeFactor = kTxQueueSizeFactor,
 		float queueDelayGuard = kQueueDelayGuard,
 		float lossEventRateScale = kLossEventRateScale);
+
+    /*
+     * Updates the min and max bitrates for an existing stream
+     */
+    void updateBitrateStream(uint32_t ssrc,
+        float minBitrate,
+        float maxBitrate);
+
+    /*
+     * Access the configured RtpQueue of an existing stream
+     */
+    RtpQueueIface * getStreamQueue(uint32_t ssrc);
 
 	/*
 	* Call this function for each new video frame
@@ -182,6 +194,11 @@ public:
 	*/
 	void setTargetPriority(uint32_t ssrc, float aPriority);
 
+    /*
+     * Get smoothed RTT
+     */
+    float getSRtt() { return sRtt_us / 1e6f; };
+
 	/*
 	* Print logs
 	*/
@@ -208,7 +225,7 @@ private:
 	class Stream {
 	public:
 		Stream(ScreamTx *parent,
-			RtpQueue *rtpQueue,
+			RtpQueueIface *rtpQueue,
 			uint32_t ssrc,
 			float priority,
 			float minBitrate,
@@ -234,7 +251,7 @@ private:
 
 		bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 		ScreamTx *parent;
-		RtpQueue *rtpQueue;      // RTP Packet queue
+		RtpQueueIface *rtpQueue;      // RTP Packet queue
 		uint32_t ssrc;            // SSRC of stream
 		float rampUpSpeed;
 		float maxRtpQueueDelay;
@@ -468,11 +485,6 @@ private:
 	* return 1 if in fast start
 	*/
 	int isInFastStart() { return inFastStart ? 1 : 0; };
-
-	/*
-	* Get smoothed RTT
-	*/
-	float getSRtt() { return sRtt_us / 1e6f; };
 
 	/*
 	* Returns the maximum bytes in flight value of the last
