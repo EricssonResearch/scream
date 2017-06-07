@@ -2,6 +2,7 @@
 #include "ScreamTx.h"
 #include "ScreamRx.h"
 #include <cstdint>
+#include <cmath>
 #include <string.h>
 #include <iostream>
 #include <algorithm>
