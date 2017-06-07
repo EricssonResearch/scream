@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
+
 using namespace std;
 
 // === Some good to have features, SCReAM works also
@@ -149,7 +151,7 @@ ScreamTx::~ScreamTx() {
 /*
 * Register new stream
 */
-void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
+void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
     uint32_t ssrc,
     float priority,
     float minBitrate,
@@ -174,6 +176,20 @@ void ScreamTx::registerNewStream(RtpQueue *rtpQueue,
         lossEventRateScale);
     streams[nStreams++] = stream;
 }
+
+void ScreamTx::updateBitrateStream(uint32_t ssrc,
+                         float minBitrate,
+                         float maxBitrate) {
+    Stream *stream = getStream(ssrc);
+    stream->minBitrate = minBitrate;
+    stream->maxBitrate = maxBitrate;
+}
+
+RtpQueueIface * ScreamTx::getStreamQueue(uint32_t ssrc) {
+    Stream* stream = getStream(ssrc);
+    return stream->rtpQueue;
+}
+
 
 /*
 * New media frame
@@ -597,7 +613,7 @@ void ScreamTx::initialize(uint64_t time_us) {
 }
 
 ScreamTx::Stream::Stream(ScreamTx *parent_,
-    RtpQueue *rtpQueue_,
+    RtpQueueIface *rtpQueue_,
     uint32_t ssrc_,
     float priority_,
     float minBitrate_,
