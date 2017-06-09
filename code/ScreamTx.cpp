@@ -200,6 +200,13 @@ void ScreamTx::newMediaFrame(uint64_t time_us, uint32_t ssrc, int bytesRtp) {
 
     Stream *stream = getStream(ssrc);
     stream->updateTargetBitrate(time_us);
+    if (time_us - lastCwndUpdateT_us < 500000) {
+        /*
+        * We expect feedback at least every 500ms
+        * to update the target rate.
+        */
+        stream->updateTargetBitrate(time_us);
+    }
     if (time_us - lastBaseDelayRefreshT_us < sRtt_us * 2) {
         /*
         * _Very_ long periods of congestion can cause the base delay to increase
@@ -611,6 +618,7 @@ void ScreamTx::initialize(uint64_t time_us) {
     lastAdjustPrioritiesT_us = time_us;
     lastRttT_us = time_us;
     lastBaseDelayRefreshT_us = time_us + 1000000;
+    initTime_us = time_us;
 }
 
 ScreamTx::Stream::Stream(ScreamTx *parent_,
@@ -1207,7 +1215,13 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
             queueDelayFractionHist[queueDelayFractionHistPtr] = getQueueDelayFraction();
             queueDelayFractionHistPtr = (queueDelayFractionHistPtr + 1) % kQueueDelayFractionHistSize;
         }
-        computeQueueDelayTrend();
+
+        if (time_us - initTime_us > 2000000) {
+            /*
+            * Queue delay trend calculations are reliable after ~2s
+            */
+            computeQueueDelayTrend();
+        }
 
         queueDelayTrendMem = std::max(queueDelayTrendMem*0.98f, queueDelayTrend);
 
