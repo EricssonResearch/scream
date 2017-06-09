@@ -475,7 +475,7 @@ private:
 	uint64_t lastAdjustPrioritiesT_us;
 	uint64_t lastRttT_us;
 	uint64_t lastBaseDelayRefreshT_us;
-    uint64_t initTime_us;
+    uint64_t initTime_us; 
 	float queueDelayMin;
 	float queueDelayMinAvg;
 

@@ -1216,7 +1216,7 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
             queueDelayFractionHistPtr = (queueDelayFractionHistPtr + 1) % kQueueDelayFractionHistSize;
         }
 
-        if (time_us - initTime_us > 2000000) {
+        if (time_us - initTime_us > 2000000) { 
             /*
             * Queue delay trend calculations are reliable after ~2s
             */
