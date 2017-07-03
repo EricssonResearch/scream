@@ -10,34 +10,32 @@
 
 using namespace std;
 
-const float Tmax = 100.0f;
+const float Tmax = 200.0f;
 const bool isChRate = false;
-
+const bool printLog = true;
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2
 */
-const int mode = 0x02;
+const int mode = 0x03;
+const double timeBase = 50000.0;
 
 int main(int argc, char* argv[])
 {
-    int tick = (int)(10000.0 / 25.0);
+    int tick = (int)(timeBase / 25.0);
     ScreamTx *screamTx = new ScreamTx(0.6f, 0.1f, false);
     ScreamRx *screamRx = new ScreamRx();
     RtpQueue *rtpQueue[2] = { new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[2] = { 0, 0 };
     NetQueue *netQueueDelay = new NetQueue(0.05f, 0.0f, 0.03f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 5000e03, 0.0f);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 5e6, 0.0f);
     videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.1f, false, false, 0);
     videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, false, false, 0);
     if (mode & 0x01)
         screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 6000.0f, 6000.0f, 100e3f, 5000.0f, 2.0f, 1.0f, 0.1f);
-    //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 64000.0f, 10e6f, 1000000.0f);
-    //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 64000.0f, 10000000.0f, 50000.0f, 2.0f, 1.0f, 0.3f);
-    //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 5000.0f, 100000.0f, 5000.0f, 2.0f, 1.0f, 0.3f);
     if (mode & 0x02)
-        screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 64e3f, 64e3f, 10e6f, 1000000.0f);
-    //screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 64000.0f, 10000000.0f, 50000.0f, 2.0f, 1.0f, 0.3f);
+        screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 1000e3f, 1000e3f, 100e6f, 5e5f);
+//    screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 1000e3f, 1000e3f, 100e6f, 2e6f);
 
 
     float time = 0.0f;
@@ -52,11 +50,11 @@ int main(int argc, char* argv[])
     uint16_t seqNr;
     int nextCallN = -1;
     bool isFeedback = false;
-
+    double lastLogT = -1.0;
     while (time <= Tmax) {
         float retVal = -1.0;
-        time = n / 10000.0f;
-        time_us = n * 100;
+        time = n / timeBase;
+        time_us = n*(1e6 / timeBase);
         time_us_tx = time_us + 000000;
         time_us_rx = time_us + 000000;
 
@@ -97,10 +95,11 @@ int main(int argc, char* argv[])
         uint32_t rxTimestamp;
         uint16_t aseqNr;
         uint64_t aackVector;
+        uint32_t ecnCeMarkedBytes;
         uint64_t rtcpFbInterval_us = screamRx->getRtcpFbInterval();
         if (isFeedback && (time_us_rx - screamRx->getLastFeedbackT() > rtcpFbInterval_us)) {
-            if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector)) {
-                screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, false);
+            if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector, ecnCeMarkedBytes)) {
+                screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, ecnCeMarkedBytes);
                 retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
                 isFeedback = false;
                 isEvent = true;
@@ -108,8 +107,8 @@ int main(int argc, char* argv[])
             /*
             * Fetch both at the same time if there is any,  more efficient
             */
-            if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector)) {
-                screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, false);
+            if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector, ecnCeMarkedBytes)) {
+                screamTx->incomingFeedback(time_us_tx, ssrc, rxTimestamp, aseqNr, aackVector, ecnCeMarkedBytes);
                 retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
                 isFeedback = false;
                 isEvent = true;
@@ -137,14 +136,14 @@ int main(int argc, char* argv[])
             isEvent = true;
         }
 
-        if (true && isEvent) {
+        if (printLog && time - lastLogT > 0.01) {
             cout << time << " ";
             char s[500];
             screamTx->printLog(time, s);
             //cout << endl;
             cout << " " << s << endl;
+            lastLogT = time;
         }
-
         /*
         * Test the set traget priority feature
         if (time > 30 && time < 100)

@@ -15,6 +15,7 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
     lastFeedbackT_us = 0;
     nRtpSinceLastRtcp = 0;
     firstReceived = false;
+    timeStampConversionFactor = kTimestampRate / 1e6f;
 }
 
 bool ScreamRx::Stream::checkIfFlushAck(int seqNr) {
@@ -24,7 +25,8 @@ bool ScreamRx::Stream::checkIfFlushAck(int seqNr) {
 void ScreamRx::Stream::receive(uint64_t time_us,
     void* rtpPacket,
     int size,
-    uint16_t seqNr) {
+    uint16_t seqNr,
+    bool isEcnCe) {
     nRtpSinceLastRtcp++;
     /*
     * Make things wrap-around safe
@@ -84,8 +86,10 @@ void ScreamRx::Stream::receive(uint64_t time_us,
             ackVector = ackVector | (INT64_C(1) << (diff - 1));
         }
     }
-    receiveTimestamp = (uint32_t)(time_us / (int(1000000 / kTimestampRate)));
+    receiveTimestamp = (uint32_t)(time_us * timeStampConversionFactor);
 
+    if (isEcnCe)
+        ecnCeMarkedBytes += size;
 }
 
 ScreamRx::ScreamRx() {
@@ -116,7 +120,8 @@ void ScreamRx::receive(uint64_t time_us,
     void* rtpPacket,
     uint32_t ssrc,
     int size,
-    uint16_t seqNr) {
+    uint16_t seqNr,
+    bool isEcnCe) {
     bytesReceived += size;
     if (lastRateComputeT_us == 0)
         lastRateComputeT_us = time_us;
@@ -126,7 +131,7 @@ void ScreamRx::receive(uint64_t time_us,
         * Media rate computation (for all medias) is done at least every 200ms
         * This is used for RTCP feedback rate calculation
         */
-        float delta = (time_us - lastRateComputeT_us) / 1e6f;
+        float delta = (time_us - lastRateComputeT_us) * 1e-6f;
         lastRateComputeT_us = time_us;
         averageReceivedRate = std::max(0.95f*averageReceivedRate, bytesReceived * 8 / delta);
         bytesReceived = 0;
@@ -139,7 +144,7 @@ void ScreamRx::receive(uint64_t time_us,
                 * Packets for this SSRC received earlier
                 * stream is thus already in list
                 */
-                (*it)->receive(time_us, rtpPacket, size, seqNr);
+                (*it)->receive(time_us, rtpPacket, size, seqNr, isEcnCe);
                 return;
 
             }
@@ -151,7 +156,7 @@ void ScreamRx::receive(uint64_t time_us,
     * New {SSRC,PT}
     */
     Stream *stream = new Stream(ssrc);
-    stream->receive(time_us, rtpPacket, size, seqNr);
+    stream->receive(time_us, rtpPacket, size, seqNr, isEcnCe);
     streams.push_back(stream);
 }
 
@@ -159,10 +164,12 @@ void ScreamRx::receive(uint64_t time_us,
 uint64_t ScreamRx::getRtcpFbInterval() {
     /*
     * The RTCP feedback rate depends on the received media date
-    *  at very low bitrates (<50kbps) an RTCP feedback interval of ~200ms is sufficient
-    *  while higher rates (>2Mbps) a feedback interval of ~20ms is sufficient
+    *  Target ~5% overhead
     */
-    float res = 1000000 / std::min(100.0f, std::max(10.0f, averageReceivedRate / 10000.0f));
+    float rate = 0.05*averageReceivedRate/(70.0f * 8.0f); // RTCP overhead
+    rate = std::min(1000.0f, std::max(10.0f, rate));  // 
+    float res = 1000000.0f / rate;
+
     return uint64_t(res);
 }
 
@@ -182,7 +189,8 @@ bool ScreamRx::getFeedback(uint64_t time_us,
     uint32_t &ssrc,
     uint32_t &receiveTimestamp,
     uint16_t &highestSeqNr,
-    uint64_t &ackVector) {
+    uint64_t &ackVector,
+    uint32_t &ecnCeMarkedBytes) {
 
     Stream *stream = NULL;
     uint64_t minT_us = ULLONG_MAX;
@@ -201,6 +209,7 @@ bool ScreamRx::getFeedback(uint64_t time_us,
     highestSeqNr = stream->highestSeqNr;
     ssrc = stream->ssrc;
     ackVector = stream->ackVector;
+    ecnCeMarkedBytes = stream->ecnCeMarkedBytes;
     stream->lastFeedbackT_us = time_us;
     stream->nRtpSinceLastRtcp = 0;
     lastFeedbackT_us = time_us;

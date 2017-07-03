@@ -39,18 +39,23 @@ public:
         void receive(uint64_t time_us,
             void *rtpPacket,
             int size,
-            uint16_t seqNr);
+            uint16_t seqNr,
+            bool isEcnCe);
 
         uint32_t ssrc;                // SSRC of stream
         uint16_t highestSeqNr;        // Highest received sequence number
         uint32_t receiveTimestamp;    // Wall clock time
         uint64_t ackVector;           // List of received packets
+        uint32_t ecnCeMarkedBytes;    // Number of ECN-CE marked bytes
+                                      //  (i.e size of RTP packets with CE set in IP header)
 
         uint64_t lastFeedbackT_us;    // Last time feedback transmitted for
         //  this SSRC
         int nRtpSinceLastRtcp;       // Number of RTP packets since last transmitted RTCP
 
         bool firstReceived;
+
+        float timeStampConversionFactor;
     };
 
     /*
@@ -70,7 +75,8 @@ public:
         void* rtpPacket,
         uint32_t ssrc,
         int size,
-        uint16_t seqNr);
+        uint16_t seqNr,
+        bool isEcnCe = false);
 
     /*
     * Return TRUE if an RTP packet has been received and there is
@@ -88,7 +94,8 @@ public:
         uint32_t &ssrc,
         uint32_t &receiveTimestamp,
         uint16_t &highestSeqNr,
-        uint64_t &ackVector);
+        uint64_t &ackVector,
+        uint32_t &ecnCeMarkedBytes);
 
     uint64_t getLastFeedbackT() { return lastFeedbackT_us; };
 

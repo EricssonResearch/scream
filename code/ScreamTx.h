@@ -135,11 +135,6 @@ public:
 	void newMediaFrame(uint64_t time_us, uint32_t ssrc, int bytesRtp);
 
 	/*
-	* Call this function at regular intervals to determine active streams
-	*/
-	void determineActiveStreams(uint64_t time_us);
-
-	/*
 	* Function determines if an RTP packet with SSRC can be transmitted
 	* Return values :
 	* 0.0  : RTP packet with SSRC can be immediately transmitted
@@ -169,13 +164,14 @@ public:
 	* by the timestamp clock frequency (default 1000Hz)
 	* The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
 	*  Note : isOkToTransmit should be called after incomingFeedback
+    * ecnCeMarkedBytes indicates the cumulative number of bytes that are ECN-CE marked
 	*/
-	void incomingFeedback(uint64_t time_us,
-		uint32_t ssrc,         // SSRC of stream
-		uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
-		uint16_t highestSeqNr, // Highest ACKed RTP sequence number
-		uint64_t  ackVector,   // ACK vector
-		bool qBit);       // Source quench bit
+    void incomingFeedback(uint64_t time_us,
+        uint32_t ssrc,         // SSRC of stream
+        uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
+        uint16_t highestSeqNr, // Highest ACKed RTP sequence number
+        uint64_t ackVector,   // ACK vector
+        uint32_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
 
 	/*
 	* Get the target bitrate for stream with SSRC
@@ -193,11 +189,6 @@ public:
 	* Set target priority for a given stream, priority value should be in range ]0.0..1.0]
 	*/
 	void setTargetPriority(uint32_t ssrc, float aPriority);
-
-    /*
-     * Get smoothed RTT
-     */
-    float getSRtt() { return sRtt_us / 1e6f; };
 
 	/*
 	* Print logs
@@ -259,18 +250,19 @@ private:
 		float queueDelayGuard;
 		float lossEventRateScale;
 
-		int credit;             // Credit that is received if another stream gets priority
-		                        //  to transmit
+		int credit;             // Credit that is received if another stream gets 
+                                //  priority to transmit
 		float targetPriority;   // Stream target priority
-		float targetPriorityInv;// Stream target priority invers
+		float targetPriorityInv;// Stream target priority inverted
 		int bytesTransmitted;   // Number of bytes transmitted
 		int bytesAcked;         // Number of ACKed bytes
 		int bytesLost;          // Number of lost bytes
 		float rateTransmitted;  // Transmitted rate
 		float rateAcked;        // ACKed rate
 		float rateLost;         // Lost packets (bit)rate
-		int hiSeqAck;           // Highest sequence number ACKed
-		float minBitrate;       // Min bitrate
+        uint16_t hiSeqAck;      // Highest sequence number ACKed
+        uint16_t hiSeqTx;       // Highest sequence number transmitted
+        float minBitrate;       // Min bitrate
 		float maxBitrate;       // Max bitrate
 		float targetBitrate;    // Target bitrate
 		float targetBitrateI;   // Target bitrate inflection point
@@ -302,29 +294,44 @@ private:
 		uint64_t lastRtpQueueDiscardT_us;
 		bool wasRepairLoss;
 		bool repairLoss;
+        int lastLossDetectIx;
 
 		Transmitted txPackets[kMaxTxPackets];
 		int txPacketsPtr;
 
 	};
 
-	/*
-	* Initialize values
-	*
-	*/
-	void initialize(uint64_t time_us);
+    /*
+    * Initialize values
+    */
+    void initialize(uint64_t time_us);
 
-	/*
+    /*
+    * Mark ACKed RTP packets
+    */
+    void markAcked(uint64_t time_us, struct Transmitted *txPackets, uint16_t highestSeqNr, uint64_t ackVector, uint32_t timestamp, Stream *stream);
+
+    /*
+    * Update CWND
+    */
+    void updateCwnd(uint64_t time_us);
+
+    /*
+    * Detect lost RTP packets
+    */
+    void detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream);
+
+    /*
+    * Call this function at regular intervals to determine active streams
+    */
+    void determineActiveStreams(uint64_t time_us);
+
+    /*
 	* Compute 1st order prediction coefficient of queue delay multiplied by the queue delay fraction
 	* A value [0.0..1.0] indicates if queue delay is increasing
 	* This gives a rough estimate of how the queuing delay delay evolves
 	*/
 	void computeQueueDelayTrend();
-
-	/*
-	* Update CWND
-	*/
-	void updateCwnd(uint64_t time_us);
 
 	/*
 	* Estimate one way delay [jiffy] and updated base delay
@@ -347,6 +354,9 @@ private:
 	*/
 	bool isCompetingFlows();
 
+    /*
+    * Get stream with corresponding SSRC
+    */
 	Stream* getStream(uint32_t ssrc);
 
 	/*
@@ -355,6 +365,9 @@ private:
 	*/
 	int getStreamIndex(uint32_t ssrc);
 
+    /*
+    * Adjust stream bitrates to reflect priorities
+    */
 	void adjustPriorities(uint64_t time_us);
 
 	/*
@@ -378,20 +391,28 @@ private:
 		Stream* servedStream,
 		int transmittedBytes);
 
+    /*
+    * return 1 if in fast start
+    */
+    int isInFastStart() { return inFastStart ? 1 : 0; };
 
-	/*
-	* Variables for multiple steams handling
-	*/
-	Stream *streams[kMaxStreams];
-	int nStreams;
+    /*
+    * Get the fraction between queue delay and the queue delay target
+    */
+    float getQueueDelayFraction();
+
+    /*
+    * Get the queuing delay trend
+    */
+    float getQueueDelayTrend();
 
 	/*
 	* Variables for network congestion control
 	*/
+
 	/*
 	* Related to computation of queue delay and target queuing delay
 	*/
-
 	float lossBeta;
 	float queueDelayTargetMin;
 	bool enableSbd;
@@ -400,11 +421,13 @@ private:
 
 	uint64_t sRttSh_us;
 	uint64_t sRtt_us;
+    float sRtt;
 	uint32_t ackedOwd;
 	uint32_t baseOwd;
 
 	uint32_t baseOwdHist[kBaseOwdHistSize];
 	int baseOwdHistPtr;
+    uint32_t baseOwdHistMin;
 	float queueDelay;
 	float queueDelayFractionAvg;
 	float queueDelayFractionHist[kQueueDelayFractionHistSize];
@@ -417,8 +440,8 @@ private:
 	float queueDelaySbdMean;
 	float queueDelaySbdSkew;
 	float queueDelaySbdMeanSh;
-
 	float queueDelayMax;
+
 	/*
 	* CWND management
 	*/
@@ -430,11 +453,15 @@ private:
 	int bytesInFlightHistLo[kBytesInFlightHistSize];
 	int bytesInFlightHistHi[kBytesInFlightHistSize];
 	int bytesInFlightHistPtr;
-	int bytesInFlightMaxLo;
-	int bytesInFlightMaxHi;
+    int bytesInFlightMaxLo;
+    int bytesInFlightHistLoMem;
+    int bytesInFlightMaxHi;
+    int bytesInFlightHistHiMem;
+    float maxBytesInFlight;
 	int accBytesInFlightMax;
 	int nAccBytesInFlightMax;
 	float rateTransmitted;
+    float rateAcked;
 	float queueDelayTrendMem;
 	float maxRate;
 	uint64_t lastCwndUpdateT_us;
@@ -479,37 +506,10 @@ private:
 	float queueDelayMin;
 	float queueDelayMinAvg;
 
-	/*
-	* Methods
-	*/
-	/*
-	* return 1 if in fast start
-	*/
-	int isInFastStart() { return inFastStart ? 1 : 0; };
-
-	/*
-	* Returns the maximum bytes in flight value of the last
-	*  kBytesInFlightHistSize values.
-	* Used for congestion window validation.
-	*/
-	int getMaxBytesInFlightHi();
-	int getMaxBytesInFlightLo();
-
-	/*
-	* Compute the number pof bytes in flight
-	*/
-	void computeBytesInFlight();
-
-	/*
-	* Get the fraction between queue delay and the queue delay target
-	*/
-	float getQueueDelayFraction();
-
-	/*
-	* Get the queuing delay trend
-	*/
-	float getQueueDelayTrend();
-
-
+    /*
+    * Variables for multiple steams handling
+    */
+    Stream *streams[kMaxStreams];
+    int nStreams;
 };
 #endif

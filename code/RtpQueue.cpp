@@ -23,6 +23,9 @@ RtpQueue::RtpQueue() {
     tail = 0;
     nItems = 0;
 	sizeOfLastFrame = 0;
+    bytesInQueue_ = 0;
+    sizeOfQueue_ = 0;
+    sizeOfNextRtp_ = -1;
 }
 
 void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
@@ -32,10 +35,14 @@ void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
     items[head]->size = size;
     items[head]->ts = ts;
     items[head]->used = true;
+    bytesInQueue_ += size;
+    sizeOfQueue_ += 1;
+    computeSizeOfNextRtp();
 }
 
 bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
     if (items[tail]->used == false) {
+        sizeOfNextRtp_ = -1;
         return false;
     } else {
         rtpPacket = items[tail]->packet;
@@ -43,16 +50,23 @@ bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
         tail++; if (tail == RtpQueueSize) tail = 0;
+        bytesInQueue_ -= size;
+        sizeOfQueue_ -= 1;
+        computeSizeOfNextRtp();
         return true;
     }
 }
 
-int RtpQueue::sizeOfNextRtp() {
+void RtpQueue::computeSizeOfNextRtp() {
     if (!items[tail]->used) {
-        return -1;
+        sizeOfNextRtp_ = - 1;
     } else {
-        return items[tail]->size;
+        sizeOfNextRtp_ = items[tail]->size;
     }
+}
+
+int RtpQueue::sizeOfNextRtp() {
+    return sizeOfNextRtp_;
 }
 
 int RtpQueue::seqNrOfNextRtp() {
@@ -64,21 +78,11 @@ int RtpQueue::seqNrOfNextRtp() {
 }
 
 int RtpQueue::bytesInQueue() {
-	int size = 0;
-	for (int n = 0; n < RtpQueueSize; n++) {
-		if (items[n]->used)
-			size += items[n]->size;
-	}
-	return size;
+    return bytesInQueue_;
 }
 
 int RtpQueue::sizeOfQueue() {
-	int size = 0;
-	for (int n = 0; n < RtpQueueSize; n++) {
-		if (items[n]->used)
-			size += 1;
-	}
-	return size;
+    return sizeOfQueue_;
 }
 
 float RtpQueue::getDelay(float currTs) {
@@ -105,4 +109,7 @@ void RtpQueue::clear() {
     head = -1;
     tail = 0;
     nItems = 0;
+    bytesInQueue_ = 0;
+    sizeOfQueue_ = 0;
+    sizeOfNextRtp_ = -1;
 }

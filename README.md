@@ -86,12 +86,11 @@ The format is based on RTCP XR (RFC3611) and use the (reserved for future use) f
 The feedback elements are:
 
 - Highest received sequence number (16b): Indicates the highest (possibly wrapped around) sequence number for the given source.
-- n_ECN (8b): Accumulated number of received RTP packets for teh given source that have the ECN-CE code point set.
-- Q (1b): The fraction of RTCP feedback packets for the given source with this bit set, dictates how much the SCReAM sender should reduce the sending rate
+- ECN-CE-bytes (16b): Accumulated number of received ECN-CE marked bytes for the given source.
 - ACK vector (64b): Indicates successful receipt indication of the last 64 RTP packets, preceeding the RTP packet with the highest RTP sequence number.
 - Timestamp (32b): Indicates the (wallclock) receive time (in milliseconds) when the RTP packet with the highest sequence number was received, truncated to 32bits.    
 
-Handling of n_ECN and Q bits is currently not implemented in the SCReAM code.  
+Handling of ECN-CE-bytes is currently not implemented in the SCReAM code.  
 
 The feedback format is 28bytes and gives a reasonably low RTCP overhead that makes it possible to use SCReAM also for low bitrate applications.
 The RTCP feedback interval calculation in the code gives av feedback interval between 400ms, at low media bitrates, and 20ms at high media bitrates 
@@ -112,7 +111,7 @@ which should be acceptably low even at low media bitrates.
        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
        |                        SSRC of source                         |
        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       | Highest recv. seq. nr. (16b)  |   n_ECN       |Q|  reserved   |
+       | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
        |                     Ack vector (b0-31)                        |
        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
