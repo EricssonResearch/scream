@@ -10,6 +10,8 @@ public:
     int size;
     unsigned short seqNr;
     float tRelease;
+    float tQueue;
+    bool isCe;
     bool used;
 };
 
@@ -19,16 +21,18 @@ public:
 
     NetQueue(float delay, float rate=0.0f, float jitter=0.0f);
 
-    void insert(float time, 
-        void *rtpPacket, 
+    void insert(float time,
+        void *rtpPacket,
         unsigned int ssrc,
-        int size, 
-        unsigned short seqNr);
+        int size,
+        unsigned short seqNr,
+        bool isCe = false);
     bool extract(float time, 
         void *rtpPacket, 
         unsigned int &ssrc,
         int& size, 
-        unsigned short &seqNr);
+        unsigned short &seqNr,
+        bool &isCe);
     int sizeOfQueue();
 
     NetQueueItem *items[NetQueueSize];
@@ -39,6 +43,7 @@ public:
     float rate;
     float jitter;
     float nextTx;
+    float lastQueueLow;
 };
 
 #endif

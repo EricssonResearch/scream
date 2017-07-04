@@ -13,16 +13,24 @@ To achieve this, SCReAM implements a feedback protocol over RTCP that acknowledg
 A congestion window is determined from the feedback, this congestion window determines how many RTP packets that can be in flight i.e. transmitted by not yet acknowledged, an RTP queue is maintained at the sender side to temporarily store the RTP packets pending transmission, this RTP queue is mostly empty but can temporarily become larger when the link throughput decreases. 
 The congestion window is frequently adjusted for minimal e2e delay while still maintaining as high link utilization as possible. The use of self-clocking in SCReAM which is also the main principle in TCP has proven to work particularly well in wireless scenarios where the link throughput may change rapidly. This enables a congestion control which is robust to channel jitter, introduced by e.g. radio resource scheduling while still being able to respond promptly to reduced link throughput. 
 SCReAM is optimized in house in a state of the art LTE system simulator for optimal performance in deployments where the LTE radio conditions are limiting. In addition, SCReAM is also optimized for good performance in simple bottleneck case such as those given in home gateway deployments.
+The fact that SCReAM maintains a RTP queue on the sender side opens up for further optimizations to congestion, for instance it is possible to discard the contents of the RTP queue and replace with an I frame in order to refresh the video quickly at congestion.
 
-A comparison against GCC (**G**oogle **C**ongestion **C**ontrol) is shown below. Notice in particular that SCReAM utilizes free bandwidth much more efficiently. Still the reaction to reduced throughput is more prompt. SCReAMs larger video frame delay is solely because the video bitrate is higher when the throughput drops. The IP packet delay is however considerably lower, something that is highly beneficial for other flows such audio as the latter will then experience less disturbances. The fact that SCReAM maintains a RTP queue on the sender side opens up for further optimizations to congestion, for instance it is possible to discard the contents of the RTP queue and replace with an I frame in order to refresh the video quickly at congestion.
-
-![Simple bottleneck simulation GCC](https://github.com/EricssonResearch/scream/blob/master/images/image_1.png)
-
-Figure 1 : Simple bottleneck simulation GCC, the link bandwidth is outlined in red 
+Below is shown an example of SCReAM congestion control when subject to a bottleneck with varying bandwidth.
 
 ![Simple bottleneck simulation SCReAM](https://github.com/EricssonResearch/scream/blob/master/images/image_2.png)
 
-Figure 2 : Simple bottleneck simulation SCReAM
+Figure 1 : Simple bottleneck simulation SCReAM
+
+## ECN (Explicit Congestion Notification) 
+SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. Below is shown two examples with a simple 5Mbps bottleneck, the first without ECN support and the second with ECN support. It is quite apparent that ECN improves on the e2e delay quite considerably.
+
+![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn.png)
+
+Figure 2 : SCReAM without ECN support
+    
+![Simple bottleneck simulation SCReAM with ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_ecn.png)
+
+Figure 3 : SCReAM with ECN support
 
 ## Real life test
 A real life test of SCReAM is performed with the following setup in a car:
@@ -37,6 +45,8 @@ A SCReAM receiver that logged the performance and stored the received RTP packet
 Below is a graph that shows the bitrate, the congestion window and the queue delay. 
  
 ![Log from ](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM_LTE_UL.png)
+
+Figure 3 : Trace from live drive test
 
 The graph shows that SCReAM manages high bitrate video streaming with low e2e delay despite demanding conditions both in terms of variable throughput and in a changing output bitrate from the video encoder. Packet losses occur relatively frequently, the exact reason is unknown but seem to be related to handover events, normally packet loss should not occure in LTE-UL, however this seems to be the case with the used cellphone. 
 The delay increases between 1730 and 1800s, the reason here is that the available throughput was lower than the lowest possible coder bitrate. An encoder with a wider rate range would be able to make it possible to keep the delay low also in this case.

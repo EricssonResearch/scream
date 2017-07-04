@@ -15,6 +15,7 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
     lastFeedbackT_us = 0;
     nRtpSinceLastRtcp = 0;
     firstReceived = false;
+    ecnCeMarkedBytes = 0;
     timeStampConversionFactor = kTimestampRate / 1e6f;
 }
 

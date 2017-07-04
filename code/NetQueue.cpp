@@ -16,6 +16,7 @@ NetQueueItem::NetQueueItem() {
 	size = 0;
 	seqNr = 0;
 	tRelease = 0.0;
+    tQueue = 0.0;
 }
 
 
@@ -29,6 +30,7 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_) {
 	rate = rate_;
 	delay = delay_;
 	jitter = jitter_;
+    lastQueueLow = 0.0;
 	nextTx = 0;
 }
 
@@ -36,7 +38,8 @@ void NetQueue::insert(float time,
 	                  void *rtpPacket,  
 					  unsigned int ssrc,
 					  int size, 
-					  unsigned short seqNr) {
+					  unsigned short seqNr,
+                      bool isCe) {
 	head++; if (head == NetQueueSize) head = 0;
 	items[head]->used = true;
 	items[head]->packet = rtpPacket;
@@ -44,6 +47,8 @@ void NetQueue::insert(float time,
 	items[head]->size = size;
 	items[head]->seqNr = seqNr;
 	items[head]->tRelease = time+delay+jitter*(rand()/float(RAND_MAX));
+    items[head]->tQueue = time;
+    items[head]->isCe = isCe;
 	if (false && jitter > 0)
 		cerr << items[head]->tRelease << endl;
 	if (rate > 0)
@@ -56,7 +61,8 @@ bool NetQueue::extract(float time,
 	                   void *rtpPacket,   
 					   unsigned int &ssrc,
 					   int& size, 
-					   unsigned short& seqNr) {
+                       unsigned short& seqNr,
+                       bool& isCe) {
 	if (items[tail]->used == false) {
 		return false;
 	} else {
@@ -65,8 +71,20 @@ bool NetQueue::extract(float time,
 		  seqNr = items[tail]->seqNr;
 		  ssrc = items[tail]->ssrc;
 		  size = items[tail]->size;
-		  items[tail]->used = false;
-		  tail++; if (tail == NetQueueSize) tail = 0;
+          isCe = items[tail]->isCe;
+          items[tail]->used = false;
+          /*
+          * Implement a rudimentary CoDel-ish ECN marker (without the 1/sqrt(N) part)
+          */
+          if (time - items[tail]->tQueue <= 0.005 && rate > 0.0) {
+              lastQueueLow = time;
+          }
+          if (true && time - lastQueueLow > 0.1 && rate > 0.0) {
+            isCe = true;
+            lastQueueLow = time;
+          }
+          tail++; if (tail == NetQueueSize) tail = 0;
+
 		  return true;
 		}
 		return false;

@@ -20,7 +20,9 @@ using namespace std;
 // ==== Default parameters (if tuning necessary) ====
 // Connection related default parameters
 // CWND scale factor upon loss event
-static const float kLossBeta = 0.6f;
+static const float kLossBeta = 0.8f;
+// CWND scale factor upon ECN-CE event
+static const float kEcnCeBeta = 0.9f;
 // Min and max queue delay target
 static const float kQueueDelayTargetMin = 0.1f; //ms
 // Enable shared botleneck detection and queue delay target adjustement
@@ -87,6 +89,7 @@ public:
 	* Constructor, see constant definitions above for an explanation of parameters
 	*/
 	ScreamTx(float lossBeta = kLossBeta,
+        float ecnCeBeta = kEcnCeBeta,
 		float queueDelayTargetMin = kQueueDelayTargetMin,
 		bool enableSbd = kEnableSbd,
 		float gainUp = kGainUp,
@@ -295,6 +298,8 @@ private:
 		bool wasRepairLoss;
 		bool repairLoss;
         int lastLossDetectIx;
+        uint32_t ecnCeMarkedBytes;
+
 
 		Transmitted txPackets[kMaxTxPackets];
 		int txPacketsPtr;
@@ -414,6 +419,7 @@ private:
 	* Related to computation of queue delay and target queuing delay
 	*/
 	float lossBeta;
+    float ecnCeBeta;
 	float queueDelayTargetMin;
 	bool enableSbd;
 	float gainUp;
@@ -473,6 +479,11 @@ private:
 	bool lossEvent;
 	bool wasLossEvent;
 	float lossEventRate;
+
+    /*
+    * ECN-CE 
+    */
+    bool ecnCeEvent;
 
 	/*
 	* Fast start

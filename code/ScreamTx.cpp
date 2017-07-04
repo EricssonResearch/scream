@@ -54,6 +54,7 @@ static const uint64_t kBaseDelayUpdateInterval_us = 10000000;
 static int kMinCwndMss = 3;
 
 ScreamTx::ScreamTx(float lossBeta_,
+    float ecnCeBeta_,
     float queueDelayTargetMin_,
     bool enableSbd_,
     float gainUp_,
@@ -62,6 +63,7 @@ ScreamTx::ScreamTx(float lossBeta_,
     )
     : sRttSh_us(0),
     lossBeta(lossBeta_),
+    ecnCeBeta(ecnCeBeta_),
     queueDelayTargetMin(queueDelayTargetMin_),
     enableSbd(enableSbd_),
     gainUp(gainUp_),
@@ -92,6 +94,7 @@ ScreamTx::ScreamTx(float lossBeta_,
     lossEvent(false),
     wasLossEvent(false),
     lossEventRate(0.0),
+    ecnCeEvent(false),
 
     inFastStart(true),
 
@@ -452,13 +455,21 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
     */
     detectLoss(time_us, txPackets, highestSeqNr, stream);
 
-    if (lossEvent) {
+
+    if (ecnCeMarkedBytes != stream->ecnCeMarkedBytes && time_us - lastLossEventT_us > sRtt) {
+        ecnCeEvent = true;
+        lastLossEventT_us = time_us;
+    }
+    stream->ecnCeMarkedBytes = ecnCeMarkedBytes;
+
+    if (lossEvent || ecnCeEvent) {
         lastLossEventT_us = time_us;
         for (int n = 0; n < nStreams; n++) {
             Stream *tmp = streams[n];
             tmp->lossEventFlag = true;
         }
     }
+
     if (lastCwndUpdateT_us == 0)
         lastCwndUpdateT_us = time_us;
 
@@ -829,6 +840,17 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
         inFastStart = false;
         wasLossEvent = true;
     }
+    else if (ecnCeEvent) {
+        /*
+        * loss event detected, decrease congestion window
+        */
+        cwnd = std::max(cwndMin, (int)(ecnCeBeta*cwnd));
+        ecnCeEvent = false;
+        lastCongestionDetectedT_us = time_us;
+
+        inFastStart = false;
+        wasLossEvent = true;
+    }
     else {
 
         if (time_us - lastRttT_us > sRtt_us) {
@@ -1170,6 +1192,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
     bytesRtp = 0;
     rateRtp = 0.0f;
     lastLossDetectIx = -1;
+    ecnCeMarkedBytes = 0;
 
     for (int n = 0; n < kRateUpDateSize; n++) {
         rateRtpHist[n] = 0.0f;
