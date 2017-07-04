@@ -22,7 +22,7 @@ Below is shown an example of SCReAM congestion control when subject to a bottlen
 Figure 1 : Simple bottleneck simulation SCReAM
 
 ## ECN (Explicit Congestion Notification) 
-SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. Below is shown two examples with a simple 5Mbps bottleneck, the first without ECN support and the second with ECN support. It is quite apparent that ECN improves on the e2e delay quite considerably.
+SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. Below is shown two examples with a simple 5Mbps bottleneck, the first without ECN support and the second with ECN support. It is quite apparent that ECN improves on the e2e delay quite considerably. The ECN marking is similar to CoDel.
 
 ![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn.png)
 
