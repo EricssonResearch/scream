@@ -36,11 +36,11 @@ Below is illustrated a more complex case where a video coder generates large key
  
 ![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn_keyframe.png)
 
-Figure 2 : SCReAM without ECN support, key frames every 5 seconds
+Figure 4 : SCReAM without ECN support, key frames every 5 seconds
     
 ![Simple bottleneck simulation SCReAM with ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_ecn_keyframe.png)
 
-Figure 3 : SCReAM with ECN support, key frames every 5 seconds
+Figure 5 : SCReAM with ECN support, key frames every 5 seconds
 
 
 ## Real life test
@@ -57,7 +57,7 @@ Below is a graph that shows the bitrate, the congestion window and the queue del
  
 ![Log from ](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM_LTE_UL.png)
 
-Figure 3 : Trace from live drive test
+Figure 6 : Trace from live drive test
 
 The graph shows that SCReAM manages high bitrate video streaming with low e2e delay despite demanding conditions both in terms of variable throughput and in a changing output bitrate from the video encoder. Packet losses occur relatively frequently, the exact reason is unknown but seem to be related to handover events, normally packet loss should not occure in LTE-UL, however this seems to be the case with the used cellphone. 
 The delay increases between 1730 and 1800s, the reason here is that the available throughput was lower than the lowest possible coder bitrate. An encoder with a wider rate range would be able to make it possible to keep the delay low also in this case.
