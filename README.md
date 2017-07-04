@@ -32,6 +32,17 @@ Figure 2 : SCReAM without ECN support
 
 Figure 3 : SCReAM with ECN support
 
+Below is illustrated a more complex case where a video coder generates large key frames every 5 seconds. In this case ECN reduces the sending rate to give a better headroom for the key frames.
+ 
+![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn_keyframe.png)
+
+Figure 2 : SCReAM without ECN support, key frames every 5 seconds
+    
+![Simple bottleneck simulation SCReAM with ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_ecn_keyframe.png)
+
+Figure 3 : SCReAM with ECN support, key frames every 5 seconds
+
+
 ## Real life test
 A real life test of SCReAM is performed with the following setup in a car:
 
