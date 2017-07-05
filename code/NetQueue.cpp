@@ -51,8 +51,9 @@ void NetQueue::insert(float time,
     items[head]->isCe = isCe;
 	if (false && jitter > 0)
 		cerr << items[head]->tRelease << endl;
-	if (rate > 0)
-		items[head]->tRelease += sizeOfQueue()*8.0f/rate;
+    if (rate > 0) {
+        items[head]->tRelease += sizeOfQueue()*8.0f / rate;
+    }
 	items[head]->tRelease = std::max(items[head]->tRelease, nextTx);
 	nextTx = items[head]->tRelease;
 }
@@ -64,6 +65,7 @@ bool NetQueue::extract(float time,
                        unsigned short& seqNr,
                        bool& isCe) {
 	if (items[tail]->used == false) {
+        lastQueueLow = time;
 		return false;
 	} else {
 		if (time >= items[tail]->tRelease) {

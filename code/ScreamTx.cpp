@@ -1,6 +1,8 @@
 #include "RtpQueue.h"
 #include "ScreamTx.h"
 #include "ScreamRx.h"
+#define NOMINMAX
+#include <winSock2.h>
 #include <cstdint>
 #include <cmath>
 #include <string.h>
@@ -10,7 +12,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-using namespace std;
+
+//using namespace std;
 
 // === Some good to have features, SCReAM works also
 //     with these disabled
@@ -170,7 +173,8 @@ void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
     float maxRtpQueueDelay,
     float txQueueSizeFactor,
     float queueDelayGuard,
-    float lossEventRateScale) {
+    float lossEventRateScale,
+    float ecnCeEventRateScale) {
     Stream *stream = new Stream(this,
         rtpQueue,
         ssrc,
@@ -182,7 +186,8 @@ void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
         maxRtpQueueDelay,
         txQueueSizeFactor,
         queueDelayGuard,
-        lossEventRateScale);
+        lossEventRateScale,
+        ecnCeEventRateScale);
     streams[nStreams++] = stream;
 }
 
@@ -379,14 +384,15 @@ float ScreamTx::addTransmitted(uint64_t time_us,
     int ix = seqNr % kMaxTxPackets;
     Transmitted *txPacket = &(stream->txPackets[ix]);
     if (txPacket->isUsed) {
-        /*
+        
         cerr << " An already used location in the list is taken, there are a few possibilities " << endl;
         cerr << "   1) Feedback messages have been lost, or are not frequent enough " << endl;
         cerr << "   2) Bitrate is very high, consider to increase kMaxTxPackets " << endl;
-        */
+      
         /*
         * Keep the bytesInFlight counter correct
         */
+        exit(0);
         bytesInFlight -= txPacket->size;
     }
     stream->hiSeqTx = seqNr;
@@ -398,6 +404,7 @@ float ScreamTx::addTransmitted(uint64_t time_us,
     txPacket->isAcked = false;
     txPacket->isAfterReceivedEdge = false;
     bytesInFlight += size;
+
     /*
     * Update bytesInFlight
     */
@@ -439,7 +446,7 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
     uint32_t timestamp,
     uint16_t highestSeqNr,
     uint64_t ackVector,
-    uint32_t ecnCeMarkedBytes) {
+    uint16_t ecnCeMarkedBytes) {
     if (!isInitialized) initialize(time_us);
     Stream *stream = getStream(ssrc);
     accBytesInFlightMax += bytesInFlight;
@@ -455,8 +462,7 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
     */
     detectLoss(time_us, txPackets, highestSeqNr, stream);
 
-
-    if (ecnCeMarkedBytes != stream->ecnCeMarkedBytes && time_us - lastLossEventT_us > sRtt) {
+    if (ecnCeMarkedBytes != stream->ecnCeMarkedBytes && time_us - lastLossEventT_us > sRtt_us) {
         ecnCeEvent = true;
         lastLossEventT_us = time_us;
     }
@@ -466,12 +472,16 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
         lastLossEventT_us = time_us;
         for (int n = 0; n < nStreams; n++) {
             Stream *tmp = streams[n];
-            tmp->lossEventFlag = true;
+            if (lossEvent)
+                tmp->lossEventFlag = true;
+            else
+                tmp->ecnCeEventFlag = true;
         }
     }
 
     if (lastCwndUpdateT_us == 0)
         lastCwndUpdateT_us = time_us;
+
 
     if (time_us - lastCwndUpdateT_us > 10000) {
         /*
@@ -482,6 +492,65 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
         lastCwndUpdateT_us = time_us;
     }
 }
+
+/*
+* Parse feedback according to the format below. It is up to the
+* wrapper application this RTCP from a compound RTCP if needed
+* BT = 255, means that this is experimental use.
+* The code currently only handles one SSRC source per IP packet
+*
+* 0                   1                   2                   3
+* 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |V=2|P|reserved |   PT=XR=207   |           length=6            |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                              SSRC                             |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |     BT=255    |    reserved   |         block length=4        |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                        SSRC of source                         |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                     Ack vector (b0-31)                        |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                     Ack vector (b32-63)                       |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                    Timestamp (32bits)                         |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+void ScreamTx::incomingFeedback(uint64_t time_us,
+    unsigned char* buf,
+    int size) {
+    if (!(size == 32 && buf[0] == 0x80 && buf[1] == 207 && buf[8] == 255)) {
+        // This does not seem as a valid size, exit function
+        return;
+    }
+    uint32_t tmp_l_1;
+    uint16_t tmp_s;
+    uint32_t tmp_l_2;
+    uint32_t timeStamp;
+    uint16_t seqNr;
+    uint64_t ackVector;
+    uint16_t ecnCeMarkedBytes;
+    uint32_t ssrc;
+    uint16_t rawSeq;
+    memcpy(&ssrc, buf + 12, 4);
+    ssrc = ntohl(ssrc);
+    memcpy(&seqNr, buf + 16, 2);
+    seqNr = ntohs(seqNr);
+    memcpy(&ecnCeMarkedBytes, buf + 18, 2);
+    ecnCeMarkedBytes = ntohs(ecnCeMarkedBytes);
+    memcpy(&tmp_l_1, buf + 20, 4);
+    memcpy(&tmp_l_2, buf + 24, 4);
+    tmp_l_1 = ntohl(tmp_l_1);
+    tmp_l_2 = ntohl(tmp_l_2);
+    ackVector = ((uint64_t(tmp_l_1)) << 32) | tmp_l_2;
+    memcpy(&timeStamp, buf + 28, 4);
+    timeStamp = ntohl(timeStamp);
+    incomingFeedback(time_us, ssrc, timeStamp, seqNr, ackVector, ecnCeMarkedBytes);
+}
+
 
 float ScreamTx::getTargetBitrate(uint32_t ssrc) {
     return  getStream(ssrc)->getTargetBitrate();
@@ -572,6 +641,17 @@ void ScreamTx::markAcked(uint64_t time_us, struct Transmitted *txPackets, uint16
                 tmp->isAcked = true;
                 stream->hiSeqAck = highestSeqNr;
                 ackedOwd = timestamp - tmp->timestamp;
+                /*
+                * Compute the queue delay
+                */
+                uint32_t qDel = estimateOwd(time_us);
+                qDel -= getBaseOwd();
+
+                /*
+                * Convert from [jiffy] OWD to an OWD in [s]
+                */
+                queueDelay = qDel / kTimestampRate;
+
                 uint64_t rtt = time_us - tmp->timeTx_us;
 
                 sRttSh_us = (7 * sRttSh_us + rtt) / 8;
@@ -602,10 +682,10 @@ void ScreamTx::detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint1
     /*
     * Mark packets outside the 64 bit ACK vector range as forever lost
     */
-    if (stream->lastLossDetectIx > 0) {
+    if (stream->lastLossDetectIx >= 0) {
         int ix0_ = ix0;
         if (stream->lastLossDetectIx > ix0_) ix0_ += kMaxTxPackets;
-        for (int m = ix0_; m <= stream->lastLossDetectIx; m++) {
+        for (int m = stream->lastLossDetectIx; m < ix0_; m++) {
             int n = m % kMaxTxPackets;
             if (txPackets[n].isUsed) {
                 Transmitted *tmp = &txPackets[n];
@@ -688,6 +768,8 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
     else
         dT = (time_us - lastCwndUpdateT_us) * 1e-6f;
 
+
+
     /*
     * This adds a limit to how much the CWND can grow, it is particularly useful
     * in case of short gliches in the transmission, in which a large chunk of data is delivered
@@ -701,20 +783,11 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
     else
         bytesNewlyAckedLimited = 2.0f*mss;
 
-    /*
-    * Compute the queue delay
-    */
-    uint32_t tmp = estimateOwd(time_us);
-    tmp -= getBaseOwd();
-    /*
-    * Convert from [jiffy] OWD to an OWD in [s]
-    */
-    queueDelay = tmp / kTimestampRate;
-
     queueDelayMin = std::min(queueDelayMin, queueDelay);
 
     queueDelayMax = std::max(queueDelayMax, queueDelay);
 
+    float time = time_us*1e-6;
     if (queueDelayMinAvg > 0.25f*queueDelayTarget && time_us - baseOwdResetT_us > 20000000) {
         /*
         * The base OWD is likely wrong, for instance due to
@@ -725,6 +798,7 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
         for (int n = 0; n < kBaseOwdHistSize; n++)
             baseOwdHist[n] = UINT32_MAX;
         baseOwd = UINT32_MAX;
+        baseOwdHistMin = UINT32_MAX;
         baseOwdResetT_us = time_us;
     }
     /*
@@ -1159,7 +1233,8 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
     float maxRtpQueueDelay_,
     float txQueueSizeFactor_,
     float queueDelayGuard_,
-    float lossEventRateScale_) {
+    float lossEventRateScale_,
+    float ecnCeEventRateScale_) {
     parent = parent_;
     rtpQueue = rtpQueue_;
     ssrc = ssrc_;
@@ -1173,6 +1248,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
     txQueueSizeFactor = txQueueSizeFactor_;
     queueDelayGuard = queueDelayGuard_;
     lossEventRateScale = lossEventRateScale_;
+    ecnCeEventRateScale = ecnCeEventRateScale_;
     targetBitrateHistUpdateT_us = 0;
     targetBitrateI = 1.0f;
     credit = 0;
@@ -1185,6 +1261,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
     rateAcked = 0.0f;
     rateLost = 0.0f;
     lossEventFlag = false;
+    ecnCeEventFlag = false;
     txSizeBitsAvg = 0.0f;
     lastRateUpdateT_us = 0;
     lastBitrateAdjustT_us = 0;
@@ -1343,13 +1420,12 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
     isActive = true;
     lastFrameT_us = time_us;
 
-    if (lossEventFlag) {
+    if (lossEventFlag || ecnCeEventFlag) {
         /*
         * Loss event handling
         * Rate is reduced slightly to avoid that more frames than necessary
         * queue up in the sender queue
         */
-        lossEventFlag = false;
         if (time_us - lastTargetBitrateIUpdateT_us > 2000000) {
             /*
             * The timing constraint avoids that targetBitrateI
@@ -1361,8 +1437,13 @@ void ScreamTx::Stream::updateTargetBitrate(uint64_t time_us) {
             updateTargetBitrateI(br);
             lastTargetBitrateIUpdateT_us = time_us;
         }
-        targetBitrate = std::max(minBitrate,
-            targetBitrate*lossEventRateScale);
+        if (lossEventFlag)
+            targetBitrate = std::max(minBitrate,targetBitrate*lossEventRateScale);
+        else if (ecnCeEventFlag)
+            targetBitrate = std::max(minBitrate, targetBitrate*ecnCeEventRateScale);
+
+        lossEventFlag = false;
+        ecnCeEventFlag = false;
         lastBitrateAdjustT_us = time_us;
     }
     else {

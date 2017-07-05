@@ -10,33 +10,34 @@
 
 using namespace std;
 
-const float Tmax = 100.0f;
+const float Tmax = 50.0f;
 const bool isChRate = false;
 const bool printLog = true;
-const bool ecnCapable = true;
+const bool ecnCapable = false;
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2
 */
-const int mode = 0x02;
+const int mode = 0x03;
 const double timeBase = 50000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / 25.0);
     ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false);
-    ScreamRx *screamRx = new ScreamRx();
+    ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[2] = { new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[2] = { 0, 0 };
-    NetQueue *netQueueDelay = new NetQueue(0.05f, 0.0f, 0.03f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 5e6, 0.0f);
-    videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.1f, false, false, 0);
-    videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, true, false, 0);
+    NetQueue *netQueueDelay = new NetQueue(0.1f, 0.0f, 0.01f);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 8e6, 0.0f);
+    videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.2f, false, false, 0);
+    videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, false, false, 0);
     if (mode & 0x01)
-        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 6000.0f, 6000.0f, 100e3f, 5000.0f, 2.0f, 1.0f, 0.1f);
+       // screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 500e3f, 500e3f, 120e6f, 5e6f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);
+      screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 6000.0f, 6000.0f, 100e3f, 5000.0f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);
     if (mode & 0x02)
-        screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 500e3f, 500e3f, 100e6f, 5e5f, 2.0f, 1.0f, 0.1f, 0.8f);
-//    screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 1000e3f, 1000e3f, 100e6f, 2e6f);
+        //screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 500e3f, 500e3f, 120e6f, 5e6f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);
+      screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 1000e3f, 1000e3f, 100e6f, 2e6f);
 
 
     float time = 0.0f;
@@ -94,11 +95,12 @@ int main(int argc, char* argv[])
             }
             nPkt++;
         }
+#ifdef false
         isFeedback |= screamRx->isFeedback(time_us);
         uint32_t rxTimestamp;
         uint16_t aseqNr;
         uint64_t aackVector;
-        uint32_t ecnCeMarkedBytes = 0;
+        uint16_t ecnCeMarkedBytes = 0;
         uint64_t rtcpFbInterval_us = screamRx->getRtcpFbInterval();
         if (isFeedback && (time_us_rx - screamRx->getLastFeedbackT() > rtcpFbInterval_us)) {
             if (screamRx->getFeedback(time_us_rx, ssrc, rxTimestamp, aseqNr, aackVector, ecnCeMarkedBytes)) {
@@ -116,6 +118,14 @@ int main(int argc, char* argv[])
                 isFeedback = false;
                 isEvent = true;
             }
+        }
+#endif
+        unsigned char buf[100];
+        int fb_size = -1;
+        if (screamRx->createFeedback(time_us_rx, buf, fb_size)) {
+            screamTx->incomingFeedback(time_us_tx, buf, fb_size);
+            retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
+            isEvent = true;
         }
 
         if (n == nextCallN && retVal != 0.0f) {

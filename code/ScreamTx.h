@@ -53,6 +53,8 @@ static const float kTxQueueSizeFactor = 0.2f;
 static const float kQueueDelayGuard = 0.1f;
 // Video rate scaling due to loss events
 static const float kLossEventRateScale = 0.9f;
+// Video rate scaling due to ECN marking events
+static const float kEcnCeEventRateScale = 0.95f;
 
 
 
@@ -61,11 +63,13 @@ static const float kLossEventRateScale = 0.9f;
 * Timestamp sampling rate for SCReAM feedback
 */
 static const float kTimestampRate = 1000.0f;
-/* Max number of RTP packets in flight
+/* 
+* Max number of RTP packets in flight 
 * With and MSS = 1200 byte and an RTT = 200ms
 * this is enount to support media bitrates of ~50Mbps
+* Note, 65536 % kMaxTxPackets must be zero
 */
-static const int kMaxTxPackets = 1000;
+static const int kMaxTxPackets = 1024;
 /*
 * Max number of streams
 */
@@ -117,7 +121,8 @@ public:
 		float maxRtpQueueDelay = kMaxRtpQueueDelay,
 		float txQueueSizeFactor = kTxQueueSizeFactor,
 		float queueDelayGuard = kQueueDelayGuard,
-		float lossEventRateScale = kLossEventRateScale);
+		float lossEventRateScale = kLossEventRateScale,
+        float ecnCeEventRateScale = kEcnCeEventRateScale);
 
     /*
      * Updates the min and max bitrates for an existing stream
@@ -174,7 +179,36 @@ public:
         uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
         uint16_t highestSeqNr, // Highest ACKed RTP sequence number
         uint64_t ackVector,   // ACK vector
-        uint32_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
+        uint16_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
+
+    /*
+    * Parse feedback according to the format below. It is up to the
+    * wrapper application this RTCP from a compound RTCP if needed
+    * BT = 255, means that this is experimental use
+    *
+    * 0                   1                   2                   3
+    * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |V=2|P|reserved |   PT=XR=207   |           length=6            |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                              SSRC                             |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |     BT=255    |    reserved   |         block length=4        |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                        SSRC of source                         |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                     Ack vector (b0-31)                        |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                     Ack vector (b32-63)                       |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                    Timestamp (32bits)                         |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    */
+    void incomingFeedback(uint64_t time_us,
+        unsigned char* buf,
+        int size);
 
 	/*
 	* Get the target bitrate for stream with SSRC
@@ -229,7 +263,8 @@ private:
 			float maxRtpQueueDelay,
 			float txQueueSizeFactor,
 			float queueDelayGuard,
-			float lossEventRateScale);
+			float lossEventRateScale,
+            float ecnCeEventRateScale);
 
 		float getMaxRate();
 
@@ -252,6 +287,7 @@ private:
 		float txQueueSizeFactor;
 		float queueDelayGuard;
 		float lossEventRateScale;
+        float ecnCeEventRateScale;
 
 		int credit;             // Credit that is received if another stream gets 
                                 //  priority to transmit
@@ -271,7 +307,8 @@ private:
 		float targetBitrateI;   // Target bitrate inflection point
 		bool wasFastStart;      // Was fast start
 		bool lossEventFlag;     // Was loss event
-		float txSizeBitsAvg;    // Avergage nymber of bits in RTP queue
+        bool ecnCeEventFlag;    // Was ECN mark event
+        float txSizeBitsAvg;    // Avergage nymber of bits in RTP queue
 		uint64_t lastBitrateAdjustT_us; // Last time rate was updated for this stream
 		uint64_t lastRateUpdateT_us;    // Last time rate estimate was updated
 		uint64_t lastTargetBitrateIUpdateT_us;    // Last time rate estimate was updated
@@ -298,7 +335,7 @@ private:
 		bool wasRepairLoss;
 		bool repairLoss;
         int lastLossDetectIx;
-        uint32_t ecnCeMarkedBytes;
+        uint16_t ecnCeMarkedBytes;
 
 
 		Transmitted txPackets[kMaxTxPackets];

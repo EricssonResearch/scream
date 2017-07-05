@@ -6,7 +6,7 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
         
     figure(1);
     subplot(2,1,1);
-    plot(T,a(:,2)); 
+    plot(T,a(:,2),T,a(:,4)); 
     set(gca,'FontSize',12);grid on;
     set(gca,'XTickLabel',[]);    
     axis([0 Tmax 0 0.5]);grid on;
@@ -24,14 +24,14 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,9)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.5]);grid on;
+    axis([0 Tmax 0 0.2]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
     plot(T,a(:,10),T,a(:,12),T,a(:,13));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(1)]);grid on;
-    title('Bitrate [bps]');    
+    title('Bitrate [kbps]');    
     legend('Target','Transmitted', 'Acked');
     xlabel('T [s]');
     end
@@ -41,14 +41,14 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,9+K)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.1]);grid on;
+    axis([0 Tmax 0 0.2]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
     plot(T,a(:,10+K),T,a(:,12+K),T,a(:,13+K));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(2)]);grid on;
-    title('Bitrate [bps]');    
+    title('Bitrate [kbps]');    
     legend('Target','Transmitted', 'Acked');
     xlabel('T [s]');
     end

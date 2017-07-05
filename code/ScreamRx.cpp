@@ -1,5 +1,7 @@
 #include "ScreamRx.h"
 #include "ScreamTx.h"
+#define NOMINMAX
+#include <WinSock2.h>
 #include <string.h>
 #include <climits>
 #include <algorithm>
@@ -16,7 +18,6 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
     nRtpSinceLastRtcp = 0;
     firstReceived = false;
     ecnCeMarkedBytes = 0;
-    timeStampConversionFactor = kTimestampRate / 1e6f;
 }
 
 bool ScreamRx::Stream::checkIfFlushAck(int seqNr) {
@@ -87,17 +88,19 @@ void ScreamRx::Stream::receive(uint64_t time_us,
             ackVector = ackVector | (INT64_C(1) << (diff - 1));
         }
     }
-    receiveTimestamp = (uint32_t)(time_us * timeStampConversionFactor);
+    receiveTimestamp = (uint32_t)(time_us / 1000);
 
     if (isEcnCe)
         ecnCeMarkedBytes += size;
 }
 
-ScreamRx::ScreamRx() {
+ScreamRx::ScreamRx(uint32_t ssrc_) {
     lastFeedbackT_us = 0;
     bytesReceived = 0;
     lastRateComputeT_us = 0;
     averageReceivedRate = 1e5;
+    rtcpFbInterval_us = 20000;
+    ssrc = ssrc_;
 }
 
 bool ScreamRx::checkIfFlushAck(
@@ -127,7 +130,7 @@ void ScreamRx::receive(uint64_t time_us,
     if (lastRateComputeT_us == 0)
         lastRateComputeT_us = time_us;
 
-    if (time_us - lastRateComputeT_us > 200000) {
+    if (time_us - lastRateComputeT_us > 100000) {
         /*
         * Media rate computation (for all medias) is done at least every 200ms
         * This is used for RTCP feedback rate calculation
@@ -136,6 +139,14 @@ void ScreamRx::receive(uint64_t time_us,
         lastRateComputeT_us = time_us;
         averageReceivedRate = std::max(0.95f*averageReceivedRate, bytesReceived * 8 / delta);
         bytesReceived = 0;
+        /*
+        * The RTCP feedback rate depends on the received media date
+        * Target ~2% overhead but with feedback interval limited
+        *  to the range [1ms,100ms]
+        */
+        float rate = 0.02*averageReceivedRate / (70.0f * 8.0f); // RTCP overhead
+        rate = std::min(1000.0f, std::max(10.0f, rate));  // 
+        rtcpFbInterval_us = uint64_t(1000000.0f / rate);
     }
 
     if (!streams.empty()) {
@@ -163,15 +174,7 @@ void ScreamRx::receive(uint64_t time_us,
 
 
 uint64_t ScreamRx::getRtcpFbInterval() {
-    /*
-    * The RTCP feedback rate depends on the received media date
-    *  Target ~5% overhead
-    */
-    float rate = 0.05*averageReceivedRate/(70.0f * 8.0f); // RTCP overhead
-    rate = std::min(1000.0f, std::max(10.0f, rate));  // 
-    float res = 1000000.0f / rate;
-
-    return uint64_t(res);
+    return rtcpFbInterval_us;
 }
 
 bool ScreamRx::isFeedback(uint64_t time_us) {
@@ -191,7 +194,7 @@ bool ScreamRx::getFeedback(uint64_t time_us,
     uint32_t &receiveTimestamp,
     uint16_t &highestSeqNr,
     uint64_t &ackVector,
-    uint32_t &ecnCeMarkedBytes) {
+    uint16_t &ecnCeMarkedBytes) {
 
     Stream *stream = NULL;
     uint64_t minT_us = ULLONG_MAX;
@@ -215,4 +218,76 @@ bool ScreamRx::getFeedback(uint64_t time_us,
     stream->nRtpSinceLastRtcp = 0;
     lastFeedbackT_us = time_us;
     return true;
+}
+
+/*
+* Create feedback according to the format below. It is up to the
+* wrapper application to prepend this RTCP with SR or RR when needed
+* BT = 255, means that this is experimental use
+* The code currently only handles one SSRC source per IP packet
+*
+* 0                   1                   2                   3
+* 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |V=2|P|reserved |   PT=XR=207   |           length=6            |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                              SSRC                             |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |     BT=255    |    reserved   |         block length=4        |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                        SSRC of source                         |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                     Ack vector (b0-31)                        |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                     Ack vector (b32-63)                       |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                    Timestamp (32bits)                         |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+bool ScreamRx::createFeedback(uint64_t time_us, unsigned char *buf, int &size) {
+
+    if (!isFeedback(time_us))
+        return false;
+    if (time_us - getLastFeedbackT() > rtcpFbInterval_us) {
+        uint32_t timeStamp;
+        uint16_t seqNr;
+        uint64_t ackVector;
+        uint16_t ecnCeMarkedBytes;
+        uint32_t ssrc_src;
+        size = 32;
+        if (getFeedback(time_us, ssrc_src, timeStamp, seqNr, ackVector, ecnCeMarkedBytes)) {
+            //cerr << "FB Tx " << ssrc_src << " " << timeStamp << " " << seqNr << " " << ackVector << " " << ecnCeMarkedBytes << endl;
+            uint16_t tmp_s;
+            uint32_t tmp_l;
+            buf[0] = 0x80;
+            buf[1] = 207;
+            tmp_s = htons(6);
+            memcpy(buf + 2, &tmp_s, 2);
+            tmp_l = htonl(ssrc);
+            memcpy(buf + 4, &tmp_l, 4);
+            buf[8] = 0xFF; // BT=255
+            buf[9] = 0x00;
+            tmp_s = htons(4);
+            memcpy(buf + 10, &tmp_s, 2);
+
+            tmp_l = htonl(ssrc_src);
+            memcpy(buf + 12, &tmp_l, 4);
+            tmp_s = htons(seqNr);
+            memcpy(buf + 16, &tmp_s, 2);
+            tmp_s = htons(ecnCeMarkedBytes);
+            memcpy(buf + 18, &tmp_s, 2);
+            tmp_l = uint32_t((ackVector >> 32) & 0xFFFFFFFF);
+            tmp_l = htonl(tmp_l);
+            memcpy(buf + 20, &tmp_l, 4);
+            tmp_l = uint32_t(ackVector & 0xFFFFFFFF);
+            tmp_l = htonl(tmp_l);
+            memcpy(buf + 24, &tmp_l, 4);
+            tmp_l = htonl(timeStamp);
+            memcpy(buf + 28, &tmp_l, 4);
+            return true;
+        }
+    }
+    return false;
 }

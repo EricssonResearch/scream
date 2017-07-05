@@ -14,8 +14,7 @@ public:
     bool isCe;
     bool used;
 };
-
-const int NetQueueSize = 1000;
+const int NetQueueSize = 10000;
 class NetQueue {
 public:
 

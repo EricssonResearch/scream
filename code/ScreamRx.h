@@ -22,9 +22,9 @@ const int kAckVectorBits = 64;
 */
 class ScreamRx {
 public:
-    ScreamRx();
+    ScreamRx(uint32_t ssrc); // SSRC of this RTCP session
     /*
-    * One instance is created for each SSRC tuple
+    * One instance is created for each source SSRC
     */
     class Stream {
     public:
@@ -42,11 +42,11 @@ public:
             uint16_t seqNr,
             bool isEcnCe);
 
-        uint32_t ssrc;                // SSRC of stream
+        uint32_t ssrc;                // SSRC of stream (source SSRC)
         uint16_t highestSeqNr;        // Highest received sequence number
         uint32_t receiveTimestamp;    // Wall clock time
         uint64_t ackVector;           // List of received packets
-        uint32_t ecnCeMarkedBytes;    // Number of ECN-CE marked bytes
+        uint16_t ecnCeMarkedBytes;    // Number of ECN-CE marked bytes
                                       //  (i.e size of RTP packets with CE set in IP header)
 
         uint64_t lastFeedbackT_us;    // Last time feedback transmitted for
@@ -95,7 +95,34 @@ public:
         uint32_t &receiveTimestamp,
         uint16_t &highestSeqNr,
         uint64_t &ackVector,
-        uint32_t &ecnCeMarkedBytes);
+        uint16_t &ecnCeMarkedBytes);
+
+    /*
+    * Create feedback according to the format below. It is up to the 
+    * wrapper application to prepend this RTCP with SR or RR when needed
+    * BT = 255, means that this is experimental use
+    *   
+    * 0                   1                   2                   3
+    * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |V=2|P|reserved |   PT=XR=207   |           length=6            |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                              SSRC                             |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |     BT=255    |    reserved   |         block length=4        |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                        SSRC of source                         |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                     Ack vector (b0-31)                        |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                     Ack vector (b32-63)                       |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |                    Timestamp (32bits)                         |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    */
+    bool createFeedback(uint64_t time_us, unsigned char *buf, int &size);
 
     uint64_t getLastFeedbackT() { return lastFeedbackT_us; };
 
@@ -103,6 +130,8 @@ public:
     int bytesReceived;
     uint64_t lastRateComputeT_us;
     float averageReceivedRate;
+    uint64_t rtcpFbInterval_us;
+    uint32_t ssrc;
 
 
     /*
