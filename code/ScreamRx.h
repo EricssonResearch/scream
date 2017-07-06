@@ -47,7 +47,7 @@ public:
         uint32_t receiveTimestamp;    // Wall clock time
         uint64_t ackVector;           // List of received packets
         uint16_t ecnCeMarkedBytes;    // Number of ECN-CE marked bytes
-                                      //  (i.e size of RTP packets with CE set in IP header)
+        //  (i.e size of RTP packets with CE set in IP header)
 
         uint64_t lastFeedbackT_us;    // Last time feedback transmitted for
         //  this SSRC
@@ -98,10 +98,10 @@ public:
         uint16_t &ecnCeMarkedBytes);
 
     /*
-    * Create feedback according to the format below. It is up to the 
+    * Create feedback according to the format below. It is up to the
     * wrapper application to prepend this RTCP with SR or RR when needed
     * BT = 255, means that this is experimental use
-    *   
+    *
     * 0                   1                   2                   3
     * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+

@@ -1,7 +1,11 @@
 #include "ScreamRx.h"
 #include "ScreamTx.h"
+#ifdef _MSC_VER
 #define NOMINMAX
 #include <WinSock2.h>
+#else
+#include <arpa/inet.h>
+#endif
 #include <string.h>
 #include <climits>
 #include <algorithm>
@@ -145,7 +149,7 @@ void ScreamRx::receive(uint64_t time_us,
         *  to the range [1ms,100ms]
         */
         float rate = 0.02*averageReceivedRate / (70.0f * 8.0f); // RTCP overhead
-        rate = std::min(1000.0f, std::max(10.0f, rate));  // 
+        rate = std::min(1000.0f, std::max(10.0f, rate));  //
         rtcpFbInterval_us = uint64_t(1000000.0f / rate);
     }
 

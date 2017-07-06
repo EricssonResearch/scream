@@ -10,7 +10,7 @@
 
 using namespace std;
 
-const float Tmax = 50.0f;
+const float Tmax = 200.0f;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
@@ -18,26 +18,26 @@ const bool ecnCapable = false;
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2
 */
-const int mode = 0x03;
+const int mode = 0x02;
 const double timeBase = 50000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / 25.0);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 2.0f, 0, 0.0f);
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[2] = { new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[2] = { 0, 0 };
     NetQueue *netQueueDelay = new NetQueue(0.1f, 0.0f, 0.01f);
     NetQueue *netQueueRate = new NetQueue(0.0f, 8e6, 0.0f);
     videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.2f, false, false, 0);
-    videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, false, false, 0);
+    videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, true, false, 0);
     if (mode & 0x01)
        // screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 500e3f, 500e3f, 120e6f, 5e6f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);
       screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 6000.0f, 6000.0f, 100e3f, 5000.0f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);
     if (mode & 0x02)
         //screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 500e3f, 500e3f, 120e6f, 5e6f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);
-      screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 1000e3f, 1000e3f, 100e6f, 2e6f);
+      screamTx->registerNewStream(rtpQueue[1], 11, 1.0f, 1000e3f, 1000e3f, 10e6f, 1e6f);
 
 
     float time = 0.0f;
@@ -152,7 +152,7 @@ int main(int argc, char* argv[])
         if (printLog && time - lastLogT > 0.01) {
             cout << time << " ";
             char s[500];
-            screamTx->printLog(time, s);
+            screamTx->getLog(time, s);
             //cout << endl;
             cout << " " << s << endl;
             lastLogT = time;
