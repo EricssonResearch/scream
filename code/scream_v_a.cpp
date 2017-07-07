@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
     NetQueue *netQueueDelay = new NetQueue(0.1f, 0.0f, 0.01f);
     NetQueue *netQueueRate = new NetQueue(0.0f, 8e6, 0.0f);
     videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.2f, false, false, 0);
-    videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, true, false, 0);
+    videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, false, false, 0);
     if (mode & 0x01)
        // screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 500e3f, 500e3f, 120e6f, 5e6f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);
       screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 6000.0f, 6000.0f, 100e3f, 5000.0f, 2.0f, 1.0f, 0.1f, 0.9f, 0.95f);

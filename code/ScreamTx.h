@@ -98,6 +98,7 @@ public:
     *  reduced buffer size in wireless modems.
     *  This is however at the potential cost of an overall increased transmission delay also when links are uncongested 
     *  as the RTP packets are more likely to be buffered up on the sender side when cautiousPacing is set close to 1.0.
+    * lossBeta == 1.0 means that packet losses are ignored by the congestion control
     */
     ScreamTx(float lossBeta = kLossBeta,
         float ecnCeBeta = kEcnCeBeta,

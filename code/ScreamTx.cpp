@@ -740,7 +740,7 @@ void ScreamTx::detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint1
             int n = m % kMaxTxPackets;
             if (txPackets[n].isUsed) {
                 Transmitted *tmp = &txPackets[n];
-                if (time_us - lastLossEventT_us > sRtt_us) {
+                if (time_us - lastLossEventT_us > sRtt_us && lossBeta < 1.0f) {
                     lossEvent = true;
                 }
                 stream->bytesLost += tmp->size;
@@ -793,7 +793,7 @@ void ScreamTx::detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint1
                 * Packet ACK is delayed more than kReorderTime_us after an ACK of a higher SN packet
                 * raise a loss event and remove from TX list
                 */
-                if (time_us - lastLossEventT_us > sRtt_us) {
+                if (time_us - lastLossEventT_us > sRtt_us && lossBeta < 1.0f) {
                     lossEvent = true;
                 }
                 stream->bytesLost += tmp->size;
