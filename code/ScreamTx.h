@@ -240,6 +240,11 @@ public:
     void getLog(float time, char *s);
 
     /*
+    * Get short form verbose log information
+    */
+    void getShortLog(float time, char *s);
+
+    /*
     * Get overall simplified statistics
     */
     void getStatistics(float time, char *s);

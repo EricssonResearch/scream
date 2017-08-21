@@ -628,6 +628,24 @@ void ScreamTx::getLog(float time, char *s) {
     }
 }
 
+void ScreamTx::getShortLog(float time, char *s) {
+    sprintf(s, "%4.3f, %4.3f, %6d, %6d, ",
+        queueDelay, sRtt,
+        cwnd, bytesInFlight);
+
+    queueDelayMax = 0.0;
+    for (int n = 0; n < nStreams; n++) {
+        Stream *tmp = streams[n];
+        char s2[200];
+        sprintf(s2, "%4.3f, %5.0f, %5.0f, %5.0f, %5.0f, ",
+            tmp->rtpQueue->getDelay(time),
+            tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
+            tmp->rateTransmitted / 1000.0f,
+            tmp->rateLost / 1000.0f);
+        strcat(s, s2);
+    }
+}
+
 void ScreamTx::getStatistics(float time, char *s) {
     statistics->getSummary(time, s);
 }
@@ -1652,9 +1670,10 @@ bool ScreamTx::Stream::isRtpQueueDiscard() {
 * issues that VBR media brings
 */
 void ScreamTx::adjustPriorities(uint64_t time_us) {
-    if (nStreams == 1 || time_us - lastAdjustPrioritiesT_us < 1000000) {
+    if (nStreams == 1 || time_us - lastAdjustPrioritiesT_us < 1000000 || queueDelayTrend < 0.2) {
         /*
-        * Skip if only one stream or if adjustment done less than 1s ago
+        * Skip if only one stream or if adjustment done less than 1s ago.
+        * Furthermore, adjustment is pointless if there is no congestion 
         */
         return;
     }

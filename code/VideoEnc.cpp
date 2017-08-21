@@ -67,8 +67,11 @@ int VideoEnc::encode(float time) {
     float tmp = std::max(1000.0f, tbr - rtpOverHead);
     int bytes = (int)((tmp / frameRate / 8.0)*rnd);
     if (isIr) {
-        bytes *= 4;
+        bytes *= 6;
         isIr = false;
+    }
+    else {
+        //bytes /= 2;
     }
     if (simIdle) {
         if ((t_ms % 10000) < 25) {
