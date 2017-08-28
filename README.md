@@ -42,7 +42,15 @@ Figure 4 : SCReAM without ECN support, key frames every 5 seconds
 
 Figure 5 : SCReAM with ECN support, key frames every 5 seconds
 
+----------
 
+The two videos below show a simple test with a simple 3Mbps bottleneck (CoDel AQM, ECN cabable). The first video is with ECN disabled in the sender, the other is with ECN enabled. SCReAM is here used with a Panasonic WV-SBV111M IP camera. One may argue that one can disable CoDel to avoid the packet losses, unfortunately one then lose the positive properties with CoDel, mentioned earlier.
+
+[Without ECN](https://www.youtube.com/watch?v=J0po78q1QkU "Without ECN") 
+
+[With ECN](https://www.youtube.com/watch?v=qIe0ubw9jPw "With ECN") 
+
+The green areas that uccur due to packet loss is an artifact in the conversion of the RTP dump.
 ## Real life test
 A real life test of SCReAM is performed with the following setup in a car:
 
