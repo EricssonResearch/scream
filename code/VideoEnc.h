@@ -21,6 +21,7 @@ public:
     bool simIr;
     bool simIdle;
     bool isIr;
+    int irT;
     int ixIdle = 0;
     int delayIx = 0;
 };

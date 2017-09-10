@@ -69,7 +69,7 @@ static const float kTimestampRate = 1000.0f;
 * this is enount to support media bitrates of ~50Mbps
 * Note, 65536 % kMaxTxPackets must be zero
 */
-static const int kMaxTxPackets = 1024;
+static const int kMaxTxPackets = 2048;
 /*
 * Max number of streams
 */
@@ -81,24 +81,27 @@ static const int kBaseOwdHistSize = 50;
 static const int kQueueDelayNormHistSize = 200;
 static const int kQueueDelayNormHistSizeSh = 50;
 static const int kQueueDelayFractionHistSize = 20;
-static const int kBytesInFlightHistSize = 5;
+static const int kBytesInFlightHistSizeMax = 60;
 static const int kRateRtpHistSize = 3;
 static const int kRateUpDateSize = 4;
 static const int kTargetBitrateHistSize = 3;
+static const int kLossRateHistSize = 10;
 
 class RtpQueueIface;
 class ScreamTx {
 public:
     /*
     * Constructor, see constant definitions above for an explanation of parameters
-    * cwnd > 0 sets a different initial congestion window, for example it can be set to 
+    * cwnd > 0 sets a different initial congestion window, for example it can be set to
     *  initialrate/8*rtt
     * cautiousPacing is set in the range [0.0..1.0]. A higher values restricts the transmission rate of large key frames
-    *  which can be beneficial if it is evident that large key frames cause packet drops, for instance due to 
+    *  which can be beneficial if it is evident that large key frames cause packet drops, for instance due to
     *  reduced buffer size in wireless modems.
-    *  This is however at the potential cost of an overall increased transmission delay also when links are uncongested 
+    *  This is however at the potential cost of an overall increased transmission delay also when links are uncongested
     *  as the RTP packets are more likely to be buffered up on the sender side when cautiousPacing is set close to 1.0.
     * lossBeta == 1.0 means that packet losses are ignored by the congestion control
+    * bytesInFlightHistSize is default 5 (seconds), this can be increased to up to 60s if issues are seen with stuttering
+    *  video in cases when camera input stimuli changes from static to moving.
     */
     ScreamTx(float lossBeta = kLossBeta,
         float ecnCeBeta = kEcnCeBeta,
@@ -106,8 +109,10 @@ public:
         bool enableSbd = kEnableSbd,
         float gainUp = kGainUp,
         float gainDown = kGainDown,
-        int cwnd = 0,  // An initial cwnd larger than 2*mss
-        float cautiousPacing = 0.0f); 
+        int cwnd = 0,
+        float cautiousPacing = 0.0f,
+        int bytesInFlightHistSize = 5,
+        bool openWindow = false);
 
     ~ScreamTx();
 
@@ -120,10 +125,10 @@ public:
     */
     void registerNewStream(RtpQueueIface *rtpQueue,
         uint32_t ssrc,
-        float priority,
-        float minBitrate,
-        float startBitrate,
-        float maxBitrate,
+        float priority,     // priority in range ]0.0 .. 1.0], 1.0 is highest
+        float minBitrate,   // Min target bitrate
+        float startBitrate, // Starting bitrate
+        float maxBitrate,   // Max target bitrate
         float rampUpSpeed = kRampUpSpeed,
         float maxRtpQueueDelay = kMaxRtpQueueDelay,
         float txQueueSizeFactor = kTxQueueSizeFactor,
@@ -185,7 +190,7 @@ public:
         uint32_t ssrc,         // SSRC of stream
         uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
         uint16_t highestSeqNr, // Highest ACKed RTP sequence number
-        uint64_t ackVector,   // ACK vector
+        uint64_t ackVector,    // ACK vector
         uint16_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
 
     /*
@@ -240,7 +245,7 @@ public:
     void getLog(float time, char *s);
 
     /*
-    * Get short form verbose log information
+    * Get verbose log information
     */
     void getShortLog(float time, char *s);
 
@@ -275,9 +280,11 @@ private:
         void getSummary(float time, char s[]);
         void add(float rateTx, float rateLost, float rtt, float queueDelay);
     private:
-
+        float lossRateHist[kLossRateHistSize];
+        float rateLostAcc;
+        int rateLostN;
+        int lossRateHistPtr;
         float avgRateTx;
-        float avgRateLost;
         float avgRtt;
         float avgQueueDelay;
     };
@@ -327,6 +334,8 @@ private:
 
         int credit;             // Credit that is received if another stream gets
         //  priority to transmit
+        int creditLost;         // Amount of lost (unused) credit, input to
+        //  adjustPriorities function
         float targetPriority;   // Stream target priority
         float targetPriorityInv;// Stream target priority inverted
         int bytesTransmitted;   // Number of bytes transmitted
@@ -485,10 +494,6 @@ private:
     float getQueueDelayTrend();
 
     /*
-    * Variables for network congestion control
-    */
-
-    /*
     * Related to computation of queue delay and target queuing delay
     */
     float lossBeta;
@@ -529,9 +534,11 @@ private:
     int mss; // Maximum Segment Size
     int cwnd; // congestion window
     int cwndMin;
+    bool openWindow;
     int bytesInFlight;
-    int bytesInFlightHistLo[kBytesInFlightHistSize];
-    int bytesInFlightHistHi[kBytesInFlightHistSize];
+    int bytesInFlightHistLo[kBytesInFlightHistSizeMax];
+    int bytesInFlightHistHi[kBytesInFlightHistSizeMax];
+    int bytesInFlightHistSize;
     int bytesInFlightHistPtr;
     int bytesInFlightMaxLo;
     int bytesInFlightHistLoMem;
@@ -597,8 +604,8 @@ private:
     int nStreams;
 
     /*
-      * Statistics
-      */
+    * Statistics
+    */
     Statistics *statistics;
 
 };

@@ -44,6 +44,7 @@ public:
 
         uint32_t ssrc;                // SSRC of stream (source SSRC)
         uint16_t highestSeqNr;        // Highest received sequence number
+        uint16_t highestSeqNrTx;      // Highest fed back sequence number
         uint32_t receiveTimestamp;    // Wall clock time
         uint64_t ackVector;           // List of received packets
         uint16_t ecnCeMarkedBytes;    // Number of ECN-CE marked bytes
@@ -56,6 +57,8 @@ public:
         bool firstReceived;
 
         float timeStampConversionFactor;
+
+        int ix;
     };
 
     /*
@@ -133,6 +136,8 @@ public:
     uint64_t rtcpFbInterval_us;
     uint32_t ssrc;
 
+    int getIx(uint32_t ssrc);
+    int ix;
 
     /*
     * Variables for multiple steams handling
@@ -141,4 +146,3 @@ public:
 };
 
 #endif
-

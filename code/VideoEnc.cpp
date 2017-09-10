@@ -18,6 +18,7 @@ VideoEnc::VideoEnc(RtpQueue* rtpQueue_, float frameRate_, float delta_, bool sim
     delta = delta_;
     simIr = simIr_;
     simIdle = simIdle_;
+    irT = 5000;
     for (int n = 0; n < TARGET_RATE; n++) {
         targetRate[n] = 0.0f;
     }
@@ -67,11 +68,11 @@ int VideoEnc::encode(float time) {
     float tmp = std::max(1000.0f, tbr - rtpOverHead);
     int bytes = (int)((tmp / frameRate / 8.0)*rnd);
     if (isIr) {
-        bytes *= 6;
+        bytes *= 4;
         isIr = false;
     }
     else {
-        //bytes /= 2;
+        //if (simIr) bytes /= 2;
     }
     if (simIdle) {
         if ((t_ms % 10000) < 25) {

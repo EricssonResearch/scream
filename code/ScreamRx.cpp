@@ -12,12 +12,12 @@
 #include <iostream>
 using namespace std;
 
-
 ScreamRx::Stream::Stream(uint32_t ssrc_) {
     ssrc = ssrc_;
     ackVector = 0;
     receiveTimestamp = 0x0;
     highestSeqNr = 0x0;
+    highestSeqNrTx = 0x0;
     lastFeedbackT_us = 0;
     nRtpSinceLastRtcp = 0;
     firstReceived = false;
@@ -25,9 +25,9 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
 }
 
 bool ScreamRx::Stream::checkIfFlushAck(int seqNr) {
-
-    return (seqNr - highestSeqNr > kAckVectorBits / 2) && nRtpSinceLastRtcp >= 1;
+    return (seqNr - highestSeqNr > (kAckVectorBits / 2)) && nRtpSinceLastRtcp >= 1;
 }
+
 void ScreamRx::Stream::receive(uint64_t time_us,
     void* rtpPacket,
     int size,
@@ -46,11 +46,11 @@ void ScreamRx::Stream::receive(uint64_t time_us,
     uint32_t seqNrExt = seqNr;
     uint32_t highestSeqNrExt = highestSeqNr;
     if (seqNr < highestSeqNr) {
-        if (highestSeqNr - seqNr > 1000)
+        if (highestSeqNr - seqNr > 16384)
             seqNrExt += 65536;
     }
     if (highestSeqNr < seqNr) {
-        if (seqNr - highestSeqNr > 1000)
+        if (seqNr - highestSeqNr > 16384)
             highestSeqNrExt += 65536;
     }
 
@@ -105,6 +105,7 @@ ScreamRx::ScreamRx(uint32_t ssrc_) {
     averageReceivedRate = 1e5;
     rtcpFbInterval_us = 20000;
     ssrc = ssrc_;
+    ix = 0;
 }
 
 bool ScreamRx::checkIfFlushAck(
@@ -149,7 +150,7 @@ void ScreamRx::receive(uint64_t time_us,
         *  to the range [1ms,100ms]
         */
         float rate = 0.02*averageReceivedRate / (70.0f * 8.0f); // RTCP overhead
-        rate = std::min(1000.0f, std::max(10.0f, rate));  //
+        rate = std::min(500.0f, std::max(10.0f, rate));  //
         rtcpFbInterval_us = uint64_t(1000000.0f / rate);
     }
 
@@ -172,6 +173,7 @@ void ScreamRx::receive(uint64_t time_us,
     * New {SSRC,PT}
     */
     Stream *stream = new Stream(ssrc);
+    stream->ix = ix++;
     stream->receive(time_us, rtpPacket, size, seqNr, isEcnCe);
     streams.push_back(stream);
 }
@@ -191,6 +193,17 @@ bool ScreamRx::isFeedback(uint64_t time_us) {
         }
     }
     return false;
+}
+
+int ScreamRx::getIx(uint32_t ssrc) {
+    if (!streams.empty()) {
+        for (auto it = streams.begin(); it != streams.end(); ++it) {
+            Stream *stream = (*it);
+            if (ssrc == stream->ssrc)
+                return stream->ix;
+        }
+    }
+    return -1;
 }
 
 bool ScreamRx::getFeedback(uint64_t time_us,
@@ -215,6 +228,7 @@ bool ScreamRx::getFeedback(uint64_t time_us,
 
     receiveTimestamp = stream->receiveTimestamp;
     highestSeqNr = stream->highestSeqNr;
+    stream->highestSeqNrTx = highestSeqNr;
     ssrc = stream->ssrc;
     ackVector = stream->ackVector;
     ecnCeMarkedBytes = stream->ecnCeMarkedBytes;
@@ -262,7 +276,6 @@ bool ScreamRx::createFeedback(uint64_t time_us, unsigned char *buf, int &size) {
         uint32_t ssrc_src;
         size = 32;
         if (getFeedback(time_us, ssrc_src, timeStamp, seqNr, ackVector, ecnCeMarkedBytes)) {
-            //cerr << "FB Tx " << ssrc_src << " " << timeStamp << " " << seqNr << " " << ackVector << " " << ecnCeMarkedBytes << endl;
             uint16_t tmp_s;
             uint32_t tmp_l;
             buf[0] = 0x80;
