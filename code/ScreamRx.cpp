@@ -26,7 +26,7 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
 }
 
 bool ScreamRx::Stream::checkIfFlushAck(int seqNr) {
-  return (seqNr - highestSeqNr > (kAckVectorBits / 2)) && nRtpSinceLastRtcp >= 1;
+    return (seqNr - highestSeqNr > (kAckVectorBits / 2)) && nRtpSinceLastRtcp >= 1;
 }
 
 void ScreamRx::Stream::receive(uint64_t time_us,
@@ -151,11 +151,11 @@ void ScreamRx::receive(uint64_t time_us,
         *  to the range [1ms,100ms]
         */
         float rate = 0.02*averageReceivedRate / (70.0f * 8.0f); // RTCP overhead
-        rate = std::min(500.0f, std::max(10.0f, rate));  
+        rate = std::min(500.0f, std::max(10.0f, rate));
         /*
-        * More than one stream ?, increase the feedback rate as 
+        * More than one stream ?, increase the feedback rate as
         *  we currently don't bundle feedback packets
-        */ 
+        */
         rate *= streams.size();
         rtcpFbInterval_us = uint64_t(1000000.0f / rate);
     }
@@ -204,9 +204,9 @@ bool ScreamRx::isFeedback(uint64_t time_us) {
 int ScreamRx::getIx(uint32_t ssrc) {
     if (!streams.empty()) {
         for (auto it = streams.begin(); it != streams.end(); ++it) {
-          Stream *stream = (*it);
-          if (ssrc == stream->ssrc)
-            return stream->ix;
+            Stream *stream = (*it);
+            if (ssrc == stream->ssrc)
+                return stream->ix;
         }
     }
     return -1;
