@@ -100,8 +100,6 @@ public:
     *  This is however at the potential cost of an overall increased transmission delay also when links are uncongested
     *  as the RTP packets are more likely to be buffered up on the sender side when cautiousPacing is set close to 1.0.
     * lossBeta == 1.0 means that packet losses are ignored by the congestion control
-    * bytesInFlightHistSize is default 5 (seconds), this can be increased to up to 60s if issues are seen with stuttering
-    *  video in cases when camera input stimuli changes from static to moving.
     */
     ScreamTx(float lossBeta = kLossBeta,
         float ecnCeBeta = kEcnCeBeta,
@@ -109,7 +107,7 @@ public:
         bool enableSbd = kEnableSbd,
         float gainUp = kGainUp,
         float gainDown = kGainDown,
-        int cwnd = 0,
+        int cwnd = 0,  // An initial cwnd larger than 2*mss
         float cautiousPacing = 0.0f,
         int bytesInFlightHistSize = 5,
         bool openWindow = false);
@@ -190,7 +188,7 @@ public:
         uint32_t ssrc,         // SSRC of stream
         uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
         uint16_t highestSeqNr, // Highest ACKed RTP sequence number
-        uint64_t ackVector,    // ACK vector
+        uint64_t ackVector,   // ACK vector
         uint16_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
 
     /*
@@ -287,6 +285,9 @@ private:
         float avgRateTx;
         float avgRtt;
         float avgQueueDelay;
+        float sumRateTx;
+        float sumRateLost;
+
     };
 
 
@@ -494,6 +495,10 @@ private:
     float getQueueDelayTrend();
 
     /*
+    * Variables for network congestion control
+    */
+
+    /*
     * Related to computation of queue delay and target queuing delay
     */
     float lossBeta;
@@ -604,8 +609,8 @@ private:
     int nStreams;
 
     /*
-    * Statistics
-    */
+      * Statistics
+      */
     Statistics *statistics;
 
 };

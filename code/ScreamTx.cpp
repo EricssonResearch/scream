@@ -27,6 +27,7 @@ static const bool kEnableConsecutiveFastStart = true;
 static const bool kEnablePacketPacing = true;
 static const float kPacketPacingHeadRoom = 1.25f;
 
+
 // Rate update interval
 static const uint64_t kRateAdjustInterval_us = 200000; // 200ms
 
@@ -110,6 +111,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 
     inFastStart(true),
 
+    //pacingBitrate(0.0),
     paceInterval_us(0),
     paceInterval(0.0),
 
@@ -176,6 +178,8 @@ ScreamTx::~ScreamTx() {
 }
 
 ScreamTx::Statistics::Statistics() {
+    sumRateTx = 0.0f;
+    sumRateLost = 0.0f;
     avgRateTx = 0.0f;
     avgRtt = 0.0f;
     avgQueueDelay = 0.0f;
@@ -189,6 +193,8 @@ ScreamTx::Statistics::Statistics() {
 
 void ScreamTx::Statistics::add(float rateTx, float rateLost, float rtt, float queueDelay) {
     const float alpha = 0.98f;
+    sumRateTx += rateTx;
+    sumRateLost += rateLost;
     if (avgRateTx == 0.0f) {
         avgRateTx = rateTx;
         avgRtt = rtt;
@@ -217,11 +223,15 @@ void ScreamTx::Statistics::getSummary(float time, char s[]) {
     for (int n = 0; n < kLossRateHistSize; n++)
         lossRate += lossRateHist[n];
     lossRate /= kLossRateHistSize;
-
-    sprintf(s, "%5.1f  Transmit rate = %5.0fkbps, PLR = %5.2f%%, RTT = %5.3fs, Queue delay = %5.3fs",
+    float lossRateLong = 0.0f;
+    if (sumRateTx > 100000.0f) {
+        lossRateLong = sumRateLost / sumRateTx*100.0f;
+    }
+    sprintf(s, "%5.1f  Transmit rate = %5.0fkbps, PLR = %5.2f%%(%5.2f%%), RTT = %5.3fs, Queue delay = %5.3fs",
         time,
         avgRateTx / 1000.0f,
         lossRate,
+        lossRateLong,
         avgRtt,
         avgQueueDelay);
 }
@@ -798,7 +808,6 @@ void ScreamTx::detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint1
 
 }
 
-
 float ScreamTx::getTargetBitrate(uint32_t ssrc) {
     return  getStream(ssrc)->getTargetBitrate();
 }
@@ -831,7 +840,7 @@ void ScreamTx::getLog(float time, char *s) {
 void ScreamTx::getShortLog(float time, char *s) {
     int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
     sprintf(s, "%4.3f, %4.3f, %6d, %6d, %5.0f, ",
-        queueDelay, sRtt,
+        queueDelayMax, sRtt,
         cwnd, bytesInFlight, rateTransmitted / 1000.0f);
 
     queueDelayMax = 0.0;
