@@ -82,7 +82,6 @@ static const int kQueueDelayNormHistSize = 200;
 static const int kQueueDelayNormHistSizeSh = 50;
 static const int kQueueDelayFractionHistSize = 20;
 static const int kBytesInFlightHistSizeMax = 60;
-static const int kRateRtpHistSize = 3;
 static const int kRateUpDateSize = 4;
 static const int kTargetBitrateHistSize = 3;
 static const int kLossRateHistSize = 10;
@@ -116,10 +115,11 @@ public:
 
     /*
     * Register a new stream {SSRC,PT} tuple,
-    * with a priority value in the range [0.0..1.0]
-    * where 1.0 denotes the highest priority
-    * bitrates in bps
-    * Constructor, see constant definitions above for an explanation of other default parameters
+    *  with a priority value in the range ]0.0..1.0]
+    *  where 1.0 denotes the highest priority.
+    * It is recommended that at least one stream has prioritity 1.0.
+    * Bitrates are specified in bps
+    * See constant definitions above for an explanation of other default parameters
     */
     void registerNewStream(RtpQueueIface *rtpQueue,
         uint32_t ssrc,
@@ -359,7 +359,7 @@ private:
         uint64_t lastRateUpdateT_us;    // Last time rate estimate was updated
         uint64_t lastTargetBitrateIUpdateT_us;    // Last time rate estimate was updated
 
-        uint64_t timeTxAck_us;      // timestamp when higest ACKed SN was transmitted
+        uint64_t timeTxAck_us;  // timestamp when higest ACKed SN was transmitted
 
         int bytesRtp;           // Number of RTP bytes from media coder
         float rateRtp;          // Media bitrate
@@ -580,6 +580,7 @@ private:
     */
     uint64_t paceInterval_us;
     float paceInterval;
+    float rateTransmittedAvg;
 
     /*
     * Update control variables

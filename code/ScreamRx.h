@@ -32,7 +32,7 @@ public:
 
         bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 
-        bool checkIfFlushAck(int seqNr);
+        bool checkIfFlushAck();
         /*
         * Receive RTP packet
         */
@@ -48,11 +48,11 @@ public:
         uint32_t receiveTimestamp;    // Wall clock time
         uint64_t ackVector;           // List of received packets
         uint16_t ecnCeMarkedBytes;    // Number of ECN-CE marked bytes
-        //  (i.e size of RTP packets with CE set in IP header)
+                                      //  (i.e size of RTP packets with CE set in IP header)
 
         uint64_t lastFeedbackT_us;    // Last time feedback transmitted for
-        //  this SSRC
-        int nRtpSinceLastRtcp;       // Number of RTP packets since last transmitted RTCP
+                                      //  this SSRC
+        int nRtpSinceLastRtcp;        // Number of RTP packets since last transmitted RTCP
 
         bool firstReceived;
 
@@ -68,8 +68,7 @@ public:
     *  not possible
     */
     bool checkIfFlushAck(
-        uint32_t ssrc,
-        uint16_t seqNr);
+        uint32_t ssrc);
 
     /*
     * Function is called each time an RTP packet is received

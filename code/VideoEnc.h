@@ -24,6 +24,7 @@ public:
     int irT;
     int ixIdle = 0;
     int delayIx = 0;
+    int irOffset = 0;
 };
 
 

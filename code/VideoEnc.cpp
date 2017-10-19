@@ -41,10 +41,8 @@ float rnd2 = 0.0f;
 int VideoEnc::encode(float time) {
     int rtpBytes = 0;
     int t_ms = (int)(time * 1000);
-    if ((t_ms % 5000) < 1 && simIr)
+    if (((t_ms + irOffset) % 5000) < 10 && simIr)
         isIr = true;
-    //if ((t_ms == 1000) && simIr && false)
-    //		isIr = true;
     rnd2 = 0.8*rnd2 + delta*2.0f*(((float)(rand())) / RAND_MAX - 0.5f);
     float rnd = 1.0f + rnd2;
     if (isIr) {
@@ -68,11 +66,11 @@ int VideoEnc::encode(float time) {
     float tmp = std::max(1000.0f, tbr - rtpOverHead);
     int bytes = (int)((tmp / frameRate / 8.0)*rnd);
     if (isIr) {
-        bytes *= 4;
+        bytes = bytes*4 + (int) (1000e3/frameRate/8.0);
         isIr = false;
     }
     else {
-        //if (simIr) bytes /= 2;
+        if (simIr) bytes /= 2;
     }
     if (simIdle) {
         if ((t_ms % 10000) < 25) {

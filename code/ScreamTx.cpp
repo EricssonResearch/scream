@@ -16,9 +16,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-
-//using namespace std;
-
 // === Some good to have features, SCReAM works also
 //     with these disabled
 // Fast start can resume if little or no congestion detected
@@ -26,7 +23,6 @@ static const bool kEnableConsecutiveFastStart = true;
 // Packet pacing reduces jitter
 static const bool kEnablePacketPacing = true;
 static const float kPacketPacingHeadRoom = 1.25f;
-
 
 // Rate update interval
 static const uint64_t kRateAdjustInterval_us = 200000; // 200ms
@@ -111,9 +107,9 @@ ScreamTx::ScreamTx(float lossBeta_,
 
     inFastStart(true),
 
-    //pacingBitrate(0.0),
     paceInterval_us(0),
     paceInterval(0.0),
+    rateTransmittedAvg(0.0),
 
     isInitialized(false),
     lastSRttUpdateT_us(0),
@@ -322,7 +318,6 @@ void ScreamTx::newMediaFrame(uint64_t time_us, uint32_t ssrc, int bytesRtp) {
     }
 }
 
-float rateTransmittedAvg = 0.0f;
 /*
 * Determine if OK to transmit RTP packet
 */
@@ -437,7 +432,7 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
     /*
     * A retransmission time out mechanism to avoid deadlock
     */
-    if (time_us - lastTransmitT_us > 500000) { // 200ms
+    if (time_us - lastTransmitT_us > 500000 && lastTransmitT_us < time_us) { // 200ms
         for (int n = 0; n < kMaxTxPackets; n++) {
             stream->txPackets[n].isUsed = false;
         }
@@ -445,7 +440,6 @@ float ScreamTx::isOkToTransmit(uint64_t time_us, uint32_t &ssrc) {
         exit = false;
         retVal = 0.0f;
     }
-
 
     if (!exit) {
         /*
@@ -493,11 +487,11 @@ float ScreamTx::addTransmitted(uint64_t time_us,
     txPacket->isUsed = true;
     txPacket->isAcked = false;
     txPacket->isAfterReceivedEdge = false;
-    bytesInFlight += size;
 
     /*
     * Update bytesInFlight
     */
+    bytesInFlight += size;
 
     stream->bytesTransmitted += size;
     lastTransmitT_us = time_us;
@@ -595,10 +589,19 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
     uint16_t highestSeqNr,
     uint64_t ackVector,
     uint16_t ecnCeMarkedBytes) {
+
     if (!isInitialized) initialize(time_us);
     Stream *stream = getStream(ssrc);
     if (stream == 0) {
         // Bogus RTCP?, the SSRC is wrong anyway, Skip
+        return;
+    }
+
+    uint16_t diff = highestSeqNr - stream->hiSeqAck;
+    if (diff > 65000 && stream->hiSeqAck != 0 && stream->timeTxAck_us != 0) {
+        /*
+        * Out of order received ACKs are ignored
+        */
         return;
     }
     accBytesInFlightMax += bytesInFlight;
@@ -645,7 +648,7 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
 }
 
 /*
-* Mark ACKed RTP packets
+*  Mark ACKed RTP packets
 */
 void ScreamTx::markAcked(uint64_t time_us, struct Transmitted *txPackets, uint16_t highestSeqNr, uint64_t ackVector, uint32_t timestamp, Stream *stream) {
     /*
@@ -722,7 +725,7 @@ void ScreamTx::detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint1
     * There is a faint possibility that we miss to detect large bursts of lost packets with this fix
     */
     int ix1 = highestSeqNr; ix1 = ix1 % kMaxTxPackets;
-    int ix0 = stream->hiSeqAck + 1;//(ix1 - kAckVectorBits);
+    int ix0 = stream->hiSeqAck + 1;
     stream->hiSeqAck = highestSeqNr;
     if (ix0 < 0) ix0 += kMaxTxPackets;
     while (ix1 < ix0)
@@ -813,13 +816,18 @@ float ScreamTx::getTargetBitrate(uint32_t ssrc) {
 }
 
 void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
-    getStream(ssrc)->targetPriority = priority;
-    getStream(ssrc)->targetPriorityInv = 1.0f / priority;
+    Stream *stream = getStream(ssrc);
+    if (queueDelayTrend > 0.02) {
+        stream->targetBitrate *= priority / stream->targetPriority;
+        stream->targetBitrate = std::min(std::max(stream->targetBitrate, stream->minBitrate), stream->maxBitrate);
+    }
+    stream->targetPriority = priority;
+    stream->targetPriorityInv = 1.0f / priority;
 }
 
 void ScreamTx::getLog(float time, char *s) {
     int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
-    sprintf(s, "%4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %5.0f, %1d, ",
+    sprintf(s, "%4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
         queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
         cwnd, bytesInFlight, rateTransmitted / 1000.0f, isInFastStart());
 
@@ -827,8 +835,8 @@ void ScreamTx::getLog(float time, char *s) {
     for (int n = 0; n < nStreams; n++) {
         Stream *tmp = streams[n];
         char s2[200];
-        sprintf(s2, "%4.3f, %5.0f, %5.0f, %5.0f, %5.0f, %5.0f, %5d, ",
-            tmp->rtpQueue->getDelay(time),
+        sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %6.0f, %5.0f, %5d, ",
+            std::max(0.0f, tmp->rtpQueue->getDelay(time)),
             tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
             tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
             tmp->rateLost / 1000.0f,
@@ -839,7 +847,7 @@ void ScreamTx::getLog(float time, char *s) {
 
 void ScreamTx::getShortLog(float time, char *s) {
     int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
-    sprintf(s, "%4.3f, %4.3f, %6d, %6d, %5.0f, ",
+    sprintf(s, "%4.3f, %4.3f, %6d, %6d, %6.0f, ",
         queueDelayMax, sRtt,
         cwnd, bytesInFlight, rateTransmitted / 1000.0f);
 
@@ -847,8 +855,8 @@ void ScreamTx::getShortLog(float time, char *s) {
     for (int n = 0; n < nStreams; n++) {
         Stream *tmp = streams[n];
         char s2[200];
-        sprintf(s2, "%4.3f, %5.0f, %5.0f, %5.0f, %5.0f, ",
-            tmp->rtpQueue->getDelay(time),
+        sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, ",
+            std::max(0.0f, tmp->rtpQueue->getDelay(time)),
             tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
             tmp->rateTransmitted / 1000.0f,
             tmp->rateLost / 1000.0f);
@@ -880,14 +888,11 @@ void ScreamTx::initialize(uint64_t time_us) {
 * Update the  congestion window
 */
 void ScreamTx::updateCwnd(uint64_t time_us) {
-
     float dT = 0.001;
     if (lastCwndUpdateT_us == 0)
         lastCwndUpdateT_us = time_us;
     else
         dT = (time_us - lastCwndUpdateT_us) * 1e-6f;
-
-
 
     /*
     * This adds a limit to how much the CWND can grow, it is particularly useful
@@ -1401,6 +1406,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
     rateRtp = 0.0f;
     lastLossDetectIx = -1;
     ecnCeMarkedBytes = 0;
+    timeTxAck_us = 0;
 
     for (int n = 0; n < kRateUpDateSize; n++) {
         rateRtpHist[n] = 0.0f;
