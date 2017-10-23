@@ -65,7 +65,7 @@ public:
     * Check to ensure that ACK vector can cover also large holes in
     *  in the received sequence number space. These cases can frequently occur when
     *  SCReAM is used in frame discard mode i.e. when real video rate control is
-    *  not possible
+    *  not possible 
     */
     bool checkIfFlushAck();
 

@@ -58,7 +58,7 @@ void ScreamRx::Stream::receive(uint64_t time_us,
 
     /*
     * Update the ACK vector that indicates receiption '=1' of RTP packets prior to
-    * the highest received sequence number.
+    * the highest received sequence number. 
     * The next highest SN is indicated by the least significant bit,
     * this means that for the first received RTP, the ACK vector is
     * 0x0, for the second received RTP, the ACK vector it is 0x1, for the third 0x3 and so
