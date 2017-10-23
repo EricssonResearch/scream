@@ -67,8 +67,7 @@ public:
     *  SCReAM is used in frame discard mode i.e. when real video rate control is
     *  not possible
     */
-    bool checkIfFlushAck(
-        uint32_t ssrc);
+    bool checkIfFlushAck();
 
     /*
     * Function is called each time an RTP packet is received

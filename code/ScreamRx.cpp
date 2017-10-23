@@ -110,17 +110,11 @@ ScreamRx::ScreamRx(uint32_t ssrc_) {
     ix = 0;
 }
 
-bool ScreamRx::checkIfFlushAck(
-    uint32_t ssrc) {
+bool ScreamRx::checkIfFlushAck() {
     if (!streams.empty()) {
         for (auto it = streams.begin(); it != streams.end(); ++it) {
-            if ((*it)->isMatch(ssrc)) {
-                /*
-                * Packets for this SSRC received earlier
-                * stream is thus already in list
-                */
-                return (*it)->checkIfFlushAck();
-            }
+            if ((*it)->checkIfFlushAck())
+               return true; 
         }
     }
     return false;
