@@ -6,7 +6,7 @@ SCReAM (**S**elf-**C**locked **R**at**e** **A**daptation for **M**ultimedia) is 
 Congestion control for WebRTC media is currently being standardized in the IETF RMCAT WG, the scope of the working group is to define requirements for congestion control and also to standardize a few candidate solutions. 
 SCReAM is a congestion control candidate solution for WebRTC developed at Ericsson Research and optimized for good performance in wireless access. 
 
-The algorithm is submitted to the RMCAT WG [1], a Sigcomm paper [2] and [3] explains the rationale behind the design of the algorithm in more detail. A comparison against GCC (Google Congestion Control) is shown in [4]. A final presentation is found in [5].
+The algorithm is submitted to the RMCAT WG [1], a Sigcomm paper [2] and [3] explains the rationale behind the design of the algorithm in more detail. A comparison against GCC (Google Congestion Control) is shown in [4]. Final presentations are found in [5] and [6].
 Unlike many other congestion control algorithms that are rate based i.e. they estimate the network throughput and adjust the media bitrate accordingly, SCReAM is self-clocked which essentially means that the algorithm does not send in more data into a network than what actually exits the network.
 
 To achieve this, SCReAM implements a feedback protocol over RTCP that acknowledges received RTP packets. 
@@ -22,7 +22,11 @@ Below is shown an example of SCReAM congestion control when subject to a bottlen
 Figure 1 : Simple bottleneck simulation SCReAM
 
 ## ECN (Explicit Congestion Notification) 
-SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. Below is shown two examples with a simple 5Mbps bottleneck, the first without ECN support and the second with ECN support. It is quite apparent that ECN improves on the e2e delay quite considerably. The ECN marking is similar to CoDel.
+SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. The ECN marking is similar to CoDel. 
+
+In addition SCReAM also supports L4S, i.e that the sending rate is reduced proportional to the fraction of the RTP packets that are ECN marked. This enables lower network queue delay.  
+
+Below is shown three examples with a simple 20Mbps bottleneck. It is quite apparent that ECN improves on the e2e delay quite considerably and that the use of L4S reduces the delay even more. L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, given the varying output rate of the video encoder.
 
 ![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn.png)
 
@@ -32,15 +36,10 @@ Figure 2 : SCReAM without ECN support
 
 Figure 3 : SCReAM with ECN support
 
-Below is illustrated a more complex case where a video coder generates large key frames every 5 seconds. In this case ECN reduces the sending rate to give a better headroom for the key frames.
- 
-![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn_keyframe.png)
+![Simple bottleneck simulation SCReAM with L4S support](https://github.com/EricssonResearch/scream/blob/master/images/scream_l4s.png)
 
-Figure 4 : SCReAM without ECN support, key frames every 5 seconds
-    
-![Simple bottleneck simulation SCReAM with ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_ecn_keyframe.png)
+Figure 4 : SCReAM with L4S support
 
-Figure 5 : SCReAM with ECN support, key frames every 5 seconds
 
 ----------
 
@@ -65,7 +64,7 @@ Below is a graph that shows the bitrate, the congestion window and the queue del
  
 ![Log from ](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM_LTE_UL.png)
 
-Figure 6 : Trace from live drive test
+Figure 5 : Trace from live drive test
 
 The graph shows that SCReAM manages high bitrate video streaming with low e2e delay despite demanding conditions both in terms of variable throughput and in a changing output bitrate from the video encoder. Packet losses occur relatively frequently, the exact reason is unknown but seem to be related to handover events, normally packet loss should not occure in LTE-UL, however this seems to be the case with the used cellphone. 
 The delay increases between 1730 and 1800s, the reason here is that the available throughput was lower than the lowest possible coder bitrate. An encoder with a wider rate range would be able to make it possible to keep the delay low also in this case.
@@ -107,6 +106,8 @@ For more information on how to use the code in multimedia clients or in experime
 [4] IETF RMCAT presentation, comparison against Google Congestion Control (GCC) http://www.ietf.org/proceedings/90/slides/slides-90-rmcat-3.pdf 
 
 [5] IETF RMCAT presentation (final for WGLC) : https://www.ietf.org/proceedings/96/slides/slides-96-rmcat-0.pdf
+
+[6] IETF RMCAT presention , SCReAM for remote controlled vehicles over 4G/5G : https://datatracker.ietf.org/meeting/100/materials/slides-100-rmcat-scream-experiments
 
 ## Feedback format
 It is recommended that the experimental feedback format below is used with SCReAM until a dedicated feedback packet format is devised. 
