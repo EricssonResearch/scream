@@ -19,8 +19,7 @@ NetQueueItem::NetQueueItem() {
     tQueue = 0.0;
 }
 
-
-NetQueue::NetQueue(float delay_, float rate_, float jitter_) {
+NetQueue::NetQueue(float delay_, float rate_, float jitter_, bool isL4s_) {
 	for (int n=0; n < NetQueueSize; n++) {
 		items[n] = new NetQueueItem();
 	}
@@ -32,6 +31,12 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_) {
 	jitter = jitter_;
     lastQueueLow = 0.0;
 	nextTx = 0;
+    isL4s = isL4s_;
+    bytesTx = 0;
+    lastRateUpdateT = 0;
+    pDrop = 0.0f;
+    prevRateFrac = 0.0f;
+    l4sTh = std::max(0.005, 5.0 * 1200 * 8 / rate);
 }
 
 void NetQueue::insert(float time, 
@@ -49,10 +54,9 @@ void NetQueue::insert(float time,
 	items[head]->tRelease = time+delay+jitter*(rand()/float(RAND_MAX));
     items[head]->tQueue = time;
     items[head]->isCe = isCe;
-	if (false && jitter > 0)
-		cerr << items[head]->tRelease << endl;
     if (rate > 0) {
-        items[head]->tRelease += sizeOfQueue()*8.0f / rate;
+        float delay = sizeOfQueue()*8.0f / rate;
+        items[head]->tRelease += delay;
     }
 	items[head]->tRelease = std::max(items[head]->tRelease, nextTx);
 	nextTx = items[head]->tRelease;
@@ -68,23 +72,34 @@ bool NetQueue::extract(float time,
         lastQueueLow = time;
 		return false;
 	} else {
-		if (time >= items[tail]->tRelease) {
-	      rtpPacket = items[tail]->packet;
-		  seqNr = items[tail]->seqNr;
-		  ssrc = items[tail]->ssrc;
-		  size = items[tail]->size;
-          isCe = items[tail]->isCe;
-          items[tail]->used = false;
-          /*
-          * Implement a rudimentary CoDel-ish ECN marker (without the 1/sqrt(N) part)
-          */
-          if (time - items[tail]->tQueue <= 0.005 && rate > 0.0) {
-              lastQueueLow = time;
+        if (time >= items[tail]->tRelease) {
+            rtpPacket = items[tail]->packet;
+            seqNr = items[tail]->seqNr;
+            ssrc = items[tail]->ssrc;
+            size = items[tail]->size;
+            isCe = items[tail]->isCe;
+            items[tail]->used = false;
+            /*
+            * Implement a rudimentary CoDel-ish ECN marker (without the 1/sqrt(N) part)
+            */
+            float qDel = time - items[tail]->tQueue;
+            if (!isL4s && time - items[tail]->tQueue <= 0.005 && rate > 0.0) {
+                lastQueueLow = time;
+            }
+            if (!isL4s && time - lastQueueLow > 0.1 && rate > 0.0) {
+                isCe = true;
+                lastQueueLow = time;
+            }
+            if (isL4s && time - items[tail]->tQueue > l4sTh && rate > 0.0) {
+              isCe = true;
+            }
+            if (isL4s && pDrop > 0.0f) {
+              float rnd = float(rand()) / RAND_MAX;
+              if (rnd < pDrop) {
+                  isCe = true;
+              }
           }
-          if (true && time - lastQueueLow > 0.1 && rate > 0.0) {
-            isCe = true;
-            lastQueueLow = time;
-          }
+          bytesTx += size;
           tail++; if (tail == NetQueueSize) tail = 0;
 
 		  return true;
@@ -100,4 +115,23 @@ int NetQueue::sizeOfQueue() {
 			size += items[n]->size;
 	}
 	return size;
+}
+
+const float rateUpdateT = 0.05;
+const float rateFracTarget1 = 0.9;
+void NetQueue::updateRate(float time) {
+    if (time - lastRateUpdateT >= rateUpdateT && rate > 0) {
+        float dT = time - lastRateUpdateT;
+        float rateT = bytesTx * 8 / dT;
+        bytesTx = 0;
+        lastRateUpdateT = time;
+        float rateFrac = rateT / rate - 0.8;
+        rateFrac /= 0.2;
+        rateFrac = std::max(0.0f, std::min(1.0f, rateFrac));
+        pDrop = 0.8*pDrop + 0.2*rateFrac;
+        pDrop = std::min(1.0f, std::max(0.0f, pDrop));
+        prevRateFrac = rateFrac;
+        if (false && pDrop > 0)
+          cerr << pDrop << endl;;
+    }
 }

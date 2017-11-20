@@ -9,7 +9,7 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     plot(T,a(:,2));%,T,a(:,4)); 
     set(gca,'FontSize',12);grid on;
     set(gca,'XTickLabel',[]);    
-    axis([0 Tmax 0 0.5]);grid on;
+    axis([0 Tmax 0 0.2]);grid on;
     title('qdel[s]');
     
     subplot(2,1,2);
@@ -24,15 +24,15 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,10)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.2]);grid on;
+    axis([0 Tmax 0 0.1]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,11),T,a(:,13),T,a(:,14));
+    plot(T,a(:,11),T,a(:,13),T,a(:,12));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(1)]);grid on;
     title('Bitrate [kbps]');    
-    legend('Target','Transmitted', 'Acked');
+    legend('Target','Transmitted', 'RTP');
     xlabel('T [s]');
     end
     if I>1
@@ -41,15 +41,15 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,10+K)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.2]);grid on;
+    axis([0 Tmax 0 0.1]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,11+K),T,a(:,13+K),T,a(:,14+K));
+    plot(T,a(:,11+K),T,a(:,13+K),T,a(:,12+K));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(2)]);grid on;
     title('Bitrate [kbps]');    
-    legend('Target','Transmitted', 'Acked');
+    legend('Target','Transmitted', 'RTP');
     xlabel('T [s]');
     end
     if I>2        
@@ -58,15 +58,15 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,10+K)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.2]);grid on;
+    axis([0 Tmax 0 0.1]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,11+K),T,a(:,13+K),T,a(:,14+K));
+    plot(T,a(:,11+K),T,a(:,13+K),T,a(:,12+K));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(3)]);grid on;
     title('Bitrate [kbps]');    
-    legend('Target','Transmitted', 'Acked');
+    legend('Target','Transmitted', 'RTP');
     xlabel('T [s]');
     end
     

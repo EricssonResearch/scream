@@ -1,4 +1,4 @@
-// scream_01.cpp : Defines the entry point for the console application.
+// Simple test application for verification of SCReAM function
 //
 
 #include "stdafx.h"
@@ -10,33 +10,36 @@
 
 using namespace std;
 
-const float Tmax = 200.0f;
+const float Tmax = 100.0f;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
+const bool isL4s = false;
+const float FR = 30.0f;
+#define TRACEFILE "../traces/trace_no_key_smooth.txt"
+//#define TRACEFILE "../traces/trace_key.txt"
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
-const int mode = 0x07;
+const int mode = 0x01;
 const double timeBase = 50000.0;
 
 int main(int argc, char* argv[])
 {
-    int tick = (int)(timeBase / 25.0);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 2.0f, 0);
+    int tick = (int)(timeBase / FR);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 2.0f, 0, 0.0f, 20, isL4s);
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
-    NetQueue *netQueueDelay = new NetQueue(0.1f, 0.0f, 0.03f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 10e6, 0.0f);
-    videoEnc[0] = new VideoEnc(rtpQueue[0], 25.0, 0.2f, false, false, 0);
-    videoEnc[1] = new VideoEnc(rtpQueue[1], 25.0, 0.2f, false, false, 0);
-    videoEnc[2] = new VideoEnc(rtpQueue[2], 25.0, 0.2f, false, false, 0);
-    videoEnc[1]->irOffset = 1000;
-    videoEnc[2]->irOffset = 2000;
+    NetQueue *netQueueDelay = new NetQueue(0.05f, 0.0f, 0.002f);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 5e6, 0.0f, isL4s);
+    videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE);
+    videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
+    videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
     if (mode & 0x01)
-        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
+       //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 100e6f, 1e6f, 0.2f, 0.1f, 0.1f);
+       screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x02)
         screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x04)
@@ -64,6 +67,7 @@ int main(int argc, char* argv[])
         time_us_tx = time_us + 000000;
         time_us_rx = time_us + 000000;
 
+        netQueueRate->updateRate(time);
         bool isEvent = false;
 
         if (n % tick == 0) {
@@ -91,10 +95,10 @@ int main(int argc, char* argv[])
         }
 
         bool isCe = false;
-        if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
-            netQueueDelay->insert(time, rtpPacket, ssrc, size, seqNr, isCe);
-        }
         if (netQueueDelay->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
+            netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr, isCe);
+        }
+        if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
             if ((nPkt % 1000 == 19 || nPkt % 1000 == 21) && false) {
                 cerr << "lost " << seqNr << endl;
             }
@@ -134,7 +138,7 @@ int main(int argc, char* argv[])
                 rtpQueue[2]->sendPacket(rtpPacket, size, seqNr);
                 break;
             }
-            netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr);
+            netQueueDelay->insert(time, rtpPacket, ssrc, size, seqNr);
             retVal = screamTx->addTransmitted(time_us_tx, ssrc, size, seqNr);
             nextCallN = n + max(1, (int)(1000.0*retVal));
             isEvent = true;
@@ -163,7 +167,7 @@ int main(int argc, char* argv[])
                 netQueueRate->rate = 4000e3;
             }
         }
-        if (time > 50 && !swprio) {
+        if (false && time > 50 && !swprio) {
             swprio = true;
             //screamTx->setTargetPriority(10, 0.2);
             screamTx->setTargetPriority(11, 1.0);

@@ -99,6 +99,9 @@ public:
     *  This is however at the potential cost of an overall increased transmission delay also when links are uncongested
     *  as the RTP packets are more likely to be buffered up on the sender side when cautiousPacing is set close to 1.0.
     * lossBeta == 1.0 means that packet losses are ignored by the congestion control
+    * bytesInFlightHistSize can be set to a larger value than 5(s) for enhanced robustness to media coders that are idle
+    *  for long periods
+    * isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
     */
     ScreamTx(float lossBeta = kLossBeta,
         float ecnCeBeta = kEcnCeBeta,
@@ -109,6 +112,7 @@ public:
         int cwnd = 0,  // An initial cwnd larger than 2*mss
         float cautiousPacing = 0.0f,
         int bytesInFlightHistSize = 5,
+        bool isL4s = false,
         bool openWindow = false);
 
     ~ScreamTx();
@@ -541,6 +545,7 @@ private:
     int cwndMin;
     bool openWindow;
     int bytesInFlight;
+    int bytesInFlightLog;
     int bytesInFlightHistLo[kBytesInFlightHistSizeMax];
     int bytesInFlightHistHi[kBytesInFlightHistSizeMax];
     int bytesInFlightHistSize;
@@ -557,7 +562,11 @@ private:
     float queueDelayTrendMem;
     float maxRate;
     uint64_t lastCwndUpdateT_us;
-
+    bool isL4s;
+    float l4sAlpha;
+    int bytesMarkedThisRtt;
+    int bytesDeliveredThisRtt;
+    uint64_t lastL4sAlphaUpdateT_us;
     /*
     * Loss event
     */

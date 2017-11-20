@@ -18,7 +18,7 @@ const int NetQueueSize = 10000;
 class NetQueue {
 public:
 
-    NetQueue(float delay, float rate=0.0f, float jitter=0.0f);
+    NetQueue(float delay, float rate=0.0f, float jitter=0.0f, bool isL4s = false);
 
     void insert(float time,
         void *rtpPacket,
@@ -34,6 +34,8 @@ public:
         bool &isCe);
     int sizeOfQueue();
 
+    void updateRate(float time);
+
     NetQueueItem *items[NetQueueSize];
     int head; // Pointer to last inserted item
     int tail; // Pointer to the oldest item
@@ -43,6 +45,12 @@ public:
     float jitter;
     float nextTx;
     float lastQueueLow;
+    bool isL4s;
+    int bytesTx;
+    float lastRateUpdateT;
+    float pDrop;
+    float prevRateFrac;
+    float l4sTh;
 };
 
 #endif
