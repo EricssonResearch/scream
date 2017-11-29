@@ -11,10 +11,9 @@ const int kAckVectorBits = 64;
 *  + Record receive time stamps and RTP sequence numbers for incoming RTP packets
 *  + Generate RTCP feedback elements
 *  + Calculate an appropriate RTCP feedback interval
-* See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf
+* See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx
 *  for details on how it is integrated in audio/video platforms.
 * A full implementation needs the additional code for
-*  + RTCP feedback (e.g using RFC3611 XR elements)
 *  + Other obvious stuff such as RTP payload depacketizer, video+audio deoders, rendering, dejitterbuffers
 * It is recommended that RTCP feedback for multiple streams are bundled in one RTCP packet.
 *  However as low bitrate media (e.g audio) requires a lower feedback rate than high bitrate media (e.g video)

@@ -8,10 +8,9 @@ using namespace std;
 
 /*
 * This module implements the sender side of SCReAM,
-*  see https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf
+*  see https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx
 *  for details on how it is integrated in audio/video platforms
 * A full implementation needs the additional code for
-*  + RTCP feedback (e.g using RFC3611 XR elements)
 *  + RTP queue(s), one queue per stream, see SCReAM description for interface description
 *  + Other obvious stuff such as RTP payload packetizer, video+audio capture, coders....
 *

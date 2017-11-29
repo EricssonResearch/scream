@@ -15,9 +15,9 @@ const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
 const bool isL4s = false;
-const float FR = 30.0f;
-#define TRACEFILE "../traces/trace_no_key_smooth.txt"
-//#define TRACEFILE "../traces/trace_key.txt"
+const float FR = 25.0f;
+//#define TRACEFILE "../traces/trace_no_key_smooth.txt"
+#define TRACEFILE "../traces/trace_key.txt"
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
@@ -38,8 +38,8 @@ int main(int argc, char* argv[])
     videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
     if (mode & 0x01)
-       //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 100e6f, 1e6f, 0.2f, 0.1f, 0.1f);
-       screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
+       //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 100e6f, 4e6f, 0.2f, 0.1f, 0.1f);
+        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x02)
         screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x04)
