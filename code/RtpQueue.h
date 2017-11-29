@@ -36,20 +36,20 @@ public:
     bool pop(void *rtpPacket, int &size, unsigned short &seqNr);
     int sizeOfNextRtp();
     int seqNrOfNextRtp();
-	int bytesInQueue(); // Number of bytes in queue
-	int sizeOfQueue();  // Number of items in queue
-	float getDelay(float currTs);
+    int bytesInQueue(); // Number of bytes in queue
+    int sizeOfQueue();  // Number of items in queue
+    float getDelay(float currTs);
     bool sendPacket(void *rtpPacket, int &size, unsigned short &seqNr);
     void clear();
-	void setSizeOfLastFrame(int aSize) { sizeOfLastFrame = aSize;};
-	int getSizeOfLastFrame() {return sizeOfLastFrame;};
-    void RtpQueue::computeSizeOfNextRtp();
+    void setSizeOfLastFrame(int aSize) { sizeOfLastFrame = aSize;};
+    int getSizeOfLastFrame() {return sizeOfLastFrame;};
+    void computeSizeOfNextRtp();
 
     RtpQueueItem *items[RtpQueueSize];
     int head; // Pointer to last inserted item
     int tail; // Pointer to the oldest item
     int nItems;
-	int sizeOfLastFrame; // Size of last frame in bytes
+    int sizeOfLastFrame; // Size of last frame in bytes
 
     int bytesInQueue_;
     int sizeOfQueue_;

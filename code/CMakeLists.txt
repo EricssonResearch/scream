@@ -17,7 +17,7 @@ VideoEnc.h
 
 SET(SRC_1
 ${SRCS}
-scream_01.cpp
+scream_v_a.cpp
 )
 
 INCLUDE_DIRECTORIES(
@@ -28,9 +28,9 @@ LINK_DIRECTORIES(
 ${screamLink}
 )
 
-ADD_EXECUTABLE(scream_01 ${SRC_1} ${HEADERS})
+ADD_EXECUTABLE(scream ${SRC_1} ${HEADERS})
 
 TARGET_LINK_LIBRARIES (
-scream_01
+scream
 ${screamLibs}
 )
