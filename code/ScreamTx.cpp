@@ -943,10 +943,11 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
     queueDelayMax = std::max(queueDelayMax, queueDelay);
 
     float time = time_us*1e-6;
-    if (queueDelayMinAvg > 0.25f*queueDelayTarget && time_us - baseOwdResetT_us > 20000000) {
+    if (queueDelay > 10000.0f  || queueDelayMinAvg > 0.25f*queueDelayTarget && time_us - baseOwdResetT_us > 20000000) {
         /*
         * The base OWD is likely wrong, for instance due to
-        * a channel change or clock drift, reset base OWD history
+        * a channel change or clock drift, CPU overheating...
+        * Reset base OWD history
         */
         queueDelayMinAvg = 0.0f;
         queueDelay = 0.0f;
@@ -956,6 +957,7 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
         baseOwdHistMin = UINT32_MAX;
         baseOwdResetT_us = time_us;
     }
+    
     /*
     * An averaged version of the queue delay fraction
     * neceassary in order to make video rate control robust
