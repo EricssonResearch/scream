@@ -110,6 +110,14 @@ ScreamRx::ScreamRx(uint32_t ssrc_) {
     ix = 0;
 }
 
+ScreamRx::~ScreamRx() {
+    if (!streams.empty()) {
+        for (auto it = streams.begin(); it != streams.end(); ++it) {
+            delete (*it); 
+        }
+    }
+}
+
 bool ScreamRx::checkIfFlushAck() {
     if (!streams.empty()) {
         for (auto it = streams.begin(); it != streams.end(); ++it) {

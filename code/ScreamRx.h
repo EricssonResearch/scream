@@ -22,6 +22,8 @@ const int kAckVectorBits = 64;
 class ScreamRx {
 public:
     ScreamRx(uint32_t ssrc); // SSRC of this RTCP session
+    ~ScreamRx();
+    
     /*
     * One instance is created for each source SSRC
     */
