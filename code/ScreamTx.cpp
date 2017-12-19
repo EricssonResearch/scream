@@ -732,13 +732,14 @@ void ScreamTx::markAcked(uint64_t time_us, struct Transmitted *txPackets, uint16
                 */
                 queueDelay = qDel / kTimestampRate;
 
-                uint64_t rtt = time_us - tmp->timeTx_us;
-
-                sRttSh_us = (7 * sRttSh_us + rtt) / 8;
-                if (time_us - lastSRttUpdateT_us > sRttSh_us) {
-                    sRtt_us = (7 * sRtt_us + sRttSh_us) / 8;
-                    lastSRttUpdateT_us = time_us;
-                    sRtt = sRtt_us*1e-6f;
+                uint64_t rtt_us = time_us - tmp->timeTx_us;
+                if (rtt_us < 1000000) {
+                    sRttSh_us = (7 * sRttSh_us + rtt_us) / 8;
+                    if (time_us - lastSRttUpdateT_us > sRttSh_us) {
+                        sRtt_us = (7 * sRtt_us + sRttSh_us) / 8;
+                        lastSRttUpdateT_us = time_us;
+                        sRtt = sRtt_us*1e-6f;
+                    }
                 }
                 stream->timeTxAck_us = tmp->timeTx_us;
             }

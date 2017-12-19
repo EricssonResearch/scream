@@ -16,8 +16,8 @@ const bool printLog = true;
 const bool ecnCapable = false;
 const bool isL4s = false;
 const float FR = 25.0f;
-//#define TRACEFILE "../traces/trace_no_key_smooth.txt"
-#define TRACEFILE "../traces/trace_key.txt"
+#define TRACEFILE "../traces/trace_no_key_smooth.txt"
+//#define TRACEFILE "../traces/trace_key.txt"
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
