@@ -732,9 +732,10 @@ void ScreamTx::markAcked(uint64_t time_us, struct Transmitted *txPackets, uint16
                 */
                 queueDelay = qDel / kTimestampRate;
 
-                uint64_t rtt_us = time_us - tmp->timeTx_us;
-                if (rtt_us < 1000000) {
-                    sRttSh_us = (7 * sRttSh_us + rtt_us) / 8;
+                uint64_t rtt = time_us - tmp->timeTx_us;
+
+                if (rtt < 1000000) {
+                    sRttSh_us = (7 * sRttSh_us + rtt) / 8;
                     if (time_us - lastSRttUpdateT_us > sRttSh_us) {
                         sRtt_us = (7 * sRtt_us + sRttSh_us) / 8;
                         lastSRttUpdateT_us = time_us;
@@ -895,6 +896,22 @@ void ScreamTx::getShortLog(float time, char *s) {
     }
 }
 
+
+void ScreamTx::getVeryShortLog(float time, char *s) {
+    int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
+    sprintf(s, "%4.3f, %4.3f, %6d, %6d, %6.0f, ",
+        queueDelayMax, sRtt,
+        cwnd, bytesInFlightLog, rateTransmitted / 1000.0f);
+    bytesInFlightLog = bytesInFlight;
+    queueDelayMax = 0.0;
+    for (int n = 0; n < 1; n++) {
+        Stream *tmp = streams[n];
+        char s2[200];
+        sprintf(s2, "%5.0f, ",
+            tmp->rateLost / 1000.0f);
+        strcat(s, s2);
+    }
+}
 void ScreamTx::getStatistics(float time, char *s) {
     statistics->getSummary(time, s);
 }
@@ -944,11 +961,10 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
     queueDelayMax = std::max(queueDelayMax, queueDelay);
 
     float time = time_us*1e-6;
-    if (queueDelay > 10000.0f  || queueDelayMinAvg > 0.25f*queueDelayTarget && time_us - baseOwdResetT_us > 20000000) {
+    if (queueDelayMinAvg > 0.25f*queueDelayTarget && time_us - baseOwdResetT_us > 20000000) {
         /*
         * The base OWD is likely wrong, for instance due to
-        * a channel change or clock drift, CPU overheating...
-        * Reset base OWD history
+        * a channel change or clock drift, reset base OWD history
         */
         queueDelayMinAvg = 0.0f;
         queueDelay = 0.0f;
@@ -958,7 +974,6 @@ void ScreamTx::updateCwnd(uint64_t time_us) {
         baseOwdHistMin = UINT32_MAX;
         baseOwdResetT_us = time_us;
     }
-    
     /*
     * An averaged version of the queue delay fraction
     * neceassary in order to make video rate control robust
