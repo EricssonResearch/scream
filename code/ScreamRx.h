@@ -34,6 +34,7 @@ public:
         bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 
         bool checkIfFlushAck();
+
         /*
         * Receive RTP packet
         */

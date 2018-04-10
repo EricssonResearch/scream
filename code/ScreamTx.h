@@ -261,6 +261,13 @@ public:
     */
     void getStatistics(float time, char *s);
 
+    /*
+    * Set file pointer for detailed per-ACK log
+    */
+    void setDetailedLogFp(FILE *fp) {
+      fp_log = fp;
+    }
+
 
 private:
     /*
@@ -454,13 +461,7 @@ private:
     /*
     * Get stream with corresponding SSRC
     */
-    Stream* getStream(uint32_t ssrc);
-
-    /*
-    * Get matching stream index for this SSRC tuple,
-    *  return -1 if no match
-    */
-    int getStreamIndex(uint32_t ssrc);
+    Stream* getStream(uint32_t ssrc, int &streamId);
 
     /*
     * Adjust stream bitrates to reflect priorities
@@ -627,6 +628,12 @@ private:
       * Statistics
       */
     Statistics *statistics;
+
+    /*
+    *
+    */
+    FILE *fp_log;
+    bool completeLogItem;
 
 };
 #endif

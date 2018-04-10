@@ -36,6 +36,7 @@ void ScreamRx::Stream::receive(uint64_t time_us,
     uint16_t seqNr,
     bool isEcnCe) {
     nRtpSinceLastRtcp++;
+
     /*
     * Make things wrap-around safe
     */

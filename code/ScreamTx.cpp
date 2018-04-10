@@ -138,7 +138,9 @@ ScreamTx::ScreamTx(float lossBeta_,
     bytesInFlightLog(0),
     lastBaseDelayRefreshT_us(0),
     maxRate(0.0f),
-    baseOwdHistMin(UINT32_MAX)
+    baseOwdHistMin(UINT32_MAX),
+    fp_log(0),
+    completeLogItem(false)
 {
     if (cwnd_ == 0) {
         cwnd = kInitMss * 2;
@@ -275,13 +277,15 @@ void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
 void ScreamTx::updateBitrateStream(uint32_t ssrc,
     float minBitrate,
     float maxBitrate) {
-    Stream *stream = getStream(ssrc);
+    int id;
+    Stream *stream = getStream(ssrc,id);
     stream->minBitrate = minBitrate;
     stream->maxBitrate = maxBitrate;
 }
 
 RtpQueueIface * ScreamTx::getStreamQueue(uint32_t ssrc) {
-    Stream* stream = getStream(ssrc);
+    int id;
+    Stream* stream = getStream(ssrc,id);
     return stream->rtpQueue;
 }
 
@@ -292,7 +296,8 @@ RtpQueueIface * ScreamTx::getStreamQueue(uint32_t ssrc) {
 void ScreamTx::newMediaFrame(uint64_t time_us, uint32_t ssrc, int bytesRtp) {
     if (!isInitialized) initialize(time_us);
 
-    Stream *stream = getStream(ssrc);
+    int id;
+    Stream *stream = getStream(ssrc,id);
     stream->updateTargetBitrate(time_us);
     if (time_us - lastCwndUpdateT_us < 500000) {
         /*
@@ -470,7 +475,8 @@ float ScreamTx::addTransmitted(uint64_t time_us,
     if (!isInitialized)
         initialize(time_us);
 
-    Stream *stream = getStream(ssrc);
+    int id;
+    Stream *stream = getStream(ssrc,id);
 
     int ix = seqNr % kMaxTxPackets;
     Transmitted *txPacket = &(stream->txPackets[ix]);
@@ -600,8 +606,9 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
     uint64_t ackVector,
     uint16_t ecnCeMarkedBytes) {
 
+    int streamId = -1;
     if (!isInitialized) initialize(time_us);
-    Stream *stream = getStream(ssrc);
+    Stream *stream = getStream(ssrc, streamId);
     if (stream == 0) {
         // Bogus RTCP?, the SSRC is wrong anyway, Skip
         return;
@@ -617,6 +624,7 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
     accBytesInFlightMax += bytesInFlight;
     nAccBytesInFlightMax++;
     Transmitted *txPackets = stream->txPackets;
+    completeLogItem = false;
     /*
     * Mark received packets, given by the ACK vector
     */
@@ -632,13 +640,17 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
         lastLossEventT_us = time_us;
     }
 
+    uint16_t ceMarked = ecnCeMarkedBytes - stream->ecnCeMarkedBytes;
+    if (fp_log && completeLogItem) {
+       fprintf(fp_log," %d %d %1.0f %d %d %d %1.0f %1.0f %1.0f %1.0f ", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ceMarked, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost);  
+    }
+
     if (isL4s) {
         /*
         * L4S mode compute a congestion scaling factor that is dependent on the fraction 
         *  of ECN marked packets
         */
-        uint16_t marked = ecnCeMarkedBytes - stream->ecnCeMarkedBytes;
-        bytesMarkedThisRtt += marked;
+        bytesMarkedThisRtt += ceMarked;
         bytesDeliveredThisRtt += bytesNewlyAcked;
         if (lastL4sAlphaUpdateT_us - time_us > sRtt_us) {
             lastL4sAlphaUpdateT_us = time_us;
@@ -674,6 +686,10 @@ void ScreamTx::incomingFeedback(uint64_t time_us,
         */
         updateCwnd(time_us);
         lastCwndUpdateT_us = time_us;
+    }
+
+    if (fp_log && completeLogItem) {
+      fprintf(fp_log,"\n");
     }
 }
 
@@ -734,6 +750,10 @@ void ScreamTx::markAcked(uint64_t time_us, struct Transmitted *txPackets, uint16
 
                 uint64_t rtt = time_us - tmp->timeTx_us;
 
+                if (fp_log) {
+                  fprintf(fp_log,"%1.3f %1.3f %1.3f ",time_us*1e-6,queueDelay,rtt*1e-6);  
+                  completeLogItem = true;
+                }
                 if (rtt < 1000000) {
                     sRttSh_us = (7 * sRttSh_us + rtt) / 8;
                     if (time_us - lastSRttUpdateT_us > sRttSh_us) {
@@ -844,11 +864,13 @@ void ScreamTx::detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint1
 }
 
 float ScreamTx::getTargetBitrate(uint32_t ssrc) {
-    return  getStream(ssrc)->getTargetBitrate();
+    int id;
+    return  getStream(ssrc,id)->getTargetBitrate();
 }
 
 void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
-    Stream *stream = getStream(ssrc);
+    int id;
+    Stream *stream = getStream(ssrc,id);
     if (queueDelayTrend > 0.02) {
         stream->targetBitrate *= priority / stream->targetPriority;
         stream->targetBitrate = std::min(std::max(stream->targetBitrate, stream->minBitrate), stream->maxBitrate);
@@ -1545,12 +1567,14 @@ float ScreamTx::Stream::getMaxRate() {
 /*
 * The the stream that matches SSRC
 */
-ScreamTx::Stream* ScreamTx::getStream(uint32_t ssrc) {
+ScreamTx::Stream* ScreamTx::getStream(uint32_t ssrc, int &streamId) {
     for (int n = 0; n < nStreams; n++) {
         if (streams[n]->isMatch(ssrc)) {
+            streamId = n;
             return streams[n];
         }
     }
+    streamId = -1;
     return NULL;
 }
 
