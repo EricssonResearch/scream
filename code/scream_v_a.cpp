@@ -10,12 +10,13 @@
 
 using namespace std;
 
-const float Tmax = 100.0f;
+const float Tmax = 50.0f;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
 const bool isL4s = false;
 const float FR = 25.0f;
+int swprio = -1;
 #define TRACEFILE "../traces/trace_no_key_smooth.txt"
 //#define TRACEFILE "../traces/trace_key.txt"
 /*
@@ -32,14 +33,14 @@ int main(int argc, char* argv[])
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
-    NetQueue *netQueueDelay = new NetQueue(0.05f, 0.0f, 0.002f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 5e6, 0.0f, isL4s);
+    NetQueue *netQueueDelay = new NetQueue(0.03f, 0.0f, 0.0005f);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 6e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE);
     videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
     if (mode & 0x01)
-       //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 100e6f, 4e6f, 0.2f, 0.1f, 0.1f);
         screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
+        //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x02)
         screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x04)
@@ -59,7 +60,6 @@ int main(int argc, char* argv[])
     int nextCallN = -1;
     bool isFeedback = false;
     double lastLogT = -1.0;
-    bool swprio = false;
     while (time <= Tmax) {
         float retVal = -1.0;
         time = n / timeBase;
@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
         if (printLog && time - lastLogT > 0.01) {
             cout << time << " ";
             char s[500];
-            screamTx->getLog(time, s);
+            screamTx->getShortLog(time, s);
             //cout << endl;
             cout << " " << s << endl;
             lastLogT = time;
@@ -167,11 +167,18 @@ int main(int argc, char* argv[])
                 netQueueRate->rate = 4000e3;
             }
         }
-        if (false && time > 50 && !swprio) {
-            swprio = true;
-            //screamTx->setTargetPriority(10, 0.2);
+        if (time > 30 && swprio == 0) {
+            swprio = 1;
+            screamTx->setTargetPriority(10, 0.2);
             screamTx->setTargetPriority(11, 1.0);
         }
+        if (time > 35 && swprio == 1) {
+            swprio = 2;
+            screamTx->setTargetPriority(10, 1.0);
+            screamTx->setTargetPriority(11, 0.2);
+        }
+        if (false && time > 50)
+            netQueueRate->rate = 8e6;
         /*
 
             if ((time >= 60) && (time < 80) && isChRate)

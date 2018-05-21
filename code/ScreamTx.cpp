@@ -871,7 +871,7 @@ float ScreamTx::getTargetBitrate(uint32_t ssrc) {
 void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
     int id;
     Stream *stream = getStream(ssrc,id);
-    if (queueDelayTrend > 0.02) {
+    if (queueDelayFractionAvg > 0.1 || !inFastStart) {
         stream->targetBitrate *= priority / stream->targetPriority;
         stream->targetBitrate = std::min(std::max(stream->targetBitrate, stream->minBitrate), stream->maxBitrate);
     }
