@@ -13,7 +13,7 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     title('qdel[s]');
     
     subplot(2,1,2);
-    plot(T,a(:,6),T,a(:,7),T,a(:,9)*2000);
+    plot(T,a(:,4),T,a(:,5));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Cmax]);grid on;    
     title('CWND & in flight [byte]');    
@@ -22,13 +22,13 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     if I>0
     figure(2);
     subplot(2,1,1);
-    plot(T,a(:,10)); 
+    plot(T,a(:,7)); 
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 0.1]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,11),T,a(:,13),T,a(:,12));
+    plot(T,a(:,8),T,a(:,10),T,a(:,9));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(1)]);grid on;
     title('Bitrate [kbps]');    
@@ -36,16 +36,16 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     xlabel('T [s]');
     end
     if I>1
-    K = 7;    
+    K = 5;    
     figure(3);
     subplot(2,1,1);
-    plot(T,a(:,10+K)); 
+    plot(T,a(:,7+K)); 
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 0.1]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,11+K),T,a(:,13+K),T,a(:,12+K));
+    plot(T,a(:,8+K),T,a(:,10+K),T,a(:,9+K));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(2)]);grid on;
     title('Bitrate [kbps]');    
@@ -53,16 +53,16 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     xlabel('T [s]');
     end
     if I>2        
-    K = 14;    
+    K = 10;    
     figure(4);
     subplot(2,1,1);
-    plot(T,a(:,10+K)); 
+    plot(T,a(:,7+K)); 
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 0.1]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,11+K),T,a(:,13+K),T,a(:,12+K));
+    plot(T,a(:,8+K),T,a(:,10+K),T,a(:,9+K));
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(3)]);grid on;
     title('Bitrate [kbps]');    
