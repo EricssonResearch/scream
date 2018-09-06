@@ -11,10 +11,17 @@ using namespace std;
 *  see https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf
 *  for details on how it is integrated in audio/video platforms
 * A full implementation needs the additional code for
-*  + RTCP feedback (e.g using RFC3611 XR elements)
 *  + RTP queue(s), one queue per stream, see SCReAM description for interface description
 *  + Other obvious stuff such as RTP payload packetizer, video+audio capture, coders....
-*
+*/
+
+/*
+* Internal time is represented as the mid 32 bits of the NTP timestamp (see RFC5905)
+* This means that the high order 16 bits is time in seconds and the low order 16 bits
+* is the fraction. The NTP time stamp is thus in Q16 i.e 1.0sec is represented
+* by the value 65536.
+* All internal time is measured in NTP time, this is done to avoid wraparound issues
+* that can otherwise occur every 18h hour or so
 */
 
 // ==== Default parameters (if tuning necessary) ====
@@ -56,13 +63,13 @@ static const float kLossEventRateScale = 0.9f;
 // Video rate scaling due to ECN marking events
 static const float kEcnCeEventRateScale = 0.95f;
 
-
-
 // Constants
 /*
 * Timestamp sampling rate for SCReAM feedback
 */
-static const float kTimestampRate = 1000.0f;
+static const int kTimeStampAtoScale = 1024;
+const float ntp2SecScaleFactor = 1.0 / 65536;
+
 /*
 * Max number of RTP packets in flight
 * With and MSS = 1200 byte and an RTT = 200ms
@@ -154,7 +161,7 @@ public:
     * Call this function for each new video frame
     *  Note : isOkToTransmit should be called after newMediaFrame
     */
-    void newMediaFrame(uint64_t time_us, uint32_t ssrc, int bytesRtp);
+    void newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp);
 
     /*
     * Function determines if an RTP packet with SSRC can be transmitted
@@ -167,63 +174,40 @@ public:
     *    cause an immediate call to isOkToTransmit
     * -1.0 : No RTP packet available to transmit or send window is not large enough
     */
-    float isOkToTransmit(uint64_t time_us, uint32_t &ssrc);
+    float isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc);
 
     /*
     * Add packet to list of transmitted packets
     * should be called when an RTP packet transmitted
     * Return time until isOkToTransmit can be called again
     */
-    float addTransmitted(uint64_t timestamp_us, // Wall clock ts when packet is transmitted
+    float addTransmitted(uint32_t timestamp_ntp, // Wall clock ts when packet is transmitted
         uint32_t ssrc,
         int size,
         uint16_t seqNr);
 
-    /*
-    * New incoming feedback, this function
-    * triggers a CWND update
-    * The SCReAM timestamp is in jiffies, where the frequency is controlled
-    * by the timestamp clock frequency (default 1000Hz)
-    * The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
-    *  Note : isOkToTransmit should be called after incomingFeedback
-    * ecnCeMarkedBytes indicates the cumulative number of bytes that are ECN-CE marked
-    */
-    void incomingFeedback(uint64_t time_us,
-        uint32_t ssrc,         // SSRC of stream
-        uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
-        uint16_t highestSeqNr, // Highest ACKed RTP sequence number
-        uint64_t ackVector,   // ACK vector
-        uint16_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
-
-    /*
-    * Parse feedback according to the format below. It is up to the
-    * wrapper application this RTCP from a compound RTCP if needed
-    * BT = 255, means that this is experimental use
-    *
-    * 0                   1                   2                   3
-    * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * |V=2|P|reserved |   PT=XR=207   |           length=6            |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * |                              SSRC                             |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * |     BT=255    |    reserved   |         block length=4        |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * |                        SSRC of source                         |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * |                     Ack vector (b0-31)                        |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * |                     Ack vector (b32-63)                       |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    * |                    Timestamp (32bits)                         |
-    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    */
-    void incomingFeedback(uint64_t time_us,
+    /* New incoming feedback, this function
+     * triggers a CWND update
+     * The SCReAM timestamp is in jiffies, where the frequency is controlled
+     * by the timestamp clock frequency(default 1000Hz)
+     * The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
+     *  Note : isOkToTransmit should be called after incomingFeedback
+     /*
+     /* Parse standardized feedback according to
+     * https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
+     * Current implementation implements -02 version
+     * It is assumed that SR/RR or other non-CCFB feedback is stripped
+     */
+    void incomingStandardizedFeedback(uint32_t time_ntp,
         unsigned char* buf,
         int size);
 
+    void incomingStandardizedFeedback(uint32_t time_ntp,
+        int streamId,
+        uint32_t timestamp,
+        uint16_t seqNr,
+        uint8_t ceBits,
+        bool isLast);
     /*
     * Get the target bitrate for stream with SSRC
     * NOTE!, Because SCReAM operates on RTP packets, the target bitrate will
@@ -265,23 +249,20 @@ public:
     * Set file pointer for detailed per-ACK log
     */
     void setDetailedLogFp(FILE *fp) {
-      fp_log = fp;
+        fp_log = fp;
     }
-
 
 private:
     /*
     * Struct for list of RTP packets in flight
     */
     struct Transmitted {
-        uint64_t timeTx_us;
-        uint32_t timestamp;
+        uint32_t timeTx_ntp;
         int size;
         uint16_t seqNr;
         bool isUsed;
         bool isAcked;
         bool isAfterReceivedEdge;
-
     };
 
     /*
@@ -303,9 +284,7 @@ private:
         float avgQueueDelay;
         float sumRateTx;
         float sumRateLost;
-
     };
-
 
     /*
     * One instance is created for each {SSRC,PT} tuple
@@ -330,11 +309,11 @@ private:
 
         float getTargetBitrate();
 
-        void updateRate(uint64_t time_us);
+        void updateRate(uint32_t time_ntp);
 
         void updateTargetBitrateI(float br);
 
-        void updateTargetBitrate(uint64_t time_us);
+        void updateTargetBitrate(uint32_t time_ntp);
 
         bool isRtpQueueDiscard();
 
@@ -371,11 +350,11 @@ private:
         bool lossEventFlag;     // Was loss event
         bool ecnCeEventFlag;    // Was ECN mark event
         float txSizeBitsAvg;    // Avergage nymber of bits in RTP queue
-        uint64_t lastBitrateAdjustT_us; // Last time rate was updated for this stream
-        uint64_t lastRateUpdateT_us;    // Last time rate estimate was updated
-        uint64_t lastTargetBitrateIUpdateT_us;    // Last time rate estimate was updated
+        uint32_t lastBitrateAdjustT_ntp; // Last time rate was updated for this stream
+        uint32_t lastRateUpdateT_ntp;    // Last time rate estimate was updated
+        uint32_t lastTargetBitrateIUpdateT_ntp;    // Last time rate estimate was updated
 
-        uint64_t timeTxAck_us;  // timestamp when higest ACKed SN was transmitted
+        uint32_t timeTxAck_ntp;  // timestamp when higest ACKed SN was transmitted
 
         int bytesRtp;           // Number of RTP bytes from media coder
         float rateRtp;          // Media bitrate
@@ -386,49 +365,48 @@ private:
         int rateUpdateHistPtr;
         float targetBitrateHist[kTargetBitrateHistSize];
         int targetBitrateHistPtr;
-        uint64_t targetBitrateHistUpdateT_us;
+        uint32_t targetBitrateHistUpdateT_ntp;
         float targetRateScale;
 
         bool isActive;
-        uint64_t lastFrameT_us;
-        uint64_t initTime_us;
+        uint32_t lastFrameT_ntp;
+        uint32_t initTime_ntp;
         bool rtpQueueDiscard;
-        uint64_t lastRtpQueueDiscardT_us;
+        uint32_t lastRtpQueueDiscardT_ntp;
         bool wasRepairLoss;
         bool repairLoss;
         int lastLossDetectIx;
         uint16_t ecnCeMarkedBytes;
 
-
         Transmitted txPackets[kMaxTxPackets];
         int txPacketsPtr;
-
     };
 
     /*
     * Initialize values
     */
-    void initialize(uint64_t time_us);
+    void initialize(uint32_t time_ntp);
 
     /*
     * Mark ACKed RTP packets
     */
-    void markAcked(uint64_t time_us, struct Transmitted *txPackets, uint16_t highestSeqNr, uint64_t ackVector, uint32_t timestamp, Stream *stream);
+    //void markAcked(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, uint64_t ackVector, uint32_t timestamp, Stream *stream);
+    void markAcked(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t seqNr, uint32_t timestamp, Stream *stream, uint8_t ceBits, uint16_t &encCeMarkedBytes);
 
     /*
     * Update CWND
     */
-    void updateCwnd(uint64_t time_us);
+    void updateCwnd(uint32_t time_ntp);
 
     /*
     * Detect lost RTP packets
     */
-    void detectLoss(uint64_t time_us, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream);
+    void detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream);
 
     /*
     * Call this function at regular intervals to determine active streams
     */
-    void determineActiveStreams(uint64_t time_us);
+    void determineActiveStreams(uint32_t time_ntp);
 
     /*
     * Compute 1st order prediction coefficient of queue delay multiplied by the queue delay fraction
@@ -441,7 +419,7 @@ private:
     * Estimate one way delay [jiffy] and updated base delay
     * Base delay is not subtracted
     */
-    uint32_t estimateOwd(uint64_t time_us);
+    uint32_t estimateOwd(uint32_t time_ntp);
 
     /*
     * return base delay [jiffy]
@@ -466,26 +444,26 @@ private:
     /*
     * Adjust stream bitrates to reflect priorities
     */
-    void adjustPriorities(uint64_t time_us);
+    void adjustPriorities(uint32_t time_ntp);
 
     /*
     * Get the prioritized stream
     *  Return NULL if no stream with
     *  with RTP packets
     */
-    Stream* getPrioritizedStream(uint64_t time_us);
+    Stream* getPrioritizedStream(uint32_t time_ntp);
 
     /*
     * Add credit to unserved streams
     */
-    void addCredit(uint64_t time_us,
+    void addCredit(uint32_t time_ntp,
         Stream* servedStream,
         int transmittedBytes);
 
     /*
     * Subtract used credit
     */
-    void subtractCredit(uint64_t time_us,
+    void subtractCredit(uint32_t time_ntp,
         Stream* servedStream,
         int transmittedBytes);
 
@@ -519,8 +497,8 @@ private:
     float gainDown;
     float cautiousPacing;
 
-    uint64_t sRttSh_us;
-    uint64_t sRtt_us;
+    uint32_t sRttSh_ntp;
+    uint32_t sRtt_ntp;
     float sRtt;
     uint32_t ackedOwd;
     uint32_t baseOwd;
@@ -567,12 +545,12 @@ private:
     float rateAcked;
     float queueDelayTrendMem;
     float maxRate;
-    uint64_t lastCwndUpdateT_us;
+    uint32_t lastCwndUpdateT_ntp;
     bool isL4s;
     float l4sAlpha;
     int bytesMarkedThisRtt;
     int bytesDeliveredThisRtt;
-    uint64_t lastL4sAlphaUpdateT_us;
+    uint32_t lastL4sAlphaUpdateT_ntp;
     /*
     * Loss event
     */
@@ -593,7 +571,7 @@ private:
     /*
     * Transmission scheduling
     */
-    uint64_t paceInterval_us;
+    uint32_t paceInterval_ntp;
     float paceInterval;
     float rateTransmittedAvg;
 
@@ -601,20 +579,20 @@ private:
     * Update control variables
     */
     bool isInitialized;
-    uint64_t lastSRttUpdateT_us;
-    uint64_t lastBaseOwdAddT_us;
-    uint64_t baseOwdResetT_us;
-    uint64_t lastAddToQueueDelayFractionHistT_us;
-    uint64_t lastBytesInFlightT_us;
-    uint64_t lastCongestionDetectedT_us;
-    uint64_t lastLossEventT_us;
-    uint64_t lastTransmitT_us;
-    uint64_t nextTransmitT_us;
-    uint64_t lastRateUpdateT_us;
-    uint64_t lastAdjustPrioritiesT_us;
-    uint64_t lastRttT_us;
-    uint64_t lastBaseDelayRefreshT_us;
-    uint64_t initTime_us;
+    uint32_t lastSRttUpdateT_ntp;
+    uint32_t lastBaseOwdAddT_ntp;
+    uint32_t baseOwdResetT_ntp;
+    uint32_t lastAddToQueueDelayFractionHistT_ntp;
+    uint32_t lastBytesInFlightT_ntp;
+    uint32_t lastCongestionDetectedT_ntp;
+    uint32_t lastLossEventT_ntp;
+    uint32_t lastTransmitT_ntp;
+    uint32_t nextTransmitT_ntp;
+    uint32_t lastRateUpdateT_ntp;
+    uint32_t lastAdjustPrioritiesT_ntp;
+    uint32_t lastRttT_ntp;
+    uint32_t lastBaseDelayRefreshT_ntp;
+    uint32_t initTime_ntp;
     float queueDelayMin;
     float queueDelayMinAvg;
 
@@ -625,8 +603,8 @@ private:
     int nStreams;
 
     /*
-      * Statistics
-      */
+    * Statistics
+    */
     Statistics *statistics;
 
     /*
@@ -636,4 +614,51 @@ private:
     bool completeLogItem;
 
 };
+#endif
+
+#ifdef OLD_CODE
+/*
+* New incoming feedback, this function
+* triggers a CWND update
+* The SCReAM timestamp is in jiffies, where the frequency is controlled
+* by the timestamp clock frequency (default 1000Hz)
+* The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
+*  Note : isOkToTransmit should be called after incomingFeedback
+* ecnCeMarkedBytes indicates the cumulative number of bytes that are ECN-CE marked
+*/
+//void incomingProprietaryFeedback(uint32_t time_ntp,
+//    uint32_t ssrc,         // SSRC of stream
+//    uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
+//    uint16_t highestSeqNr, // Highest ACKed RTP sequence number
+//    uint64_t ackVector,   // ACK vector
+//    uint16_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
+
+/*
+* Parse feedback according to the format below. It is up to the
+* wrapper application this RTCP from a compound RTCP if needed
+* BT = 255, means that this is experimental use
+*
+* 0                   1                   2                   3
+* 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |V=2|P|reserved |   PT=XR=207   |           length=6            |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                              SSRC                             |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |     BT=255    |    reserved   |         block length=4        |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                        SSRC of source                         |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                     Ack vector (b0-31)                        |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                     Ack vector (b32-63)                       |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+* |                    Timestamp (32bits)                         |
+* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+//void incomingProprietaryFeedback(uint32_t time_ntp,
+//    unsigned char* buf,
+//    int size);
 #endif

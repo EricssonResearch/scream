@@ -12,6 +12,7 @@
 #include <iostream>
 using namespace std;
 
+const int kMaxRtcpSize = 500;
 
 ScreamRx::Stream::Stream(uint32_t ssrc_) {
     ssrc = ssrc_;
@@ -19,10 +20,17 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
     receiveTimestamp = 0x0;
     highestSeqNr = 0x0;
     highestSeqNrTx = 0x0;
-    lastFeedbackT_us = 0;
+    lastFeedbackT_ntp = 0;
     nRtpSinceLastRtcp = 0;
     firstReceived = false;
     ecnCeMarkedBytes = 0;
+
+    for (int n = 0; n < kRxHistorySize; n++) {
+        ceBitsHist[n] = 0x00;
+        rxTimeHist[n] = 0;
+        seqNrHist[n] = 0x0000;
+    }
+
 }
 
 bool ScreamRx::Stream::checkIfFlushAck() {
@@ -30,21 +38,37 @@ bool ScreamRx::Stream::checkIfFlushAck() {
     return (diff > (kAckVectorBits / 4));
 }
 
-void ScreamRx::Stream::receive(uint64_t time_us,
+void ScreamRx::Stream::receive(uint32_t time_ntp,
     void* rtpPacket,
     int size,
     uint16_t seqNr,
-    bool isEcnCe) {
+    bool isEcnCe,
+    uint8_t ceBits_) {
+
+    /*
+    * Count received RTP packets since last RTCP transmitted for this SSRC
+    */
     nRtpSinceLastRtcp++;
 
     /*
-    * Make things wrap-around safe
+    * Initialize on first received packet
     */
     if (firstReceived == false) {
         highestSeqNr = seqNr;
         highestSeqNr--;
+        for (int n = 0; n < kRxHistorySize; n++) {
+            // Initialize seqNr list properly
+            seqNrHist[n] = seqNr + 1;
+        }
         firstReceived = true;
     }
+    /*
+    * Update CE bits and RX time vectors
+    */
+    int ix = seqNr % kRxHistorySize;
+    ceBitsHist[ix] = ceBits_;
+    rxTimeHist[ix] = time_ntp;
+    seqNrHist[ix] = seqNr;
 
     uint32_t seqNrExt = seqNr;
     uint32_t highestSeqNrExt = highestSeqNr;
@@ -59,7 +83,7 @@ void ScreamRx::Stream::receive(uint64_t time_us,
 
     /*
     * Update the ACK vector that indicates receiption '=1' of RTP packets prior to
-    * the highest received sequence number. 
+    * the highest received sequence number.
     * The next highest SN is indicated by the least significant bit,
     * this means that for the first received RTP, the ACK vector is
     * 0x0, for the second received RTP, the ACK vector it is 0x1, for the third 0x3 and so
@@ -95,18 +119,85 @@ void ScreamRx::Stream::receive(uint64_t time_us,
             ackVector = ackVector | (INT64_C(1) << (diff - 1));
         }
     }
-    receiveTimestamp = (uint32_t)(time_us / 1000);
+    receiveTimestamp = time_ntp;
 
     if (isEcnCe)
         ecnCeMarkedBytes += size;
 }
 
+bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
+    unsigned char *buf,
+    int &size) {
+    uint16_t tmp_s;
+    uint32_t tmp_l;
+    size = 0;
+    /*
+    * Write RTP sender SSRC
+    */
+    tmp_l = htonl(ssrc);
+    memcpy(buf, &tmp_l, 4);
+    size += 4;
+    /*
+    * Write begin_seq
+    * always report kReportedRtpPackets RTP packets
+    */
+    tmp_s = highestSeqNr - uint16_t(kReportedRtpPackets - 1);
+    tmp_s = htons(tmp_s);
+    memcpy(buf + 4, &tmp_s, 2);
+    size += 2;
+
+    /*
+    * Write end_seq
+    */
+    tmp_s = highestSeqNr + 1;
+    tmp_s = htons(tmp_s);
+    memcpy(buf + 6, &tmp_s, 2);
+    size += 2;
+    int ptr = 8;
+
+    /*
+    * Write 16bits report element for received RTP packets
+    */
+    uint16_t sn_lo = highestSeqNr - uint16_t(kReportedRtpPackets - 1);
+
+    for (uint16_t k = 0; k < kReportedRtpPackets; k++) {
+        uint16_t sn = sn_lo + k;
+
+        int ix = sn % kRxHistorySize;
+        uint32_t ato = (time_ntp - rxTimeHist[ix]);
+        ato = ato >> 6; // Q16->Q10
+        if (ato > 8189)
+            ato = 0x1FFE;
+
+        tmp_s = 0x0000;
+        if (seqNrHist[ix] == sn && rxTimeHist[ix] != 0) {
+            tmp_s = 0x8000 | ((ceBitsHist[ix] & 0x03) << 13) | (ato & 0x01FFF);;
+        }
+
+        tmp_s = htons(tmp_s);
+        memcpy(buf + ptr, &tmp_s, 2);
+        size += 2;
+        ptr += 2;
+    }
+    /*
+    * Zero pad with two extra octets if the number of reported packets is odd
+    */
+    if (kReportedRtpPackets % 2 == 1) {
+        tmp_s = 0x0000;
+        memcpy(buf + ptr, &tmp_s, 2);
+        size += 2;
+        ptr += 2;
+    }
+
+    return true;
+}
+
 ScreamRx::ScreamRx(uint32_t ssrc_) {
-    lastFeedbackT_us = 0;
+    lastFeedbackT_ntp = 0;
     bytesReceived = 0;
-    lastRateComputeT_us = 0;
+    lastRateComputeT_ntp = 0;
     averageReceivedRate = 1e5;
-    rtcpFbInterval_us = 20000;
+    rtcpFbInterval_ntp = 13107; // 20ms in NTP domain
     ssrc = ssrc_;
     ix = 0;
 }
@@ -114,7 +205,7 @@ ScreamRx::ScreamRx(uint32_t ssrc_) {
 ScreamRx::~ScreamRx() {
     if (!streams.empty()) {
         for (auto it = streams.begin(); it != streams.end(); ++it) {
-            delete (*it); 
+            delete (*it);
         }
     }
 }
@@ -123,29 +214,29 @@ bool ScreamRx::checkIfFlushAck() {
     if (!streams.empty()) {
         for (auto it = streams.begin(); it != streams.end(); ++it) {
             if ((*it)->checkIfFlushAck())
-               return true; 
+                return true;
         }
     }
     return false;
 }
 
-void ScreamRx::receive(uint64_t time_us,
+void ScreamRx::receive(uint32_t time_ntp,
     void* rtpPacket,
     uint32_t ssrc,
     int size,
     uint16_t seqNr,
-    bool isEcnCe) {
-    bytesReceived += size;
-    if (lastRateComputeT_us == 0)
-        lastRateComputeT_us = time_us;
+    uint8_t ceBits) {
 
-    if (time_us - lastRateComputeT_us > 100000) {
+    bytesReceived += size;
+    if (lastRateComputeT_ntp == 0)
+        lastRateComputeT_ntp = time_ntp;
+    if (time_ntp - lastRateComputeT_ntp > 6554) { // 100ms in NTP domain
         /*
         * Media rate computation (for all medias) is done at least every 100ms
         * This is used for RTCP feedback rate calculation
         */
-        float delta = (time_us - lastRateComputeT_us) * 1e-6f;
-        lastRateComputeT_us = time_us;
+        float delta = (time_ntp - lastRateComputeT_ntp) * ntp2SecScaleFactor;
+        lastRateComputeT_ntp = time_ntp;
         averageReceivedRate = std::max(0.95f*averageReceivedRate, bytesReceived * 8 / delta);
         bytesReceived = 0;
         /*
@@ -153,14 +244,14 @@ void ScreamRx::receive(uint64_t time_us,
         * Target ~2% overhead but with feedback interval limited
         *  to the range [2ms,100ms]
         */
-        float rate = 0.02*averageReceivedRate / (70.0f * 8.0f); // RTCP overhead
+        float rate = 0.02f*averageReceivedRate / (70.0f * 8.0f); // RTCP overhead
         rate = std::min(500.0f, std::max(10.0f, rate));
         /*
         * More than one stream ?, increase the feedback rate as
         *  we currently don't bundle feedback packets
         */
         rate *= streams.size();
-        rtcpFbInterval_us = uint64_t(1000000.0f / rate);
+        rtcpFbInterval_ntp = uint32_t(65536.0f / rate); // Convert to NTP domain (Q16)
     }
 
     if (!streams.empty()) {
@@ -170,7 +261,7 @@ void ScreamRx::receive(uint64_t time_us,
                 * Packets for this SSRC received earlier
                 * stream is thus already in list
                 */
-                (*it)->receive(time_us, rtpPacket, size, seqNr, isEcnCe);
+                (*it)->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits);
                 return;
 
             }
@@ -181,16 +272,15 @@ void ScreamRx::receive(uint64_t time_us,
     */
     Stream *stream = new Stream(ssrc);
     stream->ix = ix++;
-    stream->receive(time_us, rtpPacket, size, seqNr, isEcnCe);
+    stream->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits);
     streams.push_back(stream);
 }
 
-
-uint64_t ScreamRx::getRtcpFbInterval() {
-    return rtcpFbInterval_us;
+uint32_t ScreamRx::getRtcpFbInterval() {
+    return rtcpFbInterval_ntp;
 }
 
-bool ScreamRx::isFeedback(uint64_t time_us) {
+bool ScreamRx::isFeedback(uint32_t time_ntp) {
     if (!streams.empty()) {
         for (auto it = streams.begin(); it != streams.end(); ++it) {
             Stream *stream = (*it);
@@ -213,7 +303,87 @@ int ScreamRx::getIx(uint32_t ssrc) {
     return -1;
 }
 
-bool ScreamRx::getFeedback(uint64_t time_us,
+bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, unsigned char *buf, int &size) {
+
+    /*
+    * First check if there is any stream available that has any feedback
+    * Note, only one stream per RTCP feedback packet,
+    * TODO to enable more streams per RTCP some day...
+    */
+    Stream *stream = NULL;
+    uint32_t minT_ntp = ULONG_MAX;
+    for (auto it = streams.begin(); it != streams.end(); ++it) {
+        if ((*it)->nRtpSinceLastRtcp > 0 && (*it)->lastFeedbackT_ntp < minT_ntp) {
+            stream = *it;
+            minT_ntp = (*it)->lastFeedbackT_ntp;
+
+        }
+    }
+    if (stream == NULL)
+        return false;
+
+    uint16_t tmp_s;
+    uint32_t tmp_l;
+    buf[0] = 0x80; // TODO FMT = CCFB in 5 LSB
+    buf[1] = 207;
+    /*
+    * Write RTCP sender SSRC
+    */
+    tmp_l = htonl(ssrc);
+    memcpy(buf + 4, &tmp_l, 4);
+    size = 8;
+    int ptr = 8;
+    /*
+    * Generate RTCP feedback size until a safe sizelimit ~kMaxRtcpSize+128 byte is reached
+    */
+    while (size < kMaxRtcpSize) {
+        /*
+        * TODO, we do the above stream fetching over again even though we have the
+        * stream in the first iteration, a bit unnecessary.
+        */
+        Stream *stream = NULL;
+        uint32_t minT_ntp = ULONG_MAX;
+        for (auto it = streams.begin(); it != streams.end(); ++it) {
+            if ((*it)->nRtpSinceLastRtcp > 0 && (*it)->lastFeedbackT_ntp < minT_ntp) {
+                stream = *it;
+                minT_ntp = (*it)->lastFeedbackT_ntp;
+            }
+        }
+        if (stream == NULL)
+            break;
+
+        int size_stream = 0;
+        stream->getStandardizedFeedback(time_ntp, &buf[ptr], size_stream);
+        size += size_stream;
+        ptr += size_stream;
+        stream->lastFeedbackT_ntp = time_ntp;
+        stream->nRtpSinceLastRtcp = 0;
+        stream->highestSeqNrTx = stream->highestSeqNr;
+    }
+    /*
+    * Write report timestamp
+    */
+    tmp_l = htonl(time_ntp);
+    memcpy(buf + ptr, &tmp_l, 4);
+    size += 4;
+
+    /*
+    * write length
+    */
+    uint16_t length = size / 4 - 1;
+    tmp_s = htons(length);
+    memcpy(buf + 2, &tmp_s, 2);
+
+    /*
+    * Update stream RTCP feedback status
+    */
+    lastFeedbackT_ntp = time_ntp;
+
+    return true;
+}
+
+#ifdef OLD_CODE
+bool ScreamRx::getProprietaryFeedback(uint32_t time_ntp,
     uint32_t &ssrc,
     uint32_t &receiveTimestamp,
     uint16_t &highestSeqNr,
@@ -221,11 +391,11 @@ bool ScreamRx::getFeedback(uint64_t time_us,
     uint16_t &ecnCeMarkedBytes) {
 
     Stream *stream = NULL;
-    uint64_t minT_us = ULLONG_MAX;
+    uint32_t minT_ntp = ULONG_MAX;
     for (auto it = streams.begin(); it != streams.end(); ++it) {
-        if ((*it)->nRtpSinceLastRtcp > 0 && (*it)->lastFeedbackT_us < minT_us) {
+        if ((*it)->nRtpSinceLastRtcp > 0 && (*it)->lastFeedbackT_ntp < minT_ntp) {
             stream = *it;
-            minT_us = (*it)->lastFeedbackT_us;
+            minT_ntp = (*it)->lastFeedbackT_ntp;
 
         }
     }
@@ -239,41 +409,15 @@ bool ScreamRx::getFeedback(uint64_t time_us,
     ssrc = stream->ssrc;
     ackVector = stream->ackVector;
     ecnCeMarkedBytes = stream->ecnCeMarkedBytes;
-    stream->lastFeedbackT_us = time_us;
+    stream->lastFeedbackT_ntp = time_ntp;
     stream->nRtpSinceLastRtcp = 0;
-    lastFeedbackT_us = time_us;
+    lastFeedbackT_ntp = time_ntp;
+
     return true;
 }
+bool ScreamRx::createProprietaryFeedback(uint32_t time_ntp, unsigned char *buf, int &size) {
 
-/*
-* Create feedback according to the format below. It is up to the
-* wrapper application to prepend this RTCP with SR or RR when needed
-* BT = 255, means that this is experimental use
-* The code currently only handles one SSRC source per IP packet
-*
-* 0                   1                   2                   3
-* 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |V=2|P|reserved |   PT=XR=207   |           length=6            |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                              SSRC                             |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |     BT=255    |    reserved   |         block length=4        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                        SSRC of source                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b0-31)                        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b32-63)                       |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                    Timestamp (32bits)                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-*/
-bool ScreamRx::createFeedback(uint64_t time_us, unsigned char *buf, int &size) {
-
-    if (!isFeedback(time_us))
+    if (!isFeedback(time_ntp))
         return false;
     uint32_t timeStamp;
     uint16_t seqNr;
@@ -281,11 +425,11 @@ bool ScreamRx::createFeedback(uint64_t time_us, unsigned char *buf, int &size) {
     uint16_t ecnCeMarkedBytes;
     uint32_t ssrc_src;
     size = 32;
-    if (getFeedback(time_us, ssrc_src, timeStamp, seqNr, ackVector, ecnCeMarkedBytes)) {
+    if (getProprietaryFeedback(time_ntp, ssrc_src, timeStamp, seqNr, ackVector, ecnCeMarkedBytes)) {
         uint16_t tmp_s;
         uint32_t tmp_l;
         buf[0] = 0x80;
-        buf[1] = 207;
+        buf[1] = 205;
         tmp_s = htons(6);
         memcpy(buf + 2, &tmp_s, 2);
         tmp_l = htonl(ssrc);
@@ -312,3 +456,4 @@ bool ScreamRx::createFeedback(uint64_t time_us, unsigned char *buf, int &size) {
     }
     return false;
 }
+#endif

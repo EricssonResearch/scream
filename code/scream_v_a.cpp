@@ -10,7 +10,7 @@
 
 using namespace std;
 
-const float Tmax = 50.0f;
+const float Tmax = 50;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
@@ -23,13 +23,13 @@ int swprio = -1;
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
-const int mode = 0x01;
-const double timeBase = 50000.0;
+const int mode = 0x03;
+const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 2.0f, 0, 0.0f, 20, isL4s);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s);
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
@@ -48,9 +48,9 @@ int main(int argc, char* argv[])
 
 
     float time = 0.0f;
-    uint64_t time_us = 0;
-    uint64_t time_us_tx = 0;
-    uint64_t time_us_rx = 0;
+    uint32_t time_ntp = 0;
+    uint32_t time_ntp_tx = 0;
+    uint32_t time_ntp_rx = 0;
     int n = 0;
     int nPkt = 0;
     uint32_t ssrc;
@@ -63,10 +63,10 @@ int main(int argc, char* argv[])
     while (time <= Tmax) {
         float retVal = -1.0;
         time = n / timeBase;
-        time_us = n*(1e6 / timeBase);
-        time_us_tx = time_us + 000000;
-        time_us_rx = time_us + 000000;
-
+        time_ntp = n*(65536 / timeBase);
+        time = time_ntp / 65536.0f;
+        time_ntp_tx = time_ntp + 1 * 0xFFFF0000;
+        time_ntp_rx = time_ntp + 0 * 0xFFF00000;
         netQueueRate->updateRate(time);
         bool isEvent = false;
 
@@ -75,22 +75,22 @@ int main(int argc, char* argv[])
             if (mode & 0x01) {
                 videoEnc[0]->setTargetBitrate(screamTx->getTargetBitrate(10));
                 int bytes = videoEnc[0]->encode(time);
-                screamTx->newMediaFrame(time_us_tx, 10, bytes);
+                screamTx->newMediaFrame(time_ntp_tx, 10, bytes);
             }
             if (mode & 0x02) {
                 videoEnc[1]->setTargetBitrate(screamTx->getTargetBitrate(11));
                 int bytes = videoEnc[1]->encode(time);
-                screamTx->newMediaFrame(time_us_tx, 11, bytes);
+                screamTx->newMediaFrame(time_ntp_tx, 11, bytes);
             }
             if (mode & 0x04) {
                 videoEnc[2]->setTargetBitrate(screamTx->getTargetBitrate(12));
                 int bytes = videoEnc[2]->encode(time);
-                screamTx->newMediaFrame(time_us_tx, 12, bytes);
+                screamTx->newMediaFrame(time_ntp_tx, 12, bytes);
             }
             /*
             * New RTP packets added, try if OK to transmit
             */
-            retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
+            retVal = screamTx->isOkToTransmit(time_ntp_tx, ssrc);
             isEvent = true;
         }
 
@@ -98,31 +98,52 @@ int main(int argc, char* argv[])
         if (netQueueDelay->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
             netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr, isCe);
         }
+
         if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
-            if ((nPkt % 1000 == 19 || nPkt % 1000 == 21) && false) {
+            if ((seqNr % 1000 == 19 || seqNr % 1000 == 21) && false) {
                 cerr << "lost " << seqNr << endl;
             }
             else {
-                if (!ecnCapable) isCe = false;
-                screamRx->receive(time_us_rx, 0, ssrc, size, seqNr, isCe);
+                uint8_t ceBits = 0x00;
+                if (ecnCapable) {
+                    if (isL4s)
+                        ceBits = 0x01;
+                    else
+                        ceBits = 0x02;
+                    if (isCe) ceBits = 0x03;
+                }
+                screamRx->receive(time_ntp_rx, 0, ssrc, size, seqNr, ceBits);
             }
             nPkt++;
         }
-        unsigned char buf[100];
+
+        unsigned char buf[2000];
         int fb_size = -1;
-        if (screamRx->createFeedback(time_us_rx, buf, fb_size)) {
-            screamTx->incomingFeedback(time_us_tx, buf, fb_size);
-            retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
+        bool isFeedback = screamRx->isFeedback(time_ntp_rx) &&
+            (time_ntp_rx - screamRx->getLastFeedbackT() > screamRx->getRtcpFbInterval() || screamRx->checkIfFlushAck());
+        /*
+        if (isFeedback && screamRx->createProprietaryFeedback(time_ntp_rx, buf, fb_size)) {
+            screamTx->incomingProprietaryFeedback(time_ntp_tx, buf, fb_size);
+            retVal = screamTx->isOkToTransmit(time_ntp_tx, ssrc);
             isEvent = true;
         }
+        */
+        
+        if (isFeedback && screamRx->createStandardizedFeedback(time_ntp_rx, buf, fb_size)) {
+            screamTx->incomingStandardizedFeedback(time_ntp_tx, buf, fb_size);
+            retVal = screamTx->isOkToTransmit(time_ntp_tx, ssrc);
+            isEvent = true;
+        }
+        
 
         if (n == nextCallN && retVal != 0.0f) {
-            retVal = screamTx->isOkToTransmit(time_us_tx, ssrc);
+            retVal = screamTx->isOkToTransmit(time_ntp_tx, ssrc);
             if (retVal > 0) {
                 nextCallN = n + max(1, (int)(1000.0*retVal));
                 isEvent = true;
             }
         }
+
         if (retVal == 0) {
             /*
             * RTP packet can be transmitted
@@ -139,19 +160,20 @@ int main(int argc, char* argv[])
                 break;
             }
             netQueueDelay->insert(time, rtpPacket, ssrc, size, seqNr);
-            retVal = screamTx->addTransmitted(time_us_tx, ssrc, size, seqNr);
+            retVal = screamTx->addTransmitted(time_ntp_tx, ssrc, size, seqNr);
             nextCallN = n + max(1, (int)(1000.0*retVal));
             isEvent = true;
         }
 
-        if (printLog && time - lastLogT > 0.01) {
-            cout << time << " ";
+        if (true && printLog && time - lastLogT > 0.05) {
+            cout << time <<  " " ;
             char s[500];
             screamTx->getShortLog(time, s);
             //cout << endl;
             cout << " " << s << endl;
             lastLogT = time;
         }
+
         /*
         * Test the set traget priority feature
         if (time > 30 && time < 100)
@@ -167,6 +189,7 @@ int main(int argc, char* argv[])
                 netQueueRate->rate = 4000e3;
             }
         }
+        
         if (time > 30 && swprio == 0) {
             swprio = 1;
             screamTx->setTargetPriority(10, 0.2);
@@ -177,8 +200,10 @@ int main(int argc, char* argv[])
             screamTx->setTargetPriority(10, 1.0);
             screamTx->setTargetPriority(11, 0.2);
         }
+
         if (false && time > 50)
             netQueueRate->rate = 8e6;
+           
         /*
 
             if ((time >= 60) && (time < 80) && isChRate)
