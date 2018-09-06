@@ -113,43 +113,18 @@ For more information on how to use the code in multimedia clients or in experime
 [7] Adaptive Video with SCReAM over LTE for Remote-Operated Working Machines : https://www.hindawi.com/journals/wcmc/2018/3142496/
 
 ## Feedback format
-It is recommended that the experimental feedback format below is used with SCReAM until a dedicated feedback packet format is devised. 
+The feedback format is according to [https://tools.ietf.org/html/draft-ietf-avtcore-cc-feedback-message-02](https://tools.ietf.org/html/draft-ietf-avtcore-cc-feedback-message-02 "IETF feedback format"), a previous proprietary format is deprecated.
+The feedback overhead depends on the media bitrate. The table below shows the IP+UDP+RTCP bitrate at varuious media bitrates.
 
-The format is based on RTCP XR (RFC3611) and use the (reserved for future use) format tag = 255.
-The feedback elements are:
-
-- Highest received sequence number (16b): Indicates the highest (possibly wrapped around) sequence number for the given source.
-- ECN-CE-bytes (16b): Accumulated number of received ECN-CE marked bytes for the given source.
-- ACK vector (64b): Indicates successful receipt indication of the last 64 RTP packets, preceeding the RTP packet with the highest RTP sequence number.
-- Timestamp (32b): Indicates the (wallclock) receive time (in milliseconds) when the RTP packet with the highest sequence number was received, truncated to 32bits.    
-
-Handling of ECN-CE-bytes is currently not implemented in the SCReAM code.  
-
-The feedback format is 32bytes and gives a reasonably low RTCP overhead that makes it possible to use SCReAM also for low bitrate applications.
-The RTCP feedback interval calculation in the code gives av feedback interval between 100ms, at low media bitrates, and 1ms at very high media bitrates 
-Given an IP+UDP overhead of 20+8 bytes and with the used of reduced size RTCP (RFC5506), the RTCP feedback overhead at low media rates then become 
-RTCP_bw = 8*(28+32)/0.100 = 4.8kbps
-which should be acceptably low even at low media bitrates. 
-
-
-
-        0                   1                   2                   3
-        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |V=2|P|reserved |   PT=XR=207   |           length=6            |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                              SSRC                             |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |     BT=255    |    reserved   |         block length=4        |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                        SSRC of source                         |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                     Ack vector (b0-31)                        |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                     Ack vector (b32-63)                       |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                    Timestamp (32bits)                         |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        
+       +-----------------------------------------------------+
+       | Media bitrate [kbps] | RTCP feedback bitrate [kbps] |
+       +-----------------------------------------------------+
+       |                   50 |                           15 |
+       |                  100 |                           15 |
+       |                  500 |                           30 |
+       |                 1000 |                           60 |
+       |                10000 |                          300 |
+       |                30000 |                          500 |
+       +-----------------------------------------------------+
 
