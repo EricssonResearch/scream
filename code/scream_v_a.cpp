@@ -10,7 +10,7 @@
 
 using namespace std;
 
-const float Tmax = 50;
+const float Tmax = 1;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
@@ -23,7 +23,7 @@ int swprio = -1;
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
-const int mode = 0x03;
+const int mode = 0x01;
 const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
@@ -100,7 +100,7 @@ int main(int argc, char* argv[])
         }
 
         if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
-            if ((seqNr % 1000 == 19 || seqNr % 1000 == 21) && false) {
+            if ((seqNr % 1000 == 19 || seqNr % 1000 == 21) && true) {
                 cerr << "lost " << seqNr << endl;
             }
             else {

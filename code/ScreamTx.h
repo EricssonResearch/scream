@@ -375,7 +375,6 @@ private:
         uint32_t lastRtpQueueDiscardT_ntp;
         bool wasRepairLoss;
         bool repairLoss;
-        int lastLossDetectIx;
         uint16_t ecnCeMarkedBytes;
 
         Transmitted txPackets[kMaxTxPackets];

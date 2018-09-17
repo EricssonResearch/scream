@@ -789,37 +789,17 @@ struct Transmitted *txPackets,
 */
 void ScreamTx::detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream) {
     /*
-    * Loop only through the packets that are covered by the last highest ACK, this saves complexity
-    * There is a faint possibility that we miss to detect large bursts of lost packets with this fix
+    * Loop thorugh packets that are covered by the last sequence number and 256 packets before this.
+    * This is a potential source of increased complexity and it may miss lost packets at very high bitrates.
     */
     int ix1 = highestSeqNr; ix1 = ix1 % kMaxTxPackets;
-    int ix0 = stream->hiSeqAck + 1;
+    int ix0 = stream->hiSeqAck - 256;
     stream->hiSeqAck = highestSeqNr;
     if (ix0 < 0) ix0 += kMaxTxPackets;
     while (ix1 < ix0)
         ix1 += kMaxTxPackets;
 
-    /*
-    * Mark packets outside the 64 bit ACK vector range as forever lost
-    */
-    if (stream->lastLossDetectIx >= 0) {
-        int ix0_ = ix0;
-        if (stream->lastLossDetectIx > ix0_) ix0_ += kMaxTxPackets;
-        for (int m = stream->lastLossDetectIx; m < ix0_; m++) {
-            int n = m % kMaxTxPackets;
-            if (txPackets[n].isUsed) {
-                Transmitted *tmp = &txPackets[n];
-                if (time_ntp - lastLossEventT_ntp > sRtt_ntp && lossBeta < 1.0f) {
-                    lossEvent = true;
-                }
-                stream->bytesLost += tmp->size;
-                tmp->isUsed = false;
-                cerr << " LOSS outside ACK range " << tmp->seqNr << endl;
-                stream->repairLoss = true;
-            }
-        }
-    }
-    stream->lastLossDetectIx = ix0;
+
 
     /*
     * Mark late packets as lost
@@ -1499,7 +1479,6 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
     lastTargetBitrateIUpdateT_ntp = 0;
     bytesRtp = 0;
     rateRtp = 0.0f;
-    lastLossDetectIx = -1;
     ecnCeMarkedBytes = 0;
     timeTxAck_ntp = 0;
 
