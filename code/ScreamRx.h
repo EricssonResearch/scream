@@ -2,7 +2,6 @@
 #define SCREAM_RX
 #include <cstdint>
 #include <list>
-const int kAckVectorBits = 64;
 const int kReportedRtpPackets = 64;
 const int kRxHistorySize = 128;
 
@@ -68,17 +67,14 @@ public:
         uint16_t highestSeqNr;               // Highest received sequence number
         uint16_t highestSeqNrTx;             // Highest fed back sequence number
         uint32_t receiveTimestamp;           // Wall clock time
-        uint64_t ackVector;                  // List of received packets
-        uint16_t ecnCeMarkedBytes;           // Number of ECN-CE marked bytes
-                                             //  (i.e size of RTP packets with CE set in IP header)
-        uint8_t  ceBitsHist[kRxHistorySize]; // Vector of CE bits for last <kAckVectorBits> 
-                                             //  received RTP packets
-        uint32_t rxTimeHist[kRxHistorySize]; // Receive time for last <kAckVectorBits> 
-                                             //  received RTP packets
-        uint16_t seqNrHist[kRxHistorySize];  // Seq Nr of last received <kAckVectorBits>
-                                             //  packets
+        uint8_t  ceBitsHist[kRxHistorySize]; // Vector of CE bits for last <kRxHistorySize> 
+        //  received RTP packets
+        uint32_t rxTimeHist[kRxHistorySize]; // Receive time for last <kRxHistorySize> 
+        //  received RTP packets
+        uint16_t seqNrHist[kRxHistorySize];  // Seq Nr of last received <kRxHistorySize>
+        //  packets
         uint32_t lastFeedbackT_ntp;          // Last time feedback transmitted for
-                                             //  this SSRC
+        //  this SSRC
         int nRtpSinceLastRtcp;               // Number of RTP packets since last transmitted RTCP
 
         bool firstReceived;
@@ -146,46 +142,4 @@ public:
     std::list<Stream*> streams;
 };
 
-#endif
-
-#ifdef OLD_CODE
-/*
-* Get SCReAM proprietary RTCP feedback elements
-* return FALSE if no pending feedback available
-*/
-bool getProprietaryFeedback(uint32_t time_ntp,
-    uint32_t &ssrc,
-    uint32_t &receiveTimestamp,
-    uint16_t &highestSeqNr,
-    uint64_t &ackVector,
-    uint16_t &ecnCeMarkedBytes);
-
-/*
-* Create proprietary feedback according to the format below.
-* It is up to the wrapper application to prepend this RTCP
-*  with SR or RR when needed
-* BT = 255, means that this is experimental use
-* The code currently only handles one SSRC source per IP packet
-*
-* 0                   1                   2                   3
-* 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |V=2|P|reserved |   PT=XR=207   |           length=6            |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                              SSRC                             |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |     BT=255    |    reserved   |         block length=4        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                        SSRC of source                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b0-31)                        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b32-63)                       |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                    Timestamp (32bits)                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-*/
-bool createProprietaryFeedback(uint32_t time_ntp, unsigned char *buf, int &size);
 #endif

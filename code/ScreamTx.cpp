@@ -289,6 +289,7 @@ RtpQueueIface * ScreamTx::getStreamQueue(uint32_t ssrc) {
     return stream->rtpQueue;
 }
 
+
 /*
 * New media frame
 */
@@ -496,6 +497,7 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 
     stream->bytesTransmitted += size;
     lastTransmitT_ntp = time_ntp;
+    stream->lastTransmitT_ntp = time_ntp;
     /*
     * Add credit to unserved streams
     */
@@ -536,7 +538,6 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
     uint16_t length;
     memcpy(&length, buf + ptr, 2);
     length = ntohs(length);
-    //cerr << " RX length " << length << endl;
     ptr += 2;
     /*
     * read RTCP sender SSRC
@@ -588,6 +589,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
         }
 
         uint16_t diff = end_seq - stream->hiSeqAck;
+
         if (diff > 65000 && stream->hiSeqAck != 0 && stream->timeTxAck_ntp != 0) {
             /*
             * Out of order received ACKs are ignored
@@ -642,68 +644,69 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
     * Mark received packets, given by the ACK vector
     */
     uint16_t ecnCeMarkedBytes = 0;
-    markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytes);
+    markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytes, isLast);
 
     /*
     * Detect lost packets
     */
-    if (isLast)
+    if (isLast) {
         detectLoss(time_ntp, txPackets, seqNr, stream);
 
-    if (ecnCeMarkedBytes != 0 && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
-        ecnCeEvent = true;
-        lastLossEventT_ntp = time_ntp;
-    }
+        if (ecnCeMarkedBytes != 0 && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
+            ecnCeEvent = true;
+            lastLossEventT_ntp = time_ntp;
+        }
 
-    if (fp_log && completeLogItem) {
-        fprintf(fp_log, " %d %d %1.0f %d %d %d %1.0f %1.0f %1.0f %1.0f ", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ecnCeMarkedBytes, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost);
-    }
+        if (fp_log && completeLogItem) {
+            fprintf(fp_log, " %d %d %1.0f %d %d %d %1.0f %1.0f %1.0f %1.0f ", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ecnCeMarkedBytes, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost);
+        }
 
-    if (isL4s) {
-        /*
-        * L4S mode compute a congestion scaling factor that is dependent on the fraction
-        *  of ECN marked packets
-        */
-        bytesMarkedThisRtt += ecnCeMarkedBytes;
-        bytesDeliveredThisRtt += bytesNewlyAcked;
-        if (lastL4sAlphaUpdateT_ntp - time_ntp > sRtt_ntp) {
-            lastL4sAlphaUpdateT_ntp = time_ntp;
-            if (bytesDeliveredThisRtt > 0) {
-                float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
-                l4sAlpha = kL4sG*F + (1.0f - kL4sG)*l4sAlpha;
-                bytesDeliveredThisRtt = 0;
-                bytesMarkedThisRtt = 0;
+        if (isL4s) {
+            /*
+            * L4S mode compute a congestion scaling factor that is dependent on the fraction
+            *  of ECN marked packets
+            */
+            bytesMarkedThisRtt += ecnCeMarkedBytes;
+            bytesDeliveredThisRtt += bytesNewlyAcked;
+            if (lastL4sAlphaUpdateT_ntp - time_ntp > sRtt_ntp) {
+                lastL4sAlphaUpdateT_ntp = time_ntp;
+                if (bytesDeliveredThisRtt > 0) {
+                    float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
+                    l4sAlpha = kL4sG*F + (1.0f - kL4sG)*l4sAlpha;
+                    bytesDeliveredThisRtt = 0;
+                    bytesMarkedThisRtt = 0;
+                }
             }
         }
-    }
 
-    stream->ecnCeMarkedBytes += ecnCeMarkedBytes;
+        stream->ecnCeMarkedBytes += ecnCeMarkedBytes;
 
-    if (lossEvent || ecnCeEvent) {
-        lastLossEventT_ntp = time_ntp;
-        for (int n = 0; n < nStreams; n++) {
-            Stream *tmp = streams[n];
-            if (lossEvent)
-                tmp->lossEventFlag = true;
-            else
-                tmp->ecnCeEventFlag = true;
+        if (lossEvent || ecnCeEvent) {
+            lastLossEventT_ntp = time_ntp;
+            for (int n = 0; n < nStreams; n++) {
+                Stream *tmp = streams[n];
+                if (lossEvent)
+                    tmp->lossEventFlag = true;
+                else
+                    tmp->ecnCeEventFlag = true;
+            }
         }
-    }
 
-    if (lastCwndUpdateT_ntp == 0)
-        lastCwndUpdateT_ntp = time_ntp;
+        if (lastCwndUpdateT_ntp == 0)
+            lastCwndUpdateT_ntp = time_ntp;
 
-    if (time_ntp - lastCwndUpdateT_ntp > 655) { // 10ms in NTP domain
-        /*
-        * There is no gain with a too frequent CWND update
-        * An update every 10ms is fast enough even at very high high bitrates
-        */
-        updateCwnd(time_ntp);
-        lastCwndUpdateT_ntp = time_ntp;
-    }
+        if (time_ntp - lastCwndUpdateT_ntp > 655) { // 10ms in NTP domain
+            /*
+            * There is no gain with a too frequent CWND update
+            * An update every 10ms is fast enough even at very high high bitrates
+            */
+            updateCwnd(time_ntp);
+            lastCwndUpdateT_ntp = time_ntp;
+        }
 
-    if (fp_log && completeLogItem) {
-        fprintf(fp_log, "\n");
+        if (fp_log && completeLogItem) {
+            fprintf(fp_log, "\n");
+        }
     }
 }
 
@@ -716,70 +719,53 @@ struct Transmitted *txPackets,
     uint32_t timestamp,
     Stream *stream,
     uint8_t ceBits,
-    uint16_t &encCeMarkedBytes) {
-    /*
-    * Loop only through the packets that are covered by the last highest ACK, this saves complexity
-    * TODO, this code can possibly be simplified
-    */
-    int ix1 = seqNr; ix1 = ix1 % kMaxTxPackets;
-    int ix0 = stream->hiSeqAck + 1;
-    if (ix0 < 0) ix0 += kMaxTxPackets;
-    while (ix1 < ix0)
-        ix1 += kMaxTxPackets;
+    uint16_t &encCeMarkedBytes,
+    bool isLast) {
 
-    for (int m = ix0; m <= ix1; m++) {
-        int n = m % kMaxTxPackets;
+    int ix = seqNr % kMaxTxPackets;
+    if (txPackets[ix].isUsed) {
         /*
-        * Loop through TX packets
+        * RTP packet is in flight
         */
-        if (txPackets[n].isUsed) {
-            /*
-            * RTP packet is in flight
-            */
-            Transmitted *tmp = &txPackets[n];
+        Transmitted *tmp = &txPackets[ix];
 
-            /*
-            * Receiption of packet given by seqNr
-            */
-            if ((tmp->seqNr == seqNr) &! tmp->isAcked) {
-                if (ceBits == 0x03) {
-                    /*
-                    * Packet was CE marked, increase counter
-                    */
-                    encCeMarkedBytes += tmp->size;
-                }
-                tmp->isAcked = true;
-                ackedOwd = timestamp - tmp->timeTx_ntp;
+        /*
+        * Receiption of packet given by seqNr
+        */
+        if ((tmp->seqNr == seqNr) &!tmp->isAcked) {
+            if (ceBits == 0x03) {
                 /*
-                * Compute the queue delay i NTP domain (Q16)
+                * Packet was CE marked, increase counter
                 */
-                uint32_t qDel = estimateOwd(time_ntp);
-                qDel -= getBaseOwd();
-                /*
-                * Convert from NTP domain OWD to an OWD in [s]
-                */
-                queueDelay = qDel * ntp2SecScaleFactor;
-
-                uint32_t rtt = time_ntp - tmp->timeTx_ntp;
-
-                if (fp_log) {
-                    fprintf(fp_log, "%1.3f %1.3f %1.3f ", time_ntp*ntp2SecScaleFactor, queueDelay, rtt*ntp2SecScaleFactor);
-                    completeLogItem = true;
-                }
-                if (rtt < 1000000) {
-                    sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
-                    if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
-                        sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
-                        lastSRttUpdateT_ntp = time_ntp;
-                        sRtt = sRtt_ntp*ntp2SecScaleFactor;
-                    }
-                }
-                stream->timeTxAck_ntp = tmp->timeTx_ntp;
-                /*
-                * Found packet in list, break for-loop
-                */
-                break;
+                encCeMarkedBytes += tmp->size;
             }
+            tmp->isAcked = true;
+            ackedOwd = timestamp - tmp->timeTx_ntp;
+            /*
+            * Compute the queue delay i NTP domain (Q16)
+            */
+            uint32_t qDel = estimateOwd(time_ntp);
+            qDel -= getBaseOwd();
+            /*
+            * Convert from NTP domain OWD to an OWD in [s]
+            */
+            queueDelay = qDel * ntp2SecScaleFactor;
+
+            uint32_t rtt = time_ntp - tmp->timeTx_ntp;
+
+            if (fp_log && isLast) {
+                fprintf(fp_log, "%1.3f %1.3f %1.3f ", time_ntp*ntp2SecScaleFactor, queueDelay, rtt*ntp2SecScaleFactor);
+                completeLogItem = true;
+            }
+            if (rtt < 1000000 && isLast) {
+                sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
+                if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
+                    sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
+                    lastSRttUpdateT_ntp = time_ntp;
+                    sRtt = sRtt_ntp*ntp2SecScaleFactor;
+                }
+            }
+            stream->timeTxAck_ntp = tmp->timeTx_ntp;
         }
     }
 }
@@ -789,8 +775,8 @@ struct Transmitted *txPackets,
 */
 void ScreamTx::detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream) {
     /*
-    * Loop thorugh packets that are covered by the last sequence number and 256 packets before this.
-    * This is a potential source of increased complexity and it may miss lost packets at very high bitrates.
+    * Loop only through the packets that are covered by the last highest ACK, this saves complexity
+    * There is a faint possibility that we miss to detect large bursts of lost packets with this fix
     */
     int ix1 = highestSeqNr; ix1 = ix1 % kMaxTxPackets;
     int ix0 = stream->hiSeqAck - 256;
@@ -798,8 +784,6 @@ void ScreamTx::detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint
     if (ix0 < 0) ix0 += kMaxTxPackets;
     while (ix1 < ix0)
         ix1 += kMaxTxPackets;
-
-
 
     /*
     * Mark late packets as lost
@@ -850,7 +834,7 @@ void ScreamTx::detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint
                 }
                 stream->bytesLost += tmp->size;
                 tmp->isUsed = false;
-                cerr << " LOSS detected by reorder timer " << tmp->seqNr << endl;
+                cerr << " LOSS detected by reorder timer SSRC=" << stream->ssrc << " SN=" << tmp->seqNr << endl;
                 stream->repairLoss = true;
             }
             else if (tmp->isAcked) {
@@ -914,7 +898,6 @@ void ScreamTx::getShortLog(float time, char *s) {
         strcat(s, s2);
     }
 }
-
 
 void ScreamTx::getVeryShortLog(float time, char *s) {
     int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
@@ -1396,7 +1379,7 @@ void ScreamTx::addCredit(uint32_t time_ntp, Stream* servedStream, int transmitte
         * Skip if only one stream to save CPU
         */
         return;
-    int maxCredit = 10 * mss;
+    int maxCredit = 2 * mss;
     for (int n = 0; n < nStreams; n++) {
         Stream *tmp = streams[n];
         if (tmp != servedStream) {
@@ -1410,7 +1393,6 @@ void ScreamTx::addCredit(uint32_t time_ntp, Stream* servedStream, int transmitte
                     tmp->creditLost += tmp->credit - maxCredit;
                     tmp->credit = maxCredit;
                 }
-                //tmp->credit = std::min(10 * mss, tmp->credit + credit);
             }
         }
     }
@@ -1430,6 +1412,136 @@ void ScreamTx::subtractCredit(uint32_t time_ntp, Stream* servedStream, int trans
         */
         return;
     servedStream->credit = std::max(0, servedStream->credit - transmittedBytes);
+}
+
+/*
+* Adjust (enforce) proper prioritization between active streams
+* at regular intervals. This is a necessary addon to mitigate
+* issues that VBR media brings
+* The function consists of equal measures or rational thinking and
+* black magic, which means that there is no 100% guarantee that
+* will always work.
+*/
+void ScreamTx::adjustPriorities(uint32_t time_ntp) {
+    if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536) { // 1s in NTP domain
+        /*
+        * Skip if only one stream or if adjustment done less than 5s ago
+        */
+        return;
+    }
+
+    if (queueDelayTrend > 0.02) {
+        /*
+        * Adjust only if there is some evidence of congestion
+        */
+        int avgCreditLost = 0;
+        int avgCreditLostN = 0;
+        for (int n = 0; n < nStreams; n++) {
+            avgCreditLost += streams[n]->creditLost;
+            if (streams[n]->isActive)
+                avgCreditLostN++;
+        }
+        if (avgCreditLostN <= 1) {
+            /*
+            * At the most 1 steam active, skip adjustment
+            */
+            return;
+        }
+
+        avgCreditLost /= avgCreditLostN;
+        for (int n = 0; n < nStreams; n++) {
+            if (streams[n]->isActive) {
+                if (streams[n]->creditLost < avgCreditLost &&
+                    streams[n]->targetBitrate > streams[n]->rateRtp) {
+                    /*
+                    * Stream is using more of its share than the average
+                    * bitrate is likelky too high, reduce target bitrate
+                    * This algorithm works best when we want to ensure
+                    * different priorities
+                    */
+                    streams[n]->targetBitrate = std::max(streams[n]->minBitrate, streams[n]->targetBitrate*0.9f);
+                }
+            }
+        }
+
+        for (int n = 0; n < nStreams; n++)
+            streams[n]->creditLost = 0;
+
+
+        lastAdjustPrioritiesT_ntp = time_ntp;
+
+    }
+    if (time_ntp - lastAdjustPrioritiesT_ntp < 1310720) { // 20s in NTP domain
+        /*
+        * Clear old statistics of unused credits
+        */
+        for (int n = 0; n < nStreams; n++)
+            streams[n]->creditLost = 0;
+
+
+        lastAdjustPrioritiesT_ntp = time_ntp;
+    }
+}
+
+/*
+* Get the prioritized stream
+*/
+ScreamTx::Stream* ScreamTx::getPrioritizedStream(uint32_t time_ntp) {
+    /*
+    * Function that prioritizes between streams, this function may need
+    * to be modified to handle the prioritization better for e.g
+    * FEC, SVC etc.
+    */
+    if (nStreams == 1)
+        /*
+        * Skip if only one stream to save CPU
+        */
+        return streams[0];
+
+    int maxCredit = 1;
+    Stream *stream = NULL;
+    /*
+    * Pick a stream with credit higher or equal to
+    * the size of the next RTP packet in queue for the given stream.
+    */
+    uint32_t maxDiff = 0;
+    for (int n = 0; n < nStreams; n++) {
+        Stream *tmp = streams[n];
+        if (tmp->rtpQueue->sizeOfQueue() == 0) {
+            /*
+            * Queue empty
+            */
+        }
+        else {
+            uint32_t diff = time_ntp - tmp->lastTransmitT_ntp;
+            /*
+            * Pick stream if it has the highest credit so far
+            */
+            if (tmp->credit >= maxCredit && diff > maxDiff) {
+                stream = tmp;
+                maxDiff = diff;
+                maxCredit = tmp->credit;
+            }
+        }
+    }
+    if (stream != NULL) {
+        return stream;
+    }
+    /*
+    * If the above doesn't give a candidate..
+    * Pick the stream with the highest priority that also
+    * has at least one RTP packet in queue.
+    */
+    float maxPrio = 0.0;
+    for (int n = 0; n < nStreams; n++) {
+        Stream *tmp = streams[n];
+        float priority = tmp->targetPriority;
+        if (tmp->rtpQueue->sizeOfQueue() > 0 && priority > maxPrio) {
+            maxPrio = priority;
+            stream = tmp;
+        }
+    }
+    return stream;
 }
 
 ScreamTx::Stream::Stream(ScreamTx *parent_,
@@ -1481,6 +1593,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
     rateRtp = 0.0f;
     ecnCeMarkedBytes = 0;
     timeTxAck_ntp = 0;
+    lastTransmitT_ntp = 0;
 
     for (int n = 0; n < kRateUpDateSize; n++) {
         rateRtpHist[n] = 0.0f;
@@ -1822,361 +1935,3 @@ bool ScreamTx::Stream::isRtpQueueDiscard() {
     rtpQueueDiscard = false;
     return tmp;
 }
-
-/*
-* Adjust (enforce) proper prioritization between active streams
-* at regular intervals. This is a necessary addon to mitigate
-* issues that VBR media brings
-* The function consists of equal measures or rational thinking and
-* black magic, which means that there is no 100% guarantee that
-* will always work.
-*/
-void ScreamTx::adjustPriorities(uint32_t time_ntp) {
-    if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536) { // 1s in NTP domain
-        /*
-        * Skip if only one stream or if adjustment done less than 5s ago
-        */
-        return;
-    }
-
-    if (queueDelayTrend > 0.02) {
-        /*
-        * Adjust only if there is some evidence of congestion
-        */
-        int avgCreditLost = 0;
-        int avgCreditLostN = 0;
-        for (int n = 0; n < nStreams; n++) {
-            avgCreditLost += streams[n]->creditLost;
-            if (streams[n]->isActive)
-                avgCreditLostN++;
-        }
-        if (avgCreditLostN <= 1) {
-            /*
-            * At the most 1 steam active, skip adjustment
-            */
-            return;
-        }
-
-        avgCreditLost /= avgCreditLostN;
-        for (int n = 0; n < nStreams; n++) {
-            if (streams[n]->isActive) {
-                if (streams[n]->creditLost < avgCreditLost &&
-                    streams[n]->targetBitrate > streams[n]->rateRtp) {
-                    /*
-                    * Stream is using more of its share than the average
-                    * bitrate is likelky too high, reduce target bitrate
-                    * This algorithm works best when we want to ensure
-                    * different priorities
-                    */
-                    streams[n]->targetBitrate = std::max(streams[n]->minBitrate, streams[n]->targetBitrate*0.9f);
-                }
-            }
-        }
-
-        for (int n = 0; n < nStreams; n++)
-            streams[n]->creditLost = 0;
-
-
-        lastAdjustPrioritiesT_ntp = time_ntp;
-
-    }
-    if (time_ntp - lastAdjustPrioritiesT_ntp < 1310720) { // 20s in NTP domain
-        /*
-        * Clear old statistics of unused credits
-        */
-        for (int n = 0; n < nStreams; n++)
-            streams[n]->creditLost = 0;
-
-
-        lastAdjustPrioritiesT_ntp = time_ntp;
-    }
-}
-
-/*
-* Get the prioritized stream
-*/
-ScreamTx::Stream* ScreamTx::getPrioritizedStream(uint32_t time_ntp) {
-    /*
-    * Function that prioritizes between streams, this function may need
-    * to be modified to handle the prioritization better for e.g
-    * FEC, SVC etc.
-    */
-    if (nStreams == 1)
-        /*
-        * Skip if only one stream to save CPU
-        */
-        return streams[0];
-
-    int maxCredit = 1;
-    Stream *stream = NULL;
-    /*
-    * Pick a stream with credit higher or equal to
-    * the size of the next RTP packet in queue for the given stream.
-    */
-    for (int n = 0; n < nStreams; n++) {
-        Stream *tmp = streams[n];
-        if (tmp->rtpQueue->sizeOfQueue() == 0) {
-            /*
-            * Queue empty
-            */
-        }
-        else {
-            /*
-            * Pick stream if it has the highest credit so far
-            */
-            if (tmp->credit >= std::max(maxCredit, tmp->rtpQueue->sizeOfNextRtp())) {
-                stream = tmp;
-                maxCredit = tmp->credit;
-            }
-        }
-    }
-    if (stream != NULL) {
-        return stream;
-    }
-    /*
-    * If the above doesn't give a candidate..
-    * Pick the stream with the highest priority that also
-    * has at least one RTP packet in queue.
-    */
-    float maxPrio = 0.0;
-    for (int n = 0; n < nStreams; n++) {
-        Stream *tmp = streams[n];
-        float priority = tmp->targetPriority;
-        if (tmp->rtpQueue->sizeOfQueue() > 0 && priority > maxPrio) {
-            maxPrio = priority;
-            stream = tmp;
-        }
-    }
-    return stream;
-}
-
-
-#ifdef OLD_CODE
-/*
-*  Mark ACKed RTP packets
-*/
-void ScreamTx::markAcked(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, uint64_t ackVector, uint32_t timestamp, Stream *stream) {
-    /*
-    * Loop only through the packets that are covered by the last highest ACK, this saves complexity
-    */
-    int ix1 = highestSeqNr; ix1 = ix1 % kMaxTxPackets;
-    int ix0 = stream->hiSeqAck + 1;
-    if (ix0 < 0) ix0 += kMaxTxPackets;
-    while (ix1 < ix0)
-        ix1 += kMaxTxPackets;
-    for (int m = ix0; m <= ix1; m++) {
-        int n = m % kMaxTxPackets;
-        /*
-        * Loop through TX packets
-        */
-        if (txPackets[n].isUsed) {
-            /*
-            * RTP packet is in flight
-            */
-            Transmitted *tmp = &txPackets[n];
-
-            /*
-            * Compute SN difference
-            */
-            uint16_t diff = highestSeqNr - tmp->seqNr;
-            diff -= 1;
-
-            if (diff <= kAckVectorBits) {
-                if (ackVector & (INT64_C(1) << diff)) {
-                    /*
-                    * SN marked as received
-                    */
-                    tmp->isAcked = true;
-                }
-            }
-
-            /*
-            * Receiption of packet given by highestSeqNr
-            */
-            if (tmp->seqNr == highestSeqNr) {
-                tmp->isAcked = true;
-                ackedOwd = timestamp - tmp->timeTx_ntp;
-                /*
-                * Compute the queue delay i NTP domain (Q16)
-                */
-                uint32_t qDel = estimateOwd(time_ntp);
-                qDel -= getBaseOwd();
-
-                /*
-                * Convert from NTP domain OWD to an OWD in [s]
-                */
-                queueDelay = qDel * ntp2SecScaleFactor;
-
-                uint32_t rtt = time_ntp - tmp->timeTx_ntp;
-
-                if (fp_log) {
-                    fprintf(fp_log, "%1.3f %1.3f %1.3f ", time_ntp*ntp2SecScaleFactor, queueDelay, rtt*ntp2SecScaleFactor);
-                    completeLogItem = true;
-                }
-                if (rtt < 1000000) {
-                    sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
-                    if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
-                        sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
-                        lastSRttUpdateT_ntp = time_ntp;
-                        sRtt = sRtt_ntp*ntp2SecScaleFactor;
-                    }
-                }
-                stream->timeTxAck_ntp = tmp->timeTx_ntp;
-            }
-        }
-    }
-}
-/*
-* Parse feedback according to the format below. It is up to the
-* wrapper application this RTCP from a compound RTCP if needed
-* BT = 255, means that this is experimental use.
-* The code currently only handles one SSRC source per IP packet
-*
-* 0                   1                   2                   3
-* 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |V=2|P|reserved |   PT=XR=207   |           length=6            |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                              SSRC                             |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |     BT=255    |    reserved   |         block length=4        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                        SSRC of source                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b0-31)                        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b32-63)                       |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                    Timestamp (32bits)                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-*/
-void ScreamTx::incomingProprietaryFeedback(uint32_t time_ntp,
-    unsigned char* buf,
-    int size) {
-    if (false && !(size == 32 && buf[0] == 0x80 && buf[1] == 205 && buf[8] == 255)) {
-        // This does not seem as a valid size, exit function
-        return;
-    }
-    uint32_t tmp_l_1;
-    uint16_t tmp_s;
-    uint32_t tmp_l_2;
-    uint32_t timeStamp;
-    uint16_t seqNr;
-    uint64_t ackVector;
-    uint16_t ecnCeMarkedBytes;
-    uint32_t ssrc;
-    uint16_t rawSeq;
-    memcpy(&tmp_l_1, buf + 12, 4);
-    ssrc = ntohl(tmp_l_1);
-    memcpy(&seqNr, buf + 16, 2);
-    seqNr = ntohs(seqNr);
-    memcpy(&ecnCeMarkedBytes, buf + 18, 2);
-    ecnCeMarkedBytes = ntohs(ecnCeMarkedBytes);
-    memcpy(&tmp_l_1, buf + 20, 4);
-    memcpy(&tmp_l_2, buf + 24, 4);
-    tmp_l_1 = ntohl(tmp_l_1);
-    tmp_l_2 = ntohl(tmp_l_2);
-    ackVector = ((uint64_t(tmp_l_1)) << 32) | tmp_l_2;
-    memcpy(&timeStamp, buf + 28, 4);
-    timeStamp = ntohl(timeStamp);
-    incomingProprietaryFeedback(time_ntp, ssrc, timeStamp, seqNr, ackVector, ecnCeMarkedBytes);
-}
-/*
-* New incoming feedback
-*/
-void ScreamTx::incomingProprietaryFeedback(uint32_t time_ntp,
-    uint32_t ssrc,
-    uint32_t timestamp,
-    uint16_t highestSeqNr,
-    uint64_t ackVector,
-    uint16_t ecnCeMarkedBytes) {
-
-    int streamId = -1;
-    if (!isInitialized) initialize(time_ntp);
-    Stream *stream = getStream(ssrc, streamId);
-    if (stream == 0) {
-        // Bogus RTCP?, the SSRC is wrong anyway, Skip
-        return;
-    }
-
-    uint16_t diff = highestSeqNr - stream->hiSeqAck;
-    if (diff > 65000 && stream->hiSeqAck != 0 && stream->timeTxAck_ntp != 0) {
-        /*
-        * Out of order received ACKs are ignored
-        */
-        return;
-    }
-    accBytesInFlightMax += bytesInFlight;
-    nAccBytesInFlightMax++;
-    Transmitted *txPackets = stream->txPackets;
-    completeLogItem = false;
-    /*
-    * Mark received packets, given by the ACK vector
-    */
-    markAcked(time_ntp, txPackets, highestSeqNr, ackVector, timestamp, stream);
-
-    /*
-    * Detect lost packets
-    */
-    detectLoss(time_ntp, txPackets, highestSeqNr, stream);
-
-    if (ecnCeMarkedBytes != stream->ecnCeMarkedBytes && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
-        ecnCeEvent = true;
-        lastLossEventT_ntp = time_ntp;
-    }
-
-    uint16_t ceMarked = ecnCeMarkedBytes - stream->ecnCeMarkedBytes;
-    if (fp_log && completeLogItem) {
-        fprintf(fp_log, " %d %d %1.0f %d %d %d %1.0f %1.0f %1.0f %1.0f ", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ceMarked, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost);
-    }
-
-    if (isL4s) {
-        /*
-        * L4S mode compute a congestion scaling factor that is dependent on the fraction
-        *  of ECN marked packets
-        */
-        bytesMarkedThisRtt += ceMarked;
-        bytesDeliveredThisRtt += bytesNewlyAcked;
-        if (lastL4sAlphaUpdateT_ntp - time_ntp > sRtt_ntp) {
-            lastL4sAlphaUpdateT_ntp = time_ntp;
-            if (bytesDeliveredThisRtt > 0) {
-                float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
-                l4sAlpha = kL4sG*F + (1.0f - kL4sG)*l4sAlpha;
-                bytesDeliveredThisRtt = 0;
-                bytesMarkedThisRtt = 0;
-            }
-        }
-    }
-
-    stream->ecnCeMarkedBytes = ecnCeMarkedBytes;
-
-    if (lossEvent || ecnCeEvent) {
-        lastLossEventT_ntp = time_ntp;
-        for (int n = 0; n < nStreams; n++) {
-            Stream *tmp = streams[n];
-            if (lossEvent)
-                tmp->lossEventFlag = true;
-            else
-                tmp->ecnCeEventFlag = true;
-        }
-    }
-
-    if (lastCwndUpdateT_ntp == 0)
-        lastCwndUpdateT_ntp = time_ntp;
-
-    if (time_ntp - lastCwndUpdateT_ntp > 655) { // 10ms in NTP domain
-        /*
-        * There is no gain with a too frequent CWND update
-        * An update every 10ms is fast enough even at very high high bitrates
-        */
-        updateCwnd(time_ntp);
-        lastCwndUpdateT_ntp = time_ntp;
-    }
-
-    if (fp_log && completeLogItem) {
-        fprintf(fp_log, "\n");
-    }
-}
-#endif

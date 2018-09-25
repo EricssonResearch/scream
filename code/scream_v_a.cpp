@@ -10,7 +10,7 @@
 
 using namespace std;
 
-const float Tmax = 1;
+const float Tmax = 100;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
@@ -19,17 +19,18 @@ const float FR = 25.0f;
 int swprio = -1;
 #define TRACEFILE "../traces/trace_no_key_smooth.txt"
 //#define TRACEFILE "../traces/trace_key.txt"
+//#define TRACEFILE "../traces/trace_no_key.txt"
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
-const int mode = 0x01;
+const int mode = 0x03;
 const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false);
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
@@ -100,7 +101,7 @@ int main(int argc, char* argv[])
         }
 
         if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
-            if ((seqNr % 1000 == 19 || seqNr % 1000 == 21) && true) {
+            if ((seqNr % 1000 == 19 || seqNr % 1000 == 21) && false) {
                 cerr << "lost " << seqNr << endl;
             }
             else {
@@ -121,13 +122,6 @@ int main(int argc, char* argv[])
         int fb_size = -1;
         bool isFeedback = screamRx->isFeedback(time_ntp_rx) &&
             (time_ntp_rx - screamRx->getLastFeedbackT() > screamRx->getRtcpFbInterval() || screamRx->checkIfFlushAck());
-        /*
-        if (isFeedback && screamRx->createProprietaryFeedback(time_ntp_rx, buf, fb_size)) {
-            screamTx->incomingProprietaryFeedback(time_ntp_tx, buf, fb_size);
-            retVal = screamTx->isOkToTransmit(time_ntp_tx, ssrc);
-            isEvent = true;
-        }
-        */
         
         if (isFeedback && screamRx->createStandardizedFeedback(time_ntp_rx, buf, fb_size)) {
             screamTx->incomingStandardizedFeedback(time_ntp_tx, buf, fb_size);

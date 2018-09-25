@@ -355,6 +355,7 @@ private:
         uint32_t lastTargetBitrateIUpdateT_ntp;    // Last time rate estimate was updated
 
         uint32_t timeTxAck_ntp;  // timestamp when higest ACKed SN was transmitted
+        uint32_t lastTransmitT_ntp;
 
         int bytesRtp;           // Number of RTP bytes from media coder
         float rateRtp;          // Media bitrate
@@ -389,8 +390,14 @@ private:
     /*
     * Mark ACKed RTP packets
     */
-    //void markAcked(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, uint64_t ackVector, uint32_t timestamp, Stream *stream);
-    void markAcked(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t seqNr, uint32_t timestamp, Stream *stream, uint8_t ceBits, uint16_t &encCeMarkedBytes);
+    void markAcked(uint32_t time_ntp,
+    struct Transmitted *txPackets,
+        uint16_t seqNr,
+        uint32_t timestamp,
+        Stream *stream,
+        uint8_t ceBits,
+        uint16_t &encCeMarkedBytes,
+        bool isLast);
 
     /*
     * Update CWND
@@ -613,51 +620,4 @@ private:
     bool completeLogItem;
 
 };
-#endif
-
-#ifdef OLD_CODE
-/*
-* New incoming feedback, this function
-* triggers a CWND update
-* The SCReAM timestamp is in jiffies, where the frequency is controlled
-* by the timestamp clock frequency (default 1000Hz)
-* The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
-*  Note : isOkToTransmit should be called after incomingFeedback
-* ecnCeMarkedBytes indicates the cumulative number of bytes that are ECN-CE marked
-*/
-//void incomingProprietaryFeedback(uint32_t time_ntp,
-//    uint32_t ssrc,         // SSRC of stream
-//    uint32_t timestamp,    // SCReAM FB timestamp [jiffy]
-//    uint16_t highestSeqNr, // Highest ACKed RTP sequence number
-//    uint64_t ackVector,   // ACK vector
-//    uint16_t ecnCeMarkedBytes = 0); // Number of ECN marked bytes
-
-/*
-* Parse feedback according to the format below. It is up to the
-* wrapper application this RTCP from a compound RTCP if needed
-* BT = 255, means that this is experimental use
-*
-* 0                   1                   2                   3
-* 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |V=2|P|reserved |   PT=XR=207   |           length=6            |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                              SSRC                             |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |     BT=255    |    reserved   |         block length=4        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                        SSRC of source                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* | Highest recv. seq. nr. (16b)  |         ECN_CE_bytes          |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b0-31)                        |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                     Ack vector (b32-63)                       |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-* |                    Timestamp (32bits)                         |
-* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-*/
-//void incomingProprietaryFeedback(uint32_t time_ntp,
-//    unsigned char* buf,
-//    int size);
 #endif
