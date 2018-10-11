@@ -9,7 +9,7 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     plot(T,a(:,2));%,T,a(:,4)); 
     set(gca,'FontSize',12);grid on;
     set(gca,'XTickLabel',[]);    
-    axis([0 Tmax 0 0.2]);grid on;
+    axis([0 Tmax 0 0.4]);grid on;
     title('qdel[s]');
     
     subplot(2,1,2);
@@ -24,7 +24,7 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,7)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.2]);grid on;
+    axis([0 Tmax 0 0.4]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);

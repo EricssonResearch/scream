@@ -1732,6 +1732,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
     /*
     * Compute a maximum bitrate, this bitrates includes the RTP overhead
     */
+
     float br = getMaxRate();
     float rateRtpLimit = br;
     if (initTime_ntp == 0) {
@@ -1745,7 +1746,6 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
     if (lastBitrateAdjustT_ntp == 0) lastBitrateAdjustT_ntp = time_ntp;
     isActive = true;
     lastFrameT_ntp = time_ntp;
-
     if (lossEventFlag || ecnCeEventFlag) {
         /*
         * Loss event handling
@@ -1774,6 +1774,24 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
                 targetBitrate = std::max(minBitrate, targetBitrate*ecnCeEventRateScale);
             }
         }
+        float rtpQueueDelay = rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
+        if (rtpQueueDelay > maxRtpQueueDelay &&
+            (time_ntp - lastRtpQueueDiscardT_ntp > kMinRtpQueueDiscardInterval_ntp)) {
+            /*
+            * RTP queue is cleared as it is becoming too large,
+            * Function is however disabled initially as there is no reliable estimate of the
+            * throughput in the initial phase.
+            */
+            rtpQueue->clear();
+            cerr << time_ntp/65536.0f << " RTP queue discarded for SSRC " << ssrc << endl;
+
+            rtpQueueDiscard = true;
+
+            lastRtpQueueDiscardT_ntp = time_ntp;
+            targetRateScale = 1.0;
+            txSizeBitsAvg = 0.0f;
+        }
+
         lossEventFlag = false;
         ecnCeEventFlag = false;
         lastBitrateAdjustT_ntp = time_ntp;
@@ -1797,11 +1815,15 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
         * RTP packets in the queue, we subtract a number of bytes correspoding to the size
         * of the last frame (including RTP overhead), this is simply the aggregated size
         * of the RTP packets with the highest RTP timestamp
+        * txSizeBits is the number of bits in the RTP queue, this is limited
+        * to just enable small adjustments of the bitrate when the RTP queue grows
         */
         int lastBytes = rtpQueue->getSizeOfLastFrame();
+        int txSizeBitsLimit = (int) (targetBitrate*0.02);
         int txSizeBits = std::max(0, rtpQueue->bytesInQueue() - lastBytes) * 8;
+        txSizeBits = std::min(txSizeBits, txSizeBitsLimit);
 
-        float alpha = 0.5f;
+        const float alpha = 0.5f;
 
         txSizeBitsAvg = txSizeBitsAvg*alpha + txSizeBits*(1.0f - alpha);
         /*
@@ -1822,6 +1844,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
             * throughput in the initial phase.
             */
             rtpQueue->clear();
+            cerr << time_ntp / 65536.0f << " RTP queue discarded for SSRC " << ssrc << endl;
 
             rtpQueueDiscard = true;
 

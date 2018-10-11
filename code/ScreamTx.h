@@ -89,7 +89,7 @@ static const int kQueueDelayNormHistSize = 200;
 static const int kQueueDelayNormHistSizeSh = 50;
 static const int kQueueDelayFractionHistSize = 20;
 static const int kBytesInFlightHistSizeMax = 60;
-static const int kRateUpDateSize = 4;
+static const int kRateUpDateSize = 8;
 static const int kTargetBitrateHistSize = 3;
 static const int kLossRateHistSize = 10;
 
