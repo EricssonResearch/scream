@@ -32,7 +32,7 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
 }
 
 bool ScreamRx::Stream::checkIfFlushAck() {
-    int diff = highestSeqNr - highestSeqNrTx;
+    uint32_t diff = highestSeqNr - highestSeqNrTx;
     return (diff > (kReportedRtpPackets / 4));
 }
 
