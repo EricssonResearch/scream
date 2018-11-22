@@ -96,528 +96,548 @@ static const int kLossRateHistSize = 10;
 class RtpQueueIface;
 class ScreamTx {
 public:
-    /*
-    * Constructor, see constant definitions above for an explanation of parameters
-    * cwnd > 0 sets a different initial congestion window, for example it can be set to
-    *  initialrate/8*rtt
-    * cautiousPacing is set in the range [0.0..1.0]. A higher values restricts the transmission rate of large key frames
-    *  which can be beneficial if it is evident that large key frames cause packet drops, for instance due to
-    *  reduced buffer size in wireless modems.
-    *  This is however at the potential cost of an overall increased transmission delay also when links are uncongested
-    *  as the RTP packets are more likely to be buffered up on the sender side when cautiousPacing is set close to 1.0.
-    * lossBeta == 1.0 means that packet losses are ignored by the congestion control
-    * bytesInFlightHistSize can be set to a larger value than 5(s) for enhanced robustness to media coders that are idle
-    *  for long periods
-    * isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
-    */
-    ScreamTx(float lossBeta = kLossBeta,
-        float ecnCeBeta = kEcnCeBeta,
-        float queueDelayTargetMin = kQueueDelayTargetMin,
-        bool enableSbd = kEnableSbd,
-        float gainUp = kGainUp,
-        float gainDown = kGainDown,
-        int cwnd = 0,  // An initial cwnd larger than 2*mss
-        float cautiousPacing = 0.0f,
-        int bytesInFlightHistSize = 5,
-        bool isL4s = false,
-        bool openWindow = false);
+	/*
+	* Constructor, see constant definitions above for an explanation of parameters
+	* cwnd > 0 sets a different initial congestion window, for example it can be set to
+	*  initialrate/8*rtt
+	* cautiousPacing is set in the range [0.0..1.0]. A higher values restricts the transmission rate of large key frames
+	*  which can be beneficial if it is evident that large key frames cause packet drops, for instance due to
+	*  reduced buffer size in wireless modems.
+	*  This is however at the potential cost of an overall increased transmission delay also when links are uncongested
+	*  as the RTP packets are more likely to be buffered up on the sender side when cautiousPacing is set close to 1.0.
+	* lossBeta == 1.0 means that packet losses are ignored by the congestion control
+	* bytesInFlightHistSize can be set to a larger value than 5(s) for enhanced robustness to media coders that are idle
+	*  for long periods
+	* isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
+	*/
+	ScreamTx(float lossBeta = kLossBeta,
+		float ecnCeBeta = kEcnCeBeta,
+		float queueDelayTargetMin = kQueueDelayTargetMin,
+		bool enableSbd = kEnableSbd,
+		float gainUp = kGainUp,
+		float gainDown = kGainDown,
+		int cwnd = 0,  // An initial cwnd larger than 2*mss
+		float cautiousPacing = 0.0f,
+		int bytesInFlightHistSize = 5,
+		bool isL4s = false,
+		bool openWindow = false);
 
-    ~ScreamTx();
+	~ScreamTx();
 
-    /*
-    * Register a new stream {SSRC,PT} tuple,
-    *  with a priority value in the range ]0.0..1.0]
-    *  where 1.0 denotes the highest priority.
-    * It is recommended that at least one stream has prioritity 1.0.
-    * Bitrates are specified in bps
-    * See constant definitions above for an explanation of other default parameters
-    */
-    void registerNewStream(RtpQueueIface *rtpQueue,
-        uint32_t ssrc,
-        float priority,     // priority in range ]0.0 .. 1.0], 1.0 is highest
-        float minBitrate,   // Min target bitrate
-        float startBitrate, // Starting bitrate
-        float maxBitrate,   // Max target bitrate
-        float rampUpSpeed = kRampUpSpeed,
-        float maxRtpQueueDelay = kMaxRtpQueueDelay,
-        float txQueueSizeFactor = kTxQueueSizeFactor,
-        float queueDelayGuard = kQueueDelayGuard,
-        float lossEventRateScale = kLossEventRateScale,
-        float ecnCeEventRateScale = kEcnCeEventRateScale);
+	/*
+	* Register a new stream {SSRC,PT} tuple,
+	*  with a priority value in the range ]0.0..1.0]
+	*  where 1.0 denotes the highest priority.
+	* It is recommended that at least one stream has prioritity 1.0.
+	* Bitrates are specified in bps
+	* See constant definitions above for an explanation of other default parameters
+	*/
+	void registerNewStream(RtpQueueIface *rtpQueue,
+		uint32_t ssrc,
+		float priority,     // priority in range ]0.0 .. 1.0], 1.0 is highest
+		float minBitrate,   // Min target bitrate
+		float startBitrate, // Starting bitrate
+		float maxBitrate,   // Max target bitrate
+		float rampUpSpeed = kRampUpSpeed,
+		float maxRtpQueueDelay = kMaxRtpQueueDelay,
+		float txQueueSizeFactor = kTxQueueSizeFactor,
+		float queueDelayGuard = kQueueDelayGuard,
+		float lossEventRateScale = kLossEventRateScale,
+		float ecnCeEventRateScale = kEcnCeEventRateScale);
 
-    /*
-     * Updates the min and max bitrates for an existing stream
-     */
-    void updateBitrateStream(uint32_t ssrc,
-        float minBitrate,
-        float maxBitrate);
+	/*
+	 * Updates the min and max bitrates for an existing stream
+	 */
+	void updateBitrateStream(uint32_t ssrc,
+		float minBitrate,
+		float maxBitrate);
 
-    /*
-     * Access the configured RtpQueue of an existing stream
-     */
-    RtpQueueIface * getStreamQueue(uint32_t ssrc);
+	/*
+	 * Access the configured RtpQueue of an existing stream
+	 */
+	RtpQueueIface * getStreamQueue(uint32_t ssrc);
 
-    /*
-    * Call this function for each new video frame
-    *  Note : isOkToTransmit should be called after newMediaFrame
-    */
-    void newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp);
+	/*
+	* Call this function for each new video frame
+	*  Note : isOkToTransmit should be called after newMediaFrame
+	*/
+	void newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp);
 
-    /*
-    * Function determines if an RTP packet with SSRC can be transmitted
-    * Return values :
-    * 0.0  : RTP packet with SSRC can be immediately transmitted
-    *  addTransmitted must be called if packet is transmitted as a result of this
-    * >0.0 : Time [s] until this function should be called again
-    *   This can be used to start a timer
-    *   Note that a call to newMediaFrame or incomingFeedback should
-    *    cause an immediate call to isOkToTransmit
-    * -1.0 : No RTP packet available to transmit or send window is not large enough
-    */
-    float isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc);
+	/*
+	* Function determines if an RTP packet with SSRC can be transmitted
+	* Return values :
+	* 0.0  : RTP packet with SSRC can be immediately transmitted
+	*  addTransmitted must be called if packet is transmitted as a result of this
+	* >0.0 : Time [s] until this function should be called again
+	*   This can be used to start a timer
+	*   Note that a call to newMediaFrame or incomingFeedback should
+	*    cause an immediate call to isOkToTransmit
+	* -1.0 : No RTP packet available to transmit or send window is not large enough
+	*/
+	float isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc);
 
-    /*
-    * Add packet to list of transmitted packets
-    * should be called when an RTP packet transmitted
-    * Return time until isOkToTransmit can be called again
-    */
-    float addTransmitted(uint32_t timestamp_ntp, // Wall clock ts when packet is transmitted
-        uint32_t ssrc,
-        int size,
-        uint16_t seqNr);
+	/*
+	* Add packet to list of transmitted packets
+	* should be called when an RTP packet transmitted
+	* Return time until isOkToTransmit can be called again
+	*/
+	float addTransmitted(uint32_t timestamp_ntp, // Wall clock ts when packet is transmitted
+		uint32_t ssrc,
+		int size,
+		uint16_t seqNr);
 
-    /* New incoming feedback, this function
-     * triggers a CWND update
-     * The SCReAM timestamp is in jiffies, where the frequency is controlled
-     * by the timestamp clock frequency(default 1000Hz)
-     * The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
-     *  Note : isOkToTransmit should be called after incomingFeedback
-     /*
-     /* Parse standardized feedback according to
-     * https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
-     * Current implementation implements -02 version
-     * It is assumed that SR/RR or other non-CCFB feedback is stripped
-     */
-    void incomingStandardizedFeedback(uint32_t time_ntp,
-        unsigned char* buf,
-        int size);
+	/* New incoming feedback, this function
+	 * triggers a CWND update
+	 * The SCReAM timestamp is in jiffies, where the frequency is controlled
+	 * by the timestamp clock frequency(default 1000Hz)
+	 * The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
+	 *  Note : isOkToTransmit should be called after incomingFeedback
+	 /*
+	 /* Parse standardized feedback according to
+	 * https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
+	 * Current implementation implements -02 version
+	 * It is assumed that SR/RR or other non-CCFB feedback is stripped
+	 */
+	void incomingStandardizedFeedback(uint32_t time_ntp,
+		unsigned char* buf,
+		int size);
 
-    void incomingStandardizedFeedback(uint32_t time_ntp,
-        int streamId,
-        uint32_t timestamp,
-        uint16_t seqNr,
-        uint8_t ceBits,
-        bool isLast);
-    /*
-    * Get the target bitrate for stream with SSRC
-    * NOTE!, Because SCReAM operates on RTP packets, the target bitrate will
-    *  also include the RTP overhead. This means that a subsequent call to set the
-    *  media coder target bitrate must subtract an estimate of the RTP + framing
-    *  overhead. This is not critical for Video bitrates but can be important
-    *  when SCReAM is used to congestion control e.g low bitrate audio streams
-    * Function returns -1 if a loss is detected, this signal can be used to
-    *  request a new key frame from a video encoder
-    */
-    float getTargetBitrate(uint32_t ssrc);
+	void incomingStandardizedFeedback(uint32_t time_ntp,
+		int streamId,
+		uint32_t timestamp,
+		uint16_t seqNr,
+		uint8_t ceBits,
+		bool isLast);
+	/*
+	* Get the target bitrate for stream with SSRC
+	* NOTE!, Because SCReAM operates on RTP packets, the target bitrate will
+	*  also include the RTP overhead. This means that a subsequent call to set the
+	*  media coder target bitrate must subtract an estimate of the RTP + framing
+	*  overhead. This is not critical for Video bitrates but can be important
+	*  when SCReAM is used to congestion control e.g low bitrate audio streams
+	* Function returns -1 if a loss is detected, this signal can be used to
+	*  request a new key frame from a video encoder
+	*/
+	float getTargetBitrate(uint32_t ssrc);
 
-    /*
-    * Set target priority for a given stream, priority value should be in range ]0.0..1.0]
-    */
-    void setTargetPriority(uint32_t ssrc, float aPriority);
+	/*
+	* Set target priority for a given stream, priority value should be in range ]0.0..1.0]
+	*/
+	void setTargetPriority(uint32_t ssrc, float aPriority);
 
-    /*
-    * Get verbose log information
-    */
-    void getLog(float time, char *s);
+	/*
+	* Set maxTotalBitrate
+	* This featire is useful if it is known that for instance a cellular modem does not support a higher uplink bitrate
+	* than e.g. 50Mbps. When maxTotalBitrate is set to 50Mbps, then unnecessary bandwidth probing beyond this bitrate
+	* is avoided, this reduces delay jitter.
+	*/
+	void setMaxTotalBitrate(float aMaxTotalBitrate) {
+		maxTotalBitrate = aMaxTotalBitrate;
+	}
 
-    /*
-    * Get verbose log information
-    */
-    void getShortLog(float time, char *s);
+	/*
+	* Get maxTotalBitrate
+	*/
+	float getMaxTotalBitrate() {
+		return maxTotalBitrate;
+	}
 
-    /*
-    * Get verbose log information
-    */
-    void getVeryShortLog(float time, char *s);
 
-    /*
-    * Get overall simplified statistics
-    */
-    void getStatistics(float time, char *s);
+	/*
+	* Get verbose log information
+	*/
+	void getLog(float time, char *s);
 
-    /*
-    * Set file pointer for detailed per-ACK log
-    */
-    void setDetailedLogFp(FILE *fp) {
-        fp_log = fp;
-    }
+	/*
+	* Get verbose log information
+	*/
+	void getShortLog(float time, char *s);
+
+	/*
+	* Get verbose log information
+	*/
+	void getVeryShortLog(float time, char *s);
+
+	/*
+	* Get overall simplified statistics
+	*/
+	void getStatistics(float time, char *s);
+
+	/*
+	* Set file pointer for detailed per-ACK log
+	*/
+	void setDetailedLogFp(FILE *fp) {
+		fp_log = fp;
+	}
 
 private:
-    /*
-    * Struct for list of RTP packets in flight
-    */
-    struct Transmitted {
-        uint32_t timeTx_ntp;
-        int size;
-        uint16_t seqNr;
-        bool isUsed;
-        bool isAcked;
-        bool isAfterReceivedEdge;
-    };
+	/*
+	* Struct for list of RTP packets in flight
+	*/
+	struct Transmitted {
+		uint32_t timeTx_ntp;
+		int size;
+		uint16_t seqNr;
+		bool isUsed;
+		bool isAcked;
+		bool isAfterReceivedEdge;
+	};
 
-    /*
-      * Statistics for the network congestion control and the
-      *  stream[0]
-      */
-    class Statistics {
-    public:
-        Statistics();
-        void getSummary(float time, char s[]);
-        void add(float rateTx, float rateLost, float rtt, float queueDelay);
-    private:
-        float lossRateHist[kLossRateHistSize];
-        float rateLostAcc;
-        int rateLostN;
-        int lossRateHistPtr;
-        float avgRateTx;
-        float avgRtt;
-        float avgQueueDelay;
-        float sumRateTx;
-        float sumRateLost;
-    };
+	/*
+	  * Statistics for the network congestion control and the
+	  *  stream[0]
+	  */
+	class Statistics {
+	public:
+		Statistics();
+		void getSummary(float time, char s[]);
+		void add(float rateTx, float rateLost, float rtt, float queueDelay);
+	private:
+		float lossRateHist[kLossRateHistSize];
+		float rateLostAcc;
+		int rateLostN;
+		int lossRateHistPtr;
+		float avgRateTx;
+		float avgRtt;
+		float avgQueueDelay;
+		float sumRateTx;
+		float sumRateLost;
+	};
 
-    /*
-    * One instance is created for each {SSRC,PT} tuple
-    */
-    class Stream {
-    public:
-        Stream(ScreamTx *parent,
-            RtpQueueIface *rtpQueue,
-            uint32_t ssrc,
-            float priority,
-            float minBitrate,
-            float startBitrate,
-            float maxBitrate,
-            float rampUpSpeed,
-            float maxRtpQueueDelay,
-            float txQueueSizeFactor,
-            float queueDelayGuard,
-            float lossEventRateScale,
-            float ecnCeEventRateScale);
+	/*
+	* One instance is created for each {SSRC,PT} tuple
+	*/
+	class Stream {
+	public:
+		Stream(ScreamTx *parent,
+			RtpQueueIface *rtpQueue,
+			uint32_t ssrc,
+			float priority,
+			float minBitrate,
+			float startBitrate,
+			float maxBitrate,
+			float rampUpSpeed,
+			float maxRtpQueueDelay,
+			float txQueueSizeFactor,
+			float queueDelayGuard,
+			float lossEventRateScale,
+			float ecnCeEventRateScale);
 
-        float getMaxRate();
+		float getMaxRate();
 
-        float getTargetBitrate();
+		float getTargetBitrate();
 
-        void updateRate(uint32_t time_ntp);
+		void updateRate(uint32_t time_ntp);
 
-        void updateTargetBitrateI(float br);
+		void updateTargetBitrateI(float br);
 
-        void updateTargetBitrate(uint32_t time_ntp);
+		void updateTargetBitrate(uint32_t time_ntp);
 
-        bool isRtpQueueDiscard();
+		bool isRtpQueueDiscard();
 
-        bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
-        ScreamTx *parent;
-        RtpQueueIface *rtpQueue;      // RTP Packet queue
-        uint32_t ssrc;            // SSRC of stream
-        float rampUpSpeed;
-        float maxRtpQueueDelay;
-        float txQueueSizeFactor;
-        float queueDelayGuard;
-        float lossEventRateScale;
-        float ecnCeEventRateScale;
+		bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
+		ScreamTx *parent;
+		RtpQueueIface *rtpQueue;      // RTP Packet queue
+		uint32_t ssrc;            // SSRC of stream
+		float rampUpSpeed;
+		float maxRtpQueueDelay;
+		float txQueueSizeFactor;
+		float queueDelayGuard;
+		float lossEventRateScale;
+		float ecnCeEventRateScale;
 
-        int credit;             // Credit that is received if another stream gets
-        //  priority to transmit
-        int creditLost;         // Amount of lost (unused) credit, input to
-        //  adjustPriorities function
-        float targetPriority;   // Stream target priority
-        float targetPriorityInv;// Stream target priority inverted
-        int bytesTransmitted;   // Number of bytes transmitted
-        int bytesAcked;         // Number of ACKed bytes
-        int bytesLost;          // Number of lost bytes
-        float rateTransmitted;  // Transmitted rate
-        float rateAcked;        // ACKed rate
-        float rateLost;         // Lost packets (bit)rate
-        uint16_t hiSeqAck;      // Highest sequence number ACKed
-        uint16_t hiSeqTx;       // Highest sequence number transmitted
-        float minBitrate;       // Min bitrate
-        float maxBitrate;       // Max bitrate
-        float targetBitrate;    // Target bitrate
-        float targetBitrateI;   // Target bitrate inflection point
-        bool wasFastStart;      // Was fast start
-        bool lossEventFlag;     // Was loss event
-        bool ecnCeEventFlag;    // Was ECN mark event
-        float txSizeBitsAvg;    // Avergage nymber of bits in RTP queue
-        uint32_t lastBitrateAdjustT_ntp; // Last time rate was updated for this stream
-        uint32_t lastRateUpdateT_ntp;    // Last time rate estimate was updated
-        uint32_t lastTargetBitrateIUpdateT_ntp;    // Last time rate estimate was updated
+		int credit;             // Credit that is received if another stream gets
+		//  priority to transmit
+		int creditLost;         // Amount of lost (unused) credit, input to
+		//  adjustPriorities function
+		float targetPriority;   // Stream target priority
+		float targetPriorityInv;// Stream target priority inverted
+		int bytesTransmitted;   // Number of bytes transmitted
+		int bytesAcked;         // Number of ACKed bytes
+		int bytesLost;          // Number of lost bytes
+		float rateTransmitted;  // Transmitted rate
+		float rateAcked;        // ACKed rate
+		float rateLost;         // Lost packets (bit)rate
+		uint16_t hiSeqAck;      // Highest sequence number ACKed
+		uint16_t hiSeqTx;       // Highest sequence number transmitted
+		float minBitrate;       // Min bitrate
+		float maxBitrate;       // Max bitrate
+		float targetBitrate;    // Target bitrate
+		float targetBitrateI;   // Target bitrate inflection point
+		bool wasFastStart;      // Was fast start
+		bool lossEventFlag;     // Was loss event
+		bool ecnCeEventFlag;    // Was ECN mark event
+		float txSizeBitsAvg;    // Avergage nymber of bits in RTP queue
+		uint32_t lastBitrateAdjustT_ntp; // Last time rate was updated for this stream
+		uint32_t lastRateUpdateT_ntp;    // Last time rate estimate was updated
+		uint32_t lastTargetBitrateIUpdateT_ntp;    // Last time rate estimate was updated
 
-        uint32_t timeTxAck_ntp;  // timestamp when higest ACKed SN was transmitted
-        uint32_t lastTransmitT_ntp;
+		uint32_t timeTxAck_ntp;  // timestamp when higest ACKed SN was transmitted
+		uint32_t lastTransmitT_ntp;
 
-        int bytesRtp;           // Number of RTP bytes from media coder
-        float rateRtp;          // Media bitrate
-        float rateRtpHist[kRateUpDateSize];
-        float rateAckedHist[kRateUpDateSize];
-        float rateLostHist[kRateUpDateSize];
-        float rateTransmittedHist[kRateUpDateSize];
-        int rateUpdateHistPtr;
-        float targetBitrateHist[kTargetBitrateHistSize];
-        int targetBitrateHistPtr;
-        uint32_t targetBitrateHistUpdateT_ntp;
-        float targetRateScale;
+		int bytesRtp;           // Number of RTP bytes from media coder
+		float rateRtp;          // Media bitrate
+		float rateRtpHist[kRateUpDateSize];
+		float rateAckedHist[kRateUpDateSize];
+		float rateLostHist[kRateUpDateSize];
+		float rateTransmittedHist[kRateUpDateSize];
+		int rateUpdateHistPtr;
+		float targetBitrateHist[kTargetBitrateHistSize];
+		int targetBitrateHistPtr;
+		uint32_t targetBitrateHistUpdateT_ntp;
+		float targetRateScale;
 
-        bool isActive;
-        uint32_t lastFrameT_ntp;
-        uint32_t initTime_ntp;
-        bool rtpQueueDiscard;
-        uint32_t lastRtpQueueDiscardT_ntp;
-        bool wasRepairLoss;
-        bool repairLoss;
-        uint16_t ecnCeMarkedBytes;
+		bool isActive;
+		uint32_t lastFrameT_ntp;
+		uint32_t initTime_ntp;
+		bool rtpQueueDiscard;
+		uint32_t lastRtpQueueDiscardT_ntp;
+		bool wasRepairLoss;
+		bool repairLoss;
+		uint16_t ecnCeMarkedBytes;
 
-        Transmitted txPackets[kMaxTxPackets];
-        int txPacketsPtr;
-    };
+		Transmitted txPackets[kMaxTxPackets];
+		int txPacketsPtr;
+	};
 
-    /*
-    * Initialize values
-    */
-    void initialize(uint32_t time_ntp);
+	/*
+	* Initialize values
+	*/
+	void initialize(uint32_t time_ntp);
 
-    /*
-    * Mark ACKed RTP packets
-    */
-    void markAcked(uint32_t time_ntp,
-    struct Transmitted *txPackets,
-        uint16_t seqNr,
-        uint32_t timestamp,
-        Stream *stream,
-        uint8_t ceBits,
-        uint16_t &encCeMarkedBytes,
-        bool isLast);
+	/*
+	* Mark ACKed RTP packets
+	*/
+	void markAcked(uint32_t time_ntp,
+		struct Transmitted *txPackets,
+		uint16_t seqNr,
+		uint32_t timestamp,
+		Stream *stream,
+		uint8_t ceBits,
+		uint16_t &encCeMarkedBytes,
+		bool isLast);
 
-    /*
-    * Update CWND
-    */
-    void updateCwnd(uint32_t time_ntp);
+	/*
+	* Update CWND
+	*/
+	void updateCwnd(uint32_t time_ntp);
 
-    /*
-    * Detect lost RTP packets
-    */
-    void detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream);
+	/*
+	* Detect lost RTP packets
+	*/
+	void detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream);
 
-    /*
-    * Call this function at regular intervals to determine active streams
-    */
-    void determineActiveStreams(uint32_t time_ntp);
+	/*
+	* Call this function at regular intervals to determine active streams
+	*/
+	void determineActiveStreams(uint32_t time_ntp);
 
-    /*
-    * Compute 1st order prediction coefficient of queue delay multiplied by the queue delay fraction
-    * A value [0.0..1.0] indicates if queue delay is increasing
-    * This gives a rough estimate of how the queuing delay delay evolves
-    */
-    void computeQueueDelayTrend();
+	/*
+	* Compute 1st order prediction coefficient of queue delay multiplied by the queue delay fraction
+	* A value [0.0..1.0] indicates if queue delay is increasing
+	* This gives a rough estimate of how the queuing delay delay evolves
+	*/
+	void computeQueueDelayTrend();
 
-    /*
-    * Estimate one way delay [jiffy] and updated base delay
-    * Base delay is not subtracted
-    */
-    uint32_t estimateOwd(uint32_t time_ntp);
+	/*
+	* Estimate one way delay [jiffy] and updated base delay
+	* Base delay is not subtracted
+	*/
+	uint32_t estimateOwd(uint32_t time_ntp);
 
-    /*
-    * return base delay [jiffy]
-    */
-    uint32_t getBaseOwd();
+	/*
+	* return base delay [jiffy]
+	*/
+	uint32_t getBaseOwd();
 
-    /*
-    * Compute indicators of shared bottleneck
-    */
-    void computeSbd();
+	/*
+	* Compute indicators of shared bottleneck
+	*/
+	void computeSbd();
 
-    /*
-    * True if competing (TCP)flows detected
-    */
-    bool isCompetingFlows();
+	/*
+	* True if competing (TCP)flows detected
+	*/
+	bool isCompetingFlows();
 
-    /*
-    * Get stream with corresponding SSRC
-    */
-    Stream* getStream(uint32_t ssrc, int &streamId);
+	/*
+	* Get stream with corresponding SSRC
+	*/
+	Stream* getStream(uint32_t ssrc, int &streamId);
 
-    /*
-    * Adjust stream bitrates to reflect priorities
-    */
-    void adjustPriorities(uint32_t time_ntp);
+	/*
+	* Adjust stream bitrates to reflect priorities
+	*/
+	void adjustPriorities(uint32_t time_ntp);
 
-    /*
-    * Get the prioritized stream
-    *  Return NULL if no stream with
-    *  with RTP packets
-    */
-    Stream* getPrioritizedStream(uint32_t time_ntp);
+	/*
+	* Get the prioritized stream
+	*  Return NULL if no stream with
+	*  with RTP packets
+	*/
+	Stream* getPrioritizedStream(uint32_t time_ntp);
 
-    /*
-    * Add credit to unserved streams
-    */
-    void addCredit(uint32_t time_ntp,
-        Stream* servedStream,
-        int transmittedBytes);
+	/*
+	* Add credit to unserved streams
+	*/
+	void addCredit(uint32_t time_ntp,
+		Stream* servedStream,
+		int transmittedBytes);
 
-    /*
-    * Subtract used credit
-    */
-    void subtractCredit(uint32_t time_ntp,
-        Stream* servedStream,
-        int transmittedBytes);
+	/*
+	* Subtract used credit
+	*/
+	void subtractCredit(uint32_t time_ntp,
+		Stream* servedStream,
+		int transmittedBytes);
 
-    /*
-    * return 1 if in fast start
-    */
-    int isInFastStart() { return inFastStart ? 1 : 0; };
+	/*
+	* return 1 if in fast start
+	*/
+	int isInFastStart() { return inFastStart ? 1 : 0; };
 
-    /*
-    * Get the fraction between queue delay and the queue delay target
-    */
-    float getQueueDelayFraction();
+	/*
+	* Get the fraction between queue delay and the queue delay target
+	*/
+	float getQueueDelayFraction();
 
-    /*
-    * Get the queuing delay trend
-    */
-    float getQueueDelayTrend();
+	/*
+	* Get the queuing delay trend
+	*/
+	float getQueueDelayTrend();
 
-    /*
-    * Variables for network congestion control
-    */
+	/*
+	* Variables for network congestion control
+	*/
 
-    /*
-    * Related to computation of queue delay and target queuing delay
-    */
-    float lossBeta;
-    float ecnCeBeta;
-    float queueDelayTargetMin;
-    bool enableSbd;
-    float gainUp;
-    float gainDown;
-    float cautiousPacing;
+	/*
+	* Related to computation of queue delay and target queuing delay
+	*/
+	float lossBeta;
+	float ecnCeBeta;
+	float queueDelayTargetMin;
+	bool enableSbd;
+	float gainUp;
+	float gainDown;
+	float cautiousPacing;
 
-    uint32_t sRttSh_ntp;
-    uint32_t sRtt_ntp;
-    float sRtt;
-    uint32_t ackedOwd;
-    uint32_t baseOwd;
+	uint32_t sRttSh_ntp;
+	uint32_t sRtt_ntp;
+	float sRtt;
+	uint32_t ackedOwd;
+	uint32_t baseOwd;
 
-    uint32_t baseOwdHist[kBaseOwdHistSize];
-    int baseOwdHistPtr;
-    uint32_t baseOwdHistMin;
-    float queueDelay;
-    float queueDelayFractionAvg;
-    float queueDelayFractionHist[kQueueDelayFractionHistSize];
-    int queueDelayFractionHistPtr;
-    float queueDelayTrend;
-    float queueDelayTarget;
-    float queueDelayNormHist[kQueueDelayNormHistSize];
-    int queueDelayNormHistPtr;
-    float queueDelaySbdVar;
-    float queueDelaySbdMean;
-    float queueDelaySbdSkew;
-    float queueDelaySbdMeanSh;
-    float queueDelayMax;
+	uint32_t baseOwdHist[kBaseOwdHistSize];
+	int baseOwdHistPtr;
+	uint32_t baseOwdHistMin;
+	float queueDelay;
+	float queueDelayFractionAvg;
+	float queueDelayFractionHist[kQueueDelayFractionHistSize];
+	int queueDelayFractionHistPtr;
+	float queueDelayTrend;
+	float queueDelayTarget;
+	float queueDelayNormHist[kQueueDelayNormHistSize];
+	int queueDelayNormHistPtr;
+	float queueDelaySbdVar;
+	float queueDelaySbdMean;
+	float queueDelaySbdSkew;
+	float queueDelaySbdMeanSh;
+	float queueDelayMax;
 
-    /*
-    * CWND management
-    */
-    int bytesNewlyAcked;
-    int mss; // Maximum Segment Size
-    int cwnd; // congestion window
-    int cwndMin;
-    bool openWindow;
-    int bytesInFlight;
-    int bytesInFlightLog;
-    int bytesInFlightHistLo[kBytesInFlightHistSizeMax];
-    int bytesInFlightHistHi[kBytesInFlightHistSizeMax];
-    int bytesInFlightHistSize;
-    int bytesInFlightHistPtr;
-    int bytesInFlightMaxLo;
-    int bytesInFlightHistLoMem;
-    int bytesInFlightMaxHi;
-    int bytesInFlightHistHiMem;
-    float maxBytesInFlight;
-    int accBytesInFlightMax;
-    int nAccBytesInFlightMax;
-    float rateTransmitted;
-    float rateAcked;
-    float queueDelayTrendMem;
-    float maxRate;
-    uint32_t lastCwndUpdateT_ntp;
-    bool isL4s;
-    float l4sAlpha;
-    int bytesMarkedThisRtt;
-    int bytesDeliveredThisRtt;
-    uint32_t lastL4sAlphaUpdateT_ntp;
-    /*
-    * Loss event
-    */
-    bool lossEvent;
-    bool wasLossEvent;
-    float lossEventRate;
+	/*
+	* CWND management
+	*/
+	int bytesNewlyAcked;
+	int mss; // Maximum Segment Size
+	int cwnd; // congestion window
+	int cwndMin;
+	bool openWindow;
+	int bytesInFlight;
+	int bytesInFlightLog;
+	int bytesInFlightHistLo[kBytesInFlightHistSizeMax];
+	int bytesInFlightHistHi[kBytesInFlightHistSizeMax];
+	int bytesInFlightHistSize;
+	int bytesInFlightHistPtr;
+	int bytesInFlightMaxLo;
+	int bytesInFlightHistLoMem;
+	int bytesInFlightMaxHi;
+	int bytesInFlightHistHiMem;
+	float maxBytesInFlight;
+	int accBytesInFlightMax;
+	int nAccBytesInFlightMax;
+	float rateTransmitted;
+	float rateAcked;
+	float queueDelayTrendMem;
+	float maxRate;
+	uint32_t lastCwndUpdateT_ntp;
+	bool isL4s;
+	float l4sAlpha;
+	int bytesMarkedThisRtt;
+	int bytesDeliveredThisRtt;
+	uint32_t lastL4sAlphaUpdateT_ntp;
+	float maxTotalBitrate;
 
-    /*
-    * ECN-CE
-    */
-    bool ecnCeEvent;
+	/*
+	* Loss event
+	*/
+	bool lossEvent;
+	bool wasLossEvent;
+	float lossEventRate;
 
-    /*
-    * Fast start
-    */
-    bool inFastStart;
+	/*
+	* ECN-CE
+	*/
+	bool ecnCeEvent;
 
-    /*
-    * Transmission scheduling
-    */
-    uint32_t paceInterval_ntp;
-    float paceInterval;
-    float rateTransmittedAvg;
+	/*
+	* Fast start
+	*/
+	bool inFastStart;
 
-    /*
-    * Update control variables
-    */
-    bool isInitialized;
-    uint32_t lastSRttUpdateT_ntp;
-    uint32_t lastBaseOwdAddT_ntp;
-    uint32_t baseOwdResetT_ntp;
-    uint32_t lastAddToQueueDelayFractionHistT_ntp;
-    uint32_t lastBytesInFlightT_ntp;
-    uint32_t lastCongestionDetectedT_ntp;
-    uint32_t lastLossEventT_ntp;
-    uint32_t lastTransmitT_ntp;
-    uint32_t nextTransmitT_ntp;
-    uint32_t lastRateUpdateT_ntp;
-    uint32_t lastAdjustPrioritiesT_ntp;
-    uint32_t lastRttT_ntp;
-    uint32_t lastBaseDelayRefreshT_ntp;
-    uint32_t initTime_ntp;
-    float queueDelayMin;
-    float queueDelayMinAvg;
+	/*
+	* Transmission scheduling
+	*/
+	uint32_t paceInterval_ntp;
+	float paceInterval;
+	float rateTransmittedAvg;
 
-    /*
-    * Variables for multiple steams handling
-    */
-    Stream *streams[kMaxStreams];
-    int nStreams;
+	/*
+	* Update control variables
+	*/
+	bool isInitialized;
+	uint32_t lastSRttUpdateT_ntp;
+	uint32_t lastBaseOwdAddT_ntp;
+	uint32_t baseOwdResetT_ntp;
+	uint32_t lastAddToQueueDelayFractionHistT_ntp;
+	uint32_t lastBytesInFlightT_ntp;
+	uint32_t lastCongestionDetectedT_ntp;
+	uint32_t lastLossEventT_ntp;
+	uint32_t lastTransmitT_ntp;
+	uint32_t nextTransmitT_ntp;
+	uint32_t lastRateUpdateT_ntp;
+	uint32_t lastAdjustPrioritiesT_ntp;
+	uint32_t lastRttT_ntp;
+	uint32_t lastBaseDelayRefreshT_ntp;
+	uint32_t initTime_ntp;
+	float queueDelayMin;
+	float queueDelayMinAvg;
 
-    /*
-    * Statistics
-    */
-    Statistics *statistics;
+	/*
+	* Variables for multiple steams handling
+	*/
+	Stream *streams[kMaxStreams];
+	int nStreams;
 
-    /*
-    *
-    */
-    FILE *fp_log;
-    bool completeLogItem;
+	/*
+	* Statistics
+	*/
+	Statistics *statistics;
+
+	/*
+	*
+	*/
+	FILE *fp_log;
+	bool completeLogItem;
 
 };
 #endif

@@ -11,7 +11,7 @@
 using namespace std;
 
 const float Tmax = 40;
-const bool isChRate = true;
+const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
 const bool isL4s = false;
@@ -24,13 +24,16 @@ int swprio = -1;
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
-const int mode = 0x01;
+const int mode = 0x03;
 const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.05f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false);
+
+	//screamTx->setMaxTotalBitrate(80e6);
+
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
@@ -43,7 +46,8 @@ int main(int argc, char* argv[])
         screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 2056e3f, 10024e3f, 80192e3f, 10e6f, 0.2f, 0.1f, 0.1f);
         //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x02)
-        screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
+		screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 2056e3f, 10024e3f, 80192e3f, 10e6f, 0.2f, 0.1f, 0.1f);
+	    //screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x04)
         screamTx->registerNewStream(rtpQueue[2], 12, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.2f, 0.1f, 0.1f);
 
