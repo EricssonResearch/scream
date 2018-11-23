@@ -270,6 +270,10 @@ public:
 		fp_log = fp;
 	}
 
+	void setDetailedLogExtraData(char *s) {
+		strcpy(detailedLogExtraData,s);
+	}
+
 private:
 	/*
 	* Struct for list of RTP packets in flight
@@ -632,6 +636,7 @@ private:
 	* Statistics
 	*/
 	Statistics *statistics;
+	char detailedLogExtraData[256];
 
 	/*
 	*

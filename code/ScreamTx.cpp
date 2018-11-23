@@ -143,6 +143,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	fp_log(0),
 	completeLogItem(false)
 {
+	strcpy(detailedLogExtraData,"");
 	if (cwnd_ == 0) {
 		cwnd = kInitMss * 2;
 	}
@@ -687,7 +688,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 		}
 
 		if (fp_log && completeLogItem) {
-			fprintf(fp_log, " %d %d %1.0f %d %d %d %1.0f %1.0f %1.0f %1.0f ", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ecnCeMarkedBytes, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost);
+			fprintf(fp_log, " %d,%d,%1.0f,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%s", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ecnCeMarkedBytes, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost,detailedLogExtraData);
 		}
 
 		if (isL4s) {
@@ -783,7 +784,7 @@ void ScreamTx::markAcked(uint32_t time_ntp,
 			uint32_t rtt = time_ntp - tmp->timeTx_ntp;
 
 			if (fp_log && isLast) {
-				fprintf(fp_log, "%1.3f %1.3f %1.3f ", time_ntp*ntp2SecScaleFactor, queueDelay, rtt*ntp2SecScaleFactor);
+				fprintf(fp_log, "%1.3f,%1.3f,%1.3f,", time_ntp*ntp2SecScaleFactor, queueDelay, rtt*ntp2SecScaleFactor);
 				completeLogItem = true;
 			}
 			if (rtt < 1000000 && isLast) {
