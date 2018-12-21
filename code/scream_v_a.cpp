@@ -32,7 +32,7 @@ int main(int argc, char* argv[])
     int tick = (int)(timeBase / FR);
     ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false);
 
-	//screamTx->setMaxTotalBitrate(50e6);
+	screamTx->setCwndMinLow(5000);
 
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };

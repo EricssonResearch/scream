@@ -98,6 +98,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	mss(kInitMss),
 	cwnd(kInitMss * 2),
 	cwndMin(kInitMss * 2),
+	cwndMinLow(0),
 	lastBytesInFlightT_ntp(0),
 	bytesInFlightMaxLo(0),
 	bytesInFlightMaxHi(0),
@@ -329,7 +330,7 @@ void ScreamTx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp) {
 		int sizeOfNextRtp = stream->rtpQueue->sizeOfNextRtp();
 		mss = std::max(mss, sizeOfNextRtp);
 		if (!openWindow)
-			cwndMin = 2 * mss;
+			cwndMin = std::max(cwndMinLow,2 * mss);
 		cwnd = max(cwnd, cwndMin);
 	}
 }
@@ -448,7 +449,7 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 		*/
 		mss = kInitMss;
 		if (!openWindow)
-			cwndMin = kMinCwndMss * mss;
+			cwndMin = std::max(cwndMinLow,kMinCwndMss * mss);
 		cwnd = max(cwnd, cwndMin);
 	}
 
@@ -542,7 +543,7 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 	*/
 	mss = std::max(mss, size);
 	if (!openWindow)
-		cwndMin = 2 * mss;
+		cwndMin = std::max(cwndMinLow,2 * mss);
 	cwnd = max(cwnd, cwndMin);
 
 	/*

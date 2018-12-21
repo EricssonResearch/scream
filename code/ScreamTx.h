@@ -270,9 +270,20 @@ public:
 		fp_log = fp;
 	}
 
+	/*
+	* extra data to be appended to detailed log
+	*/
 	void setDetailedLogExtraData(char *s) {
 		strcpy(detailedLogExtraData,s);
 	}
+
+  /*
+	* Set lowest possible cwndMin
+	*/
+	void setCwndMinLow(int aValue) {
+		cwndMinLow = aValue;
+	}
+
 
 private:
 	/*
@@ -555,6 +566,7 @@ private:
 	int mss; // Maximum Segment Size
 	int cwnd; // congestion window
 	int cwndMin;
+	int cwndMinLow;
 	bool openWindow;
 	int bytesInFlight;
 	int bytesInFlightLog;
