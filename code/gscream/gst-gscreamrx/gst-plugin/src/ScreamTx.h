@@ -4,7 +4,6 @@
 #include <string.h>
 #include <iostream>
 #include <cstdint>
-extern "C" {
 using namespace std;
 
 /*
@@ -49,8 +48,6 @@ static const float kGainDown = 2.0f;
 // Stream related default parameters
 // Max video rampup speed in bps/s (bits per second increase per second)
 static const float kRampUpSpeed = 200000.0f; // bps/s
-// Max video rampup scale as fraction of the current target bitrate
-static const float kRampUpScale = 0.2f; 
 // Max RTP queue delay, RTP queue is cleared if this value is exceeded
 static const float kMaxRtpQueueDelay = 0.1;  // 0.1s
 // Compensation factor for RTP queue size
@@ -142,7 +139,6 @@ public:
 		float startBitrate, // Starting bitrate
 		float maxBitrate,   // Max target bitrate
 		float rampUpSpeed = kRampUpSpeed,
-		float rampUpScale = kRampUpScale,
 		float maxRtpQueueDelay = kMaxRtpQueueDelay,
 		float txQueueSizeFactor = kTxQueueSizeFactor,
 		float queueDelayGuard = kQueueDelayGuard,
@@ -336,7 +332,6 @@ private:
 			float startBitrate,
 			float maxBitrate,
 			float rampUpSpeed,
-			float rampUpScale,
 			float maxRtpQueueDelay,
 			float txQueueSizeFactor,
 			float queueDelayGuard,
@@ -360,7 +355,6 @@ private:
 		RtpQueueIface *rtpQueue;      // RTP Packet queue
 		uint32_t ssrc;            // SSRC of stream
 		float rampUpSpeed;
-		float rampUpScale;
 		float maxRtpQueueDelay;
 		float txQueueSizeFactor;
 		float queueDelayGuard;
@@ -663,5 +657,4 @@ private:
 	bool completeLogItem;
 
 };
-}
 #endif
