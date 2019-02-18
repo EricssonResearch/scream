@@ -120,9 +120,8 @@ int main (int argc, char *argv[])
 
 
   char s[100];
-  strcpy(s,argv[1]);
   //g_object_set (G_OBJECT(videosrc),"is-live", 1,  "horizontal-speed", 5, "pattern", 11, NULL);
-  g_object_set (G_OBJECT(videosrc),"device", s,  NULL);
+  g_object_set (G_OBJECT(videosrc),"device", argv[1],  NULL);
 
   rtpbin          = gst_element_factory_make ("rtpbin",         "rtpbin");
   g_object_set (rtpbin, "rtp-profile", GST_RTP_PROFILE_AVPF, NULL);
