@@ -1983,7 +1983,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				* Avoid that the target bitrate is reduced if it actually is the media
 				* coder that limits the output rate e.g due to inactivity
 				*/
-				if (rateRtp < targetBitrate*0.9f)
+				if (rateRtp < targetBitrate*0.9f && parent->getQueueDelayTrend() < 0.5f)
 					increment = 0.0f;
 				/*
 				* Also avoid that the target bitrate is reduced if

@@ -95,7 +95,7 @@ int main (int argc, char *argv[])
   GMainLoop *loop;
 
   GstElement *rtpbin, *pipeline, *capsfilter, *rtpsrc, *rtcpsrc, *rtcpsink, *rtpdepay,
-    *decodebin, *videoconvert, *videosink, *gscreamrx;
+    *decodebin, *videoconvert, *videosink, *gscreamrx, *rtpjitterbuffer;
   GstBus *bus;
   guint bus_watch_id;
   GstCaps *udpcaps;
@@ -123,12 +123,13 @@ int main (int argc, char *argv[])
   g_object_set(G_OBJECT(rtcpsrc), "port", 5001, NULL);
   g_assert (rtcpsrc);
   rtcpsink        = gst_element_factory_make("udpsink",          "rtcpsink");
-  g_object_set (rtcpsink, "port", 5001, "host", argv[1], NULL);
+  g_object_set (rtcpsink, "port", 5001, "host", argv[1], "bind-port", 5001, NULL);
   /* no need for synchronisation or preroll on the RTCP sink */
   g_object_set (rtcpsink, "async", FALSE, "sync", FALSE, NULL);
   g_assert (rtcpsink);
 
   gscreamrx       = gst_element_factory_make("gscreamrx",    "gscreamrx");
+  rtpjitterbuffer    = gst_element_factory_make("rtpjitterbuffer",    "rtpjitterbuffer");
   rtpdepay        = gst_element_factory_make("rtph264depay",    "rtph264depay");
   decodebin       = gst_element_factory_make ("avdec_h264",     "avdec_h264");
   videoconvert    = gst_element_factory_make ("videoconvert",   "videoconvert");
@@ -148,11 +149,11 @@ int main (int argc, char *argv[])
 
   /* we add all elements into the pipeline */
   gst_bin_add_many (GST_BIN (pipeline),
-                    rtpsrc, gscreamrx, rtpdepay, decodebin, videoconvert, videosink, NULL);
+                    rtpsrc, gscreamrx, rtpjitterbuffer, rtpdepay, decodebin, videoconvert, videosink, NULL);
 
   /* we link the elements together */
   /* videotestsrcm -> autovideosink */
-  if(!gst_element_link_many (rtpsrc, gscreamrx, rtpdepay, decodebin, videoconvert, videosink, NULL)){
+  if(!gst_element_link_many (rtpsrc, gscreamrx, rtpjitterbuffer, rtpdepay, decodebin, videoconvert, videosink, NULL)){
     g_error("Could not link on ore more of elements udpsrc, rtpdepay decodebin");
     return -1;
   }
@@ -163,6 +164,7 @@ int main (int argc, char *argv[])
   gst_bin_add(GST_BIN (pipeline), rtpbin);
   g_object_set(rtpbin, /*"latency", 5, */"rtp-profile", GST_RTP_PROFILE_AVPF, NULL);
   g_object_set(videosink, "sync", false, "async", false, NULL);
+  g_object_set(rtpjitterbuffer, "latency", 50, NULL);
 
   gst_bin_add_many(GST_BIN (pipeline), rtcpsrc, rtcpsink, NULL);
 

@@ -92,7 +92,7 @@ int main (int argc, char *argv[])
   g_object_set(G_OBJECT(videoencode), "awb-mode", 6, NULL);
   g_object_set(G_OBJECT(videoencode), "preview", false, NULL);
   g_object_set(G_OBJECT(videoencode), "annotation-mode", 1, NULL);
-  //g_object_set(G_OBJECT(videoencode), "annotation-text", "en liten textrad", NULL);
+  g_object_set(G_OBJECT(videoencode), "inline-headers", true, NULL);
 
 
   /* we add all elements into the pipeline */
@@ -126,7 +126,7 @@ int main (int argc, char *argv[])
 
   rtcpsink = gst_element_factory_make ("udpsink", "rtcpsink");
   g_assert (rtcpsink);
-  g_object_set (rtcpsink, "port", 5001, "host", argv[1], NULL);
+  g_object_set (rtcpsink, "port", 5001, "host", argv[1], "bind-port", 5001, NULL);
   /* no need for synchronisation or preroll on the RTCP sink */
   g_object_set (rtcpsink, "async", FALSE, "sync", FALSE, NULL);
 
