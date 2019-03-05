@@ -84,8 +84,10 @@ struct _GstgScreamTx
   GstElement *encoder;
   float lastRateChangeT;
   pthread_mutex_t lock_rtp_queue;
-  pthread_mutex_t lock_scream;  
+  pthread_mutex_t lock_scream;
   GstClockID clockId;
+
+  guint media_src;
 };
 
 struct _GstgScreamTxClass

@@ -43,18 +43,6 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/**
- * SECTION:element-gscreamrx
- *
- * FIXME:Describe gscreamrx here.
- *
- * <refsect2>
- * <title>Example launch line</title>
- * |[
- * gst-launch -v -m fakesrc ! gscreamrx ! fakesink silent=TRUE
- * ]|
- * </refsect2>
- */
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
@@ -331,8 +319,10 @@ gboolean rtcpPeriodicTimer(GstClock *clock, GstClockTime, GstClockID id, gpointe
       (time_ntp - filter->screamRx->getLastFeedbackT() > filter->screamRx->getRtcpFbInterval() || filter->screamRx->checkIfFlushAck());
   pthread_mutex_unlock(&filter->lock_scream);
 
-  if (true && isFeedback)
+  if (true && isFeedback) {
     g_signal_emit_by_name(filter->rtpSession,"send-rtcp",20000000);
+   // g_print(" SF \n");
+  }
 }
 
 static gboolean on_sending_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *object)
@@ -386,7 +376,7 @@ static gboolean on_sending_rtcp(GObject *session, GstBuffer *buffer, gboolean ea
     getTime(filter, &time, &time_ntp);
     bool isFb = filter->screamRx->createStandardizedFeedback(time_ntp, buf , rtcpSize);
     pthread_mutex_unlock(&filter->lock_scream);
-    if (isFb)  {
+    if (isFb && time - filter->lastRxTime < 2.0) {
       //g_print("TS %X \n",(time_ntp));
       gst_rtcp_buffer_add_packet(&rtcp_buffer, GST_RTCP_TYPE_RTPFB, &rtcp_packet);
       guint32 ssrc_n,ssrc_h;
@@ -402,7 +392,7 @@ static gboolean on_sending_rtcp(GObject *session, GstBuffer *buffer, gboolean ea
       gst_rtcp_packet_fb_set_fci_length(&rtcp_packet, len);
       guint8* fci_buf = gst_rtcp_packet_fb_get_fci(&rtcp_packet);
       memcpy(fci_buf, buf+12, len*4);
-      g_print("%6.3f RTCP fb of size %d TS %X \n", time, rtcpSize, time_ntp);
+      //g_print("%6.3f RTCP fb of size %d TS %X \n", time, rtcpSize, time_ntp);
 
       //has_packet = gst_rtcp_buffer_get_first_packet(&rtcp_buffer, &rtcp_packet);
       //gst_rtcp_packet_remove(&rtcp_packet);
@@ -520,8 +510,10 @@ if (DOSCREAM)  {
   //    size , pt, sn_h, ssrc_h, time_ntp, time);
 
   if (time - filter->lastRxTime > 2.0) {
+    pthread_mutex_lock(&filter->lock_scream);
     delete filter->screamRx;
     filter->screamRx = new ScreamRx(0); // Note SSRC should be something else
+    pthread_mutex_unlock(&filter->lock_scream);
     g_print("Restart receiver\n");
 
   }

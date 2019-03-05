@@ -15,7 +15,7 @@
  * all copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO 
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -44,36 +44,6 @@
  * Boston, MA 02111-1307, USA.
  */
 
-
-/*
-    ---- Nuvarande stadie ----s
-
-
-Uppgift 1: Vi vill kunna skicka RTC/RTCP paket samt manipulera dataströmmen för att implementera SCReAM.
-
-Vår approach: skapa ett bin element som har rtp/rtcp element vilket vi vill koppla gstreamers pipeline till.
-   - Vi kan skapa element och binda samman dom i en intern pipeline (sett i bind_communication).
-   - Tanken är att vi ska koppla gstreamers pipeline till denna pipeline.
-   - Tanken är även att denna interna pipeline har udp sockets/udp pads för att ta emot/skicka data.
-   - Vi har inte börjat kolla på ghostpads ännu, men fick höra i ett möte att detta är hur det bör fungera, tanken är att implementera detta.
-
-Vårt problem:
-  - Vid gst_element_link_pads (scream, "src", rtpbin, "recv_rtcp_sink_0"); (ungefär rad 350) är vårt problem att koppla samman scream src pad
-  med rtpbins sink pad.
-  - Vi vet inte riktigt vart som padsen ska bli kopplade, inte heller vart som dataströmmen ska "matas in" i denna pipeline.
-
-Uppgift 2: Implementera någon slags "RTP queue" som ska matas in i screamtx.registerNewStream("RTP queue", ...)
-
-Vår approach: Följa Ingemars testapplikation sett i scream_transmitter.cpp och sedan konvertera trådar och mutex till gst_task
-
-Vårt problem:
-  - Vi har inte försökt så mycket än. Så det mesta.
-
-Prio för tillfället: Uppgift 1. Huvudproblemet är just att koppla pipelinen till individuella element. Kan vi fixa det så kan vi förmodligen fixa
-resten själva.
-
-*/
-
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -83,7 +53,6 @@ resten själva.
 #include "gstgscreamtx.h"
 #include "ScreamTx.h"
 
-#define RPICAM
 #define PACKET_PACING_ON
 //#define PACKET_PACING_OFF
 #define PACE_CLOCK_T_NS 2000000
@@ -103,7 +72,8 @@ enum
 enum
 {
   PROP_0,
-  PROP_SILENT
+  PROP_SILENT,
+  PROP_MEDIA_SRC
 };
 #define DEST_HOST "127.0.0.1"
 
@@ -131,6 +101,12 @@ gst_g_scream_tx_class_init (GstgScreamTxClass * klass)
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output?",
           FALSE, G_PARAM_READWRITE));
 
+  g_object_class_install_property (gobject_class, PROP_MEDIA_SRC,
+      g_param_spec_uint ("media-src", "Media source",
+        "0=x264enc, 1=rpicamsrc, 2=uvch264src, 3=vaapih264enc, 4=omxh264enc",
+        0, 4, 0,
+        G_PARAM_READWRITE));
+
   gst_element_class_set_details_simple(gstelement_class,
     "gScreamTx",
     "FIXME:Generic",
@@ -154,13 +130,16 @@ gst_g_scream_tx_init (GstgScreamTx * filter)
   //g_print("INIT\n");
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
   filter->rtpSession = NULL;
-  filter->screamTx = new ScreamTx(0.8f, 0.9f, 0.05f, false, 1.0f, 2.0f, 0, 0.0f, 20, false, false);
+  filter->screamTx = new ScreamTx(0.8f, 0.9f, 0.1f, false, 1.0f, 2.0f, 50000, 0.0f, 20, false, false);
+  //filter->screamTx->setCwndMinLow(5000);
   filter->gstClockTimeRef = gst_clock_get_time(gst_system_clock_obtain());
   filter->rtpQueue = new RtpQueue();
   filter->encoder = NULL;
   filter->lastRateChangeT = 0.0;
   pthread_mutex_init(&filter->lock_scream, NULL);
   pthread_mutex_init(&filter->lock_rtp_queue, NULL);
+
+  filter->media_src = 0; // x264enc
 
 
   gst_pad_set_event_function (filter->sinkpad,
@@ -177,6 +156,8 @@ gst_g_scream_tx_init (GstgScreamTx * filter)
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
   filter->silent = TRUE;
+
+
 }
 
 static void
@@ -188,6 +169,9 @@ gst_g_scream_tx_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_SILENT:
       filter->silent = g_value_get_boolean (value);
+      break;
+    case PROP_MEDIA_SRC:
+      filter->media_src = g_value_get_uint (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -209,6 +193,7 @@ gst_g_scream_tx_get_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+
 }
 
 void getTime(GstgScreamTx *filter, float *time_s, guint32 *time_ntp)
@@ -234,7 +219,7 @@ gboolean txTimerEvent(GstClock *clock, GstClockTime t, GstClockID id, gpointer u
   getTime(filter,&time,&time_ntp);
   guint32 ssrc;
   guint16 sn;
-#ifdef PACKET_PACING_ON  
+#ifdef PACKET_PACING_ON
   pthread_mutex_lock(&filter->lock_scream);
   float retVal = filter->screamTx->isOkToTransmit(time_ntp, ssrc);
   pthread_mutex_unlock(&filter->lock_scream);
@@ -248,14 +233,14 @@ gboolean txTimerEvent(GstClock *clock, GstClockTime t, GstClockID id, gpointer u
     GstBuffer *buf = rtpQ->pop(sn);
     int size = gst_buffer_get_size(buf);
     gst_pad_push(filter->srcpad, buf);
-           
+
     pthread_mutex_lock(&filter->lock_scream);
     getTime(filter,&time,&time_ntp);
     filter->screamTx->addTransmitted(time_ntp, ssrc, size, sn);
     retVal = filter->screamTx->isOkToTransmit(time_ntp, ssrc);
     pthread_mutex_unlock(&filter->lock_scream);
   }
-#endif   
+#endif
 }
 
 /* GstElement vmethod implementations */
@@ -268,6 +253,9 @@ on_receiving_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *
   float time;
   guint32 time_ntp;
   getTime(filter_,&time,&time_ntp);
+
+  if (filter_->rtpSession != NULL) {
+
 
   GstRTCPBuffer rtcp_buffer = {NULL, {NULL, (GstMapFlags)0, NULL, 0, 0, {0}, {0}}};
   GstRTCPPacket rtcp_packet;
@@ -296,7 +284,9 @@ on_receiving_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *
 
           memcpy(&buf[8],&ssrc_n,4);
 
-          //g_print("LEN %d \n", fci_len);
+          int streamId = 0;
+          //if (getStream(ssrc_h, streamId) != NULL) {
+
           memcpy(&buf[12],&fci_buf[0],(fci_len)*4);
           guint16 size_field = size/4-1;
 
@@ -305,33 +295,54 @@ on_receiving_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *
           memcpy(&buf[2],&size_field,2);
           pthread_mutex_lock(&filter_->lock_scream);
           getTime(filter_,&time,&time_ntp);
+
           filter_->screamTx->incomingStandardizedFeedback(
             time_ntp,buf,size);
+
           pthread_mutex_unlock(&filter_->lock_scream);
 
           pthread_mutex_lock(&filter_->lock_scream);
-#ifdef RPICAM
           int rate = (int) (filter_->screamTx->getTargetBitrate(ssrc_h));
-#else
-          int rate = (int) (filter_->screamTx->getTargetBitrate(ssrc_h)/1000);
-#endif          
+          switch (filter_->media_src) {
+            case 0: // x264enc
+            case 3: // vaapih264enc
+              rate /= 1000;
+              break;
+            case 1: // rpicamsrc
+            case 2: // uvch264src
+            case 4: // omxh264enc
+              break;
+          }
           pthread_mutex_unlock(&filter_->lock_scream);
-          if (rate > 0 && time-filter_->lastRateChangeT > 0.2) {
+
+          if (true && rate > 0 && time-filter_->lastRateChangeT > 0.2) {
           //if (time-filter_->lastRateChangeT > 0.1) {
             //int rate = 1000000*(1+ (int(time/10) % 2));
             //int qp = 20+20*(int(time/5) % 2)  ;
-              
             filter_->lastRateChangeT = time;
-            g_object_set(G_OBJECT(filter_->encoder), "bitrate", rate, NULL);
+            switch (filter_->media_src) {
+              case 0:
+              case 1:
+              case 3:
+                g_object_set(G_OBJECT(filter_->encoder), "bitrate", rate, NULL);
+                break;
+              case 2:
+                g_object_set(G_OBJECT(filter_->encoder), "average-bitrate", rate, NULL);
+                g_object_set(G_OBJECT(filter_->encoder), "peak-bitrate", rate, NULL);
+                break;
+              case 4:
+                g_object_set(G_OBJECT(filter_->encoder), "target-bitrate", rate, NULL);
+                break;
+            }
+
             char buf2[1000];
-            
             pthread_mutex_lock(&filter_->lock_scream);
             filter_->screamTx->getShortLog(time, buf2);
             pthread_mutex_unlock(&filter_->lock_scream);
-#ifdef RPICAM
-            g_object_set(G_OBJECT(filter_->encoder), "annotation-text", buf2, NULL);
-#endif          
-            
+
+            if (filter_->media_src == 1)
+              g_object_set(G_OBJECT(filter_->encoder), "annotation-text", buf2, NULL);
+
             g_print("%6.3f %s\n",time,buf2);
           }
 
@@ -352,19 +363,21 @@ on_receiving_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *
             GstBuffer *buf = rtpQ->pop(sn);
             int size = gst_buffer_get_size(buf);
             gst_pad_push(filter_->srcpad, buf);
-            
+
             pthread_mutex_lock(&filter_->lock_scream);
             getTime(filter_,&time,&time_ntp);
             filter_->screamTx->addTransmitted(time_ntp, ssrc, size, sn);
             retVal = filter_->screamTx->isOkToTransmit(time_ntp, ssrc);
             pthread_mutex_unlock(&filter_->lock_scream);
           }
-#endif          
+#endif
+          //}
           break;
         }
       }
     }
   }
+}
 
 }
 
@@ -407,11 +420,24 @@ gst_g_scream_tx_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   //gst_buffer_extract (buf, 0, pkt, size);
   if (filter->screamTx->getStreamQueue(ssrc_h) == 0) {
     g_print(" New stream, register !\n");
-#ifdef RPICAM    
-    filter->screamTx->registerNewStream(filter->rtpQueue, ssrc_h, 1.0f, 300e3f, 500e3f, 5e6f, 1e6f, 0.1f, 0.2f, 0.1f, 0.2f);
-#else
-    filter->screamTx->registerNewStream(filter->rtpQueue, ssrc_h, 1.0f, 300e3f, 500e3f, 10e6f, 2e6f, 0.2f, 0.2f, 0.1f, 0.2f);
-#endif    
+
+    switch (filter_->media_src) {
+      case 0:
+        filter->screamTx->registerNewStream(filter->rtpQueue, ssrc_h, 1.0f, 300e3f, 1000e3f, 15e6f, 5e6f, 0.3f, 0.2f, 0.1f, 0.2f);
+        break;
+      case 1:
+        filter->screamTx->registerNewStream(filter->rtpQueue, ssrc_h, 1.0f, 300e3f, 500e3f, 5e6f, 1e6f, 0.1f, 0.2f, 0.1f, 0.2f);
+        break;
+      case 2:
+        filter->screamTx->registerNewStream(filter->rtpQueue, ssrc_h, 1.0f, 300e3f, 1000e3f, 15e6f, 5e6f, 0.3f, 0.2f, 0.1f, 0.2f);
+        break;
+      case 3:
+        filter->screamTx->registerNewStream(filter->rtpQueue, ssrc_h, 1.0f, 300e3f, 1000e3f, 15e6f, 5e6f, 0.3f, 0.2f, 0.1f, 0.2f);
+        break;
+      case 4:
+        filter->screamTx->registerNewStream(filter->rtpQueue, ssrc_h, 1.0f, 300e3f, 1000e3f, 15e6f, 5e6f, 0.3f, 0.2f, 0.1f, 0.2f);
+        break;
+    }
   }
 
   pthread_mutex_lock(&filter->lock_rtp_queue);
@@ -420,16 +446,28 @@ gst_g_scream_tx_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   pthread_mutex_unlock(&filter->lock_rtp_queue);
 
   pthread_mutex_lock(&filter->lock_scream);
-  getTime(filter,&time,&time_ntp);  
+  getTime(filter,&time,&time_ntp);
   filter->screamTx->newMediaFrame(time_ntp, ssrc_h, size);
   pthread_mutex_unlock(&filter->lock_scream);
-  
+
+  if (false && time-filter->lastRateChangeT > 0.1) {
+            int rate = 1000;//1000*(1+ 3*(int(time/10) % 2));
+
+            filter->lastRateChangeT = time;
+            g_object_set(G_OBJECT(filter->encoder), "bitrate", rate, NULL);
+            char buf2[1000];
+
+            filter_->screamTx->getShortLog(time, buf2);
+            g_print("%6.3f %s  %d\n",time,buf2, rate);
+
+  }
+
 #ifdef PACKET_PACING_OFF
   pthread_mutex_lock(&filter->lock_scream);
-  getTime(filter,&time,&time_ntp);  
+  getTime(filter,&time,&time_ntp);
   float retVal = filter->screamTx->isOkToTransmit(time_ntp, ssrc_h);
   pthread_mutex_unlock(&filter->lock_scream);
-  
+
   GstFlowReturn returnValue = GST_FLOW_OK;
 
   while  (retVal == 0) {
@@ -448,7 +486,7 @@ gst_g_scream_tx_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     pthread_mutex_unlock(&filter->lock_scream);
 
   }
-#endif  
+#endif
   //g_print("NO TX \n");
   return GST_FLOW_OK;//returnValue;
   //once++;
@@ -468,8 +506,6 @@ gst_g_scream_tx_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
   GST_LOG_OBJECT (filter, "Received %s event: %", GST_PTR_FORMAT,
       GST_EVENT_TYPE_NAME (event), event);
 
-  //g_print("SINK\n");
-
   if (filter->rtpSession == NULL) {
     GstElement *pipe = GST_ELEMENT_PARENT(parent);
     GstElement *rtpbin = gst_bin_get_by_name_recurse_up(GST_BIN(pipe), "rtpbin");
@@ -482,20 +518,26 @@ gst_g_scream_tx_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     * Odd feature... the last parameter is not kept .. strange...
     */
 
+    g_object_set((filter->rtpSession), "rtcp-min-interval", 500000000, NULL);
+
     g_signal_connect_after((filter->rtpSession), "on-receiving-rtcp", G_CALLBACK(on_receiving_rtcp), filter);
     //g_print("CALLBACK\n");
-    filter->encoder = gst_bin_get_by_name_recurse_up(GST_BIN(pipe), "encoder");
+    filter->encoder = gst_bin_get_by_name_recurse_up(GST_BIN(pipe), "video");
     g_assert(filter->encoder);
+    
+    
     //g_object_set(G_OBJECT(filter->encoder), "bitrate", 200, NULL);
 
     //filter->encoder = gst_bin_get_by_name_recurse_up(GST_BIN(pipe), "encoder");
     //g_assert(filter->encoder);
-    
+
+
+
     GstClock *clock = gst_pipeline_get_clock((GstPipeline*) pipe);
     filter->clockId = gst_clock_new_periodic_id(clock, gst_clock_get_internal_time(clock), PACE_CLOCK_T_NS);
     g_assert(filter->clockId);
     GstClockReturn t = gst_clock_id_wait_async(filter->clockId, txTimerEvent, (gpointer) filter, NULL);
-    
+
   }
 
   switch (GST_EVENT_TYPE (event)) {
