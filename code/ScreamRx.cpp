@@ -281,7 +281,7 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, unsigned char *buf,
     uint16_t tmp_s;
     uint32_t tmp_l;
     buf[0] = 0x80; // TODO FMT = CCFB in 5 LSB
-    buf[1] = 207;
+    buf[1] = 205;
     /*
     * Write RTCP sender SSRC
     */
