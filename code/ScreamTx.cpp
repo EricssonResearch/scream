@@ -1038,8 +1038,9 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 			/*
 			* The cautiousPacing parameter restricts transmission of large key frames when the parameter is set to a value closer to 1.0
 			*/
-			float pacingBitrate = (1.0f - cautiousPacing)*cwnd * 8.0f / std::max(0.001f, sRtt) + cautiousPacing * rateTransmittedAvg;
-			pacingBitrate = kPacketPacingHeadRoom * std::max(kMinimumBandwidth, pacingBitrate);
+			float pacingBitrate = rateTransmittedAvg*kPacketPacingHeadRoom;
+			pacingBitrate = (1.0f - cautiousPacing)*cwnd * 8.0f / std::max(0.001f, sRtt) + cautiousPacing * pacingBitrate;
+			pacingBitrate = std::max(kMinimumBandwidth, pacingBitrate);
 			if (maxTotalBitrate > 0) {
 				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
 			}
@@ -1249,7 +1250,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	if (queueDelayTrend > 0.2) {
 		lastCongestionDetectedT_ntp = time_ntp;
 	}
-	else if (time_ntp - lastCongestionDetectedT_ntp > 327680 && // 5s in NTP domain
+	else if (time_ntp - lastCongestionDetectedT_ntp > 65536 && // 5s in NTP domain
 		!inFastStart && kEnableConsecutiveFastStart) {
 		/*
 		* The queue delay trend has been low for more than 5.0s, resume fast start
@@ -1818,7 +1819,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			targetBitrate = std::max(minBitrate, targetBitrate*lossEventRateScale);
 		else if (ecnCeEventFlag) {
 			if (parent->isL4s) {
-				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 4.0f));
+				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 2.0f));
 				//updateTargetBitrateI(targetBitrate);
 			}
 			else {
@@ -1983,7 +1984,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				* Avoid that the target bitrate is reduced if it actually is the media
 				* coder that limits the output rate e.g due to inactivity
 				*/
-				if (rateRtp < targetBitrate*0.9f)
+				if (rateRtp < targetBitrate)
 					increment = 0.0f;
 				/*
 				* Also avoid that the target bitrate is reduced if

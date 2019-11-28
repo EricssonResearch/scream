@@ -37,6 +37,7 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_, bool isL4s_) {
     pDrop = 0.0f;
     prevRateFrac = 0.0f;
     l4sTh = std::max(0.005, 5.0 * 1200 * 8 / rate);
+	tQueueAvg = 0.0;
 }
 
 void NetQueue::insert(float time, 
@@ -90,10 +91,14 @@ bool NetQueue::extract(float time,
                 isCe = true;
                 lastQueueLow = time;
             }
-            if (isL4s && time - items[tail]->tQueue > l4sTh && rate > 0.0) {
+			tQueueAvg = (time-items[tail]->tQueue);
+			//if (isL4s && time - items[tail]->tQueue > l4sTh && rate > 0.0) {
+			if (false && rate > 0)
+			cerr << tQueueAvg << endl;
+			if (isL4s && tQueueAvg > l4sTh && rate > 0.0) {
               isCe = true;
             }
-            if (isL4s && pDrop > 0.0f) {
+            if (false && isL4s && pDrop > 0.0f) {
               float rnd = float(rand()) / RAND_MAX;
               if (rnd < pDrop) {
                   isCe = true;
@@ -118,17 +123,17 @@ int NetQueue::sizeOfQueue() {
 }
 
 const float rateUpdateT = 0.05;
-const float rateFracTarget1 = 0.9;
+
 void NetQueue::updateRate(float time) {
     if (time - lastRateUpdateT >= rateUpdateT && rate > 0) {
         float dT = time - lastRateUpdateT;
         float rateT = bytesTx * 8 / dT;
         bytesTx = 0;
         lastRateUpdateT = time;
-        float rateFrac = rateT / rate - 0.8;
+        float rateFrac = rateT / rate - 0.9;
         rateFrac /= 0.2;
         rateFrac = std::max(0.0f, std::min(1.0f, rateFrac));
-        pDrop = 0.8*pDrop + 0.2*rateFrac;
+        pDrop = 0.9*pDrop + 0.1*rateFrac;
         pDrop = std::min(1.0f, std::max(0.0f, pDrop));
         prevRateFrac = rateFrac;
         if (false && pDrop > 0)

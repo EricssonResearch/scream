@@ -51,6 +51,7 @@ public:
     float pDrop;
     float prevRateFrac;
     float l4sTh;
+	float tQueueAvg;
 };
 
 #endif

@@ -10,11 +10,11 @@
 
 using namespace std;
 
-const float Tmax = 40;
-const bool isChRate = false;
+const float Tmax = 100;
+const bool isChRate = true;
 const bool printLog = true;
-const bool ecnCapable = false;
-const bool isL4s = false;
+const bool ecnCapable = true;
+const bool isL4s = true;
 const float FR = 25.0f;
 int swprio = -1;
 #define TRACEFILE "../traces/trace_no_key_smooth.txt"
@@ -37,14 +37,14 @@ int main(int argc, char* argv[])
     ScreamRx *screamRx = new ScreamRx(0);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
-    NetQueue *netQueueDelay = new NetQueue(0.03f, 0.0f, 0.0005f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 6e6, 0.0f, isL4s);
+    NetQueue *netQueueDelay = new NetQueue(0.01f, 0.0f, 0.0005f);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 50e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE);
     videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
     if (mode & 0x01)
-        //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 2056e3f, 10024e3f, 80192e3f, 10e6f, 0.5f, 0.2f, 0.1f, 0.1f);
-        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
+        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 2e6f, 10e6f, 100e6f, 10e6f, 0.5f, 0.2f, 0.1f, 0.2f);
+        //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x02)
 		//screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 2056e3f, 10024e3f, 80192e3f, 10e6f, 0.5f, 0.2f, 0.1f, 0.1f);
 	    screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
@@ -181,8 +181,8 @@ int main(int argc, char* argv[])
         screamTx->setTargetPriority(11, 0.5);
         */
         if (isChRate) {
-            if ((time > 30.0 && time < 35) && isChRate) {
-                netQueueRate->rate = 10000e3;
+            if ((time > 20.0 && time < 30) && isChRate) {
+                netQueueRate->rate = 20000e3;
             }
             else {
                 netQueueRate->rate = 50000e3;

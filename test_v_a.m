@@ -9,11 +9,11 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     plot(T,a(:,2));%,T,a(:,4)); 
     set(gca,'FontSize',12);grid on;
     set(gca,'XTickLabel',[]);    
-    axis([0 Tmax 0 0.2]);grid on;
+    axis([0 Tmax 0 0.05]);grid on;
     title('qdel[s]');
     
     subplot(2,1,2);
-    plot(T,a(:,4),T,a(:,5));
+    plot(T,a(:,4),T,a(:,5),T,a(:,7)*20000,'k');
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Cmax]);grid on;    
     title('CWND & in flight [byte]');    
@@ -24,14 +24,14 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,8)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.1]);grid on;
+    axis([0 Tmax 0 0.05]);grid on;
     set(gca,'XTickLabel',[]);
-    title('RTP queue delay');
+    title('RTP queue delay [s]');
     subplot(2,1,2);
-    plot(T,a(:,9),T,a(:,11),T,a(:,10));
+    plot(T,a(:,9)/1000,T,a(:,11)/1000,T,a(:,10)/1000);
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(1)]);grid on;
-    title('Bitrate [kbps]');    
+    title('Bitrate [Mbps]');    
     legend('Target','Transmitted', 'RTP');
     xlabel('T [s]');
     end
