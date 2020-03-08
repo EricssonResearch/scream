@@ -7,7 +7,7 @@ Congestion control for WebRTC media is currently being standardized in the IETF 
 SCReAM is a congestion control candidate solution for WebRTC developed at Ericsson Research and optimized for good performance in wireless access.  
 
 The algorithm is an IETF experimental standard [1], a Sigcomm paper [2] and [3] explains the rationale behind the design of the algorithm in more detail. A comparison against GCC (Google Congestion Control) is shown in [4]. Final presentations are found in [5] and [6]. A short [video](https://www.youtube.com/watch?v=_jBFu-Y0wwo) exemplifies the use of SCReAM in a small vehicle, remote controlled over a public LTE network. [7] explains the rationale behind the use of SCReAM in remote controlled applications over LTE/5G.
- 
+
 Unlike many other congestion control algorithms that are rate based i.e. they estimate the network throughput and adjust the media bitrate accordingly, SCReAM is self-clocked which essentially means that the algorithm does not send in more data into a network than what actually exits the network.
 
 To achieve this, SCReAM implements a feedback protocol over RTCP that acknowledges received RTP packets. 
@@ -23,11 +23,11 @@ Below is shown an example of SCReAM congestion control when subject to a bottlen
 Figure 1 : Simple bottleneck simulation SCReAM
 
 ## ECN (Explicit Congestion Notification) 
-SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. The ECN marking is similar to CoDel. 
+SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. . 
 
 In addition SCReAM also supports L4S, i.e that the sending rate is reduced proportional to the fraction of the RTP packets that are ECN marked. This enables lower network queue delay.  
 
-Below is shown three examples with a simple 20Mbps bottleneck. It is quite apparent that ECN improves on the e2e delay quite considerably and that the use of L4S reduces the delay even more. L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, given the varying output rate of the video encoder.
+Below is shown three examples with a simple 50Mbps bottleneck that changes to 25Mbps after 50s. It is quite apparent that ECN improves on the e2e delay quite considerably and that the use of L4S reduces the delay even more. L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, given the varying output rate of the video encoder.
 
 ![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn.png)
 
@@ -35,12 +35,11 @@ Figure 2 : SCReAM without ECN support
     
 ![Simple bottleneck simulation SCReAM with ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_ecn.png)
 
-Figure 3 : SCReAM with ECN support
+Figure 3 : SCReAM with ECN support (CoDel)
 
 ![Simple bottleneck simulation SCReAM with L4S support](https://github.com/EricssonResearch/scream/blob/master/images/scream_l4s.png)
 
 Figure 4 : SCReAM with L4S support
-
 
 ----------
 
@@ -62,7 +61,7 @@ A real life test of SCReAM is performed with the following setup in a car:
 A SCReAM receiver that logged the performance and stored the received RTP packets was running in an office. The video traffic was thus transmitted in LTE uplink.The video was played out to file with GStreamer, the jitter buffer was disabled to allow for the visibility of the delay jitter artifacts,
 
 Below is a graph that shows the bitrate, the congestion window and the queue delay. 
- 
+
 ![Log from ](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM_LTE_UL.png)
 
 Figure 5 : Trace from live drive test
@@ -116,7 +115,7 @@ For more information on how to use the code in multimedia clients or in experime
 The feedback format is according to [https://tools.ietf.org/html/draft-ietf-avtcore-cc-feedback-message-02](https://tools.ietf.org/html/draft-ietf-avtcore-cc-feedback-message-02 "IETF feedback format"), a previous proprietary format is deprecated.
 The feedback overhead depends on the media bitrate. The table below shows the IP+UDP+RTCP bitrate at varuious media bitrates.
 
-        
+
        +-----------------------------------------------------+
        | Media bitrate [kbps] | RTCP feedback bitrate [kbps] |
        +-----------------------------------------------------+
