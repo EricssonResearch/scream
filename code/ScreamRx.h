@@ -25,12 +25,12 @@ const int kRxHistorySize = 128;
 * is the fraction. The NTP time stamp is thus in Q16 i.e 1.0sec is represented
 * by the value 65536.
 * All internal time is measured in NTP time, this is done to avoid wraparound issues
-* that can otherwise occur every 18h hour or so
+* that can otherwise occur every 18 hour or so
 */
 
 class ScreamRx {
 public:
-    ScreamRx(uint32_t ssrc); // SSRC of this RTCP session
+    ScreamRx(uint32_t ssrc, int ackDiff = -1, int nReportedRtpPackets = kReportedRtpPackets); // SSRC of this RTCP session
     ~ScreamRx();
 
     /*
@@ -42,7 +42,7 @@ public:
 
         bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 
-        bool checkIfFlushAck();
+        bool checkIfFlushAck(int ackDiff);
 
         /*
         * Receive RTP packet
@@ -67,9 +67,9 @@ public:
         uint16_t highestSeqNr;               // Highest received sequence number
         uint16_t highestSeqNrTx;             // Highest fed back sequence number
         uint32_t receiveTimestamp;           // Wall clock time
-        uint8_t  ceBitsHist[kRxHistorySize]; // Vector of CE bits for last <kRxHistorySize> 
+        uint8_t  ceBitsHist[kRxHistorySize]; // Vector of CE bits for last <kRxHistorySize>
         //  received RTP packets
-        uint32_t rxTimeHist[kRxHistorySize]; // Receive time for last <kRxHistorySize> 
+        uint32_t rxTimeHist[kRxHistorySize]; // Receive time for last <kRxHistorySize>
         //  received RTP packets
         uint16_t seqNrHist[kRxHistorySize];  // Seq Nr of last received <kRxHistorySize>
         //  packets
@@ -82,6 +82,8 @@ public:
         float timeStampConversionFactor;
 
         int ix;
+
+        int nReportedRtpPackets;
     };
 
     /*
@@ -136,6 +138,9 @@ public:
 
     int getIx(uint32_t ssrc);
     int ix;
+    int ackDiff;
+
+    int nReportedRtpPackets;
     /*
     * Variables for multiple steams handling
     */

@@ -31,9 +31,9 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
 
 }
 
-bool ScreamRx::Stream::checkIfFlushAck() {
+bool ScreamRx::Stream::checkIfFlushAck(int ackDiff) {
     uint32_t diff = highestSeqNr - highestSeqNrTx;
-    return (diff > (kReportedRtpPackets / 4));
+    return (diff >= ackDiff);
 }
 
 void ScreamRx::Stream::receive(uint32_t time_ntp,
@@ -112,9 +112,9 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
     size += 4;
     /*
     * Write begin_seq
-    * always report kReportedRtpPackets RTP packets
+    * always report nReportedRtpPackets RTP packets
     */
-    tmp_s = highestSeqNr - uint16_t(kReportedRtpPackets - 1);
+    tmp_s = highestSeqNr - uint16_t(nReportedRtpPackets - 1);
     tmp_s = htons(tmp_s);
     memcpy(buf + 4, &tmp_s, 2);
     size += 2;
@@ -131,9 +131,9 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
     /*
     * Write 16bits report element for received RTP packets
     */
-    uint16_t sn_lo = highestSeqNr - uint16_t(kReportedRtpPackets - 1);
+    uint16_t sn_lo = highestSeqNr - uint16_t(nReportedRtpPackets - 1);
 
-    for (uint16_t k = 0; k < kReportedRtpPackets; k++) {
+    for (uint16_t k = 0; k < nReportedRtpPackets; k++) {
         uint16_t sn = sn_lo + k;
 
         int ix = sn % kRxHistorySize;
@@ -155,7 +155,7 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
     /*
     * Zero pad with two extra octets if the number of reported packets is odd
     */
-    if (kReportedRtpPackets % 2 == 1) {
+    if (nReportedRtpPackets % 2 == 1) {
         tmp_s = 0x0000;
         memcpy(buf + ptr, &tmp_s, 2);
         size += 2;
@@ -165,7 +165,7 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
     return true;
 }
 
-ScreamRx::ScreamRx(uint32_t ssrc_) {
+ScreamRx::ScreamRx(uint32_t ssrc_, int ackDiff_, int nReportedRtpPackets_) {
     lastFeedbackT_ntp = 0;
     bytesReceived = 0;
     lastRateComputeT_ntp = 0;
@@ -173,6 +173,12 @@ ScreamRx::ScreamRx(uint32_t ssrc_) {
     rtcpFbInterval_ntp = 13107; // 20ms in NTP domain
     ssrc = ssrc_;
     ix = 0;
+    nReportedRtpPackets = nReportedRtpPackets_;
+    if (ackDiff_ > 0)
+      ackDiff = ackDiff_;
+    else
+      ackDiff = std::max(1,nReportedRtpPackets / 4);
+
 }
 
 ScreamRx::~ScreamRx() {
@@ -186,7 +192,7 @@ ScreamRx::~ScreamRx() {
 bool ScreamRx::checkIfFlushAck() {
     if (!streams.empty()) {
         for (auto it = streams.begin(); it != streams.end(); ++it) {
-            if ((*it)->checkIfFlushAck())
+            if ((*it)->checkIfFlushAck(ackDiff))
                 return true;
         }
     }
@@ -244,6 +250,7 @@ void ScreamRx::receive(uint32_t time_ntp,
     * New {SSRC,PT}
     */
     Stream *stream = new Stream(ssrc);
+    stream->nReportedRtpPackets = nReportedRtpPackets;
     stream->ix = ix++;
     stream->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits);
     streams.push_back(stream);
@@ -281,7 +288,7 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, unsigned char *buf,
     uint16_t tmp_s;
     uint32_t tmp_l;
     buf[0] = 0x80; // TODO FMT = CCFB in 5 LSB
-    buf[1] = 205;
+    buf[1] = 207;
     /*
     * Write RTCP sender SSRC
     */
