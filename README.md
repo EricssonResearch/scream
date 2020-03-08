@@ -27,7 +27,11 @@ SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result
 
 In addition SCReAM also supports L4S, i.e that the sending rate is reduced proportional to the fraction of the RTP packets that are ECN marked. This enables lower network queue delay.  
 
-Below is shown three examples with a simple 50Mbps bottleneck that changes to 25Mbps after 50s. It is quite apparent that ECN improves on the e2e delay quite considerably and that the use of L4S reduces the delay even more. L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, given the varying output rate of the video encoder.
+Below is shown three examples with a simple 50Mbps bottleneck that changes to 25Mbps after 50s, the min RTT is 20ms. 
+
+The graphs show that ECN improves on the e2e delay and that the use of L4S reduces the delay considerably more. L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, given the varying output rate of the video encoder. 
+
+Note carefully that the scales in the graphs differ, especially the delay graph is zoomed in for the L4S alternative to illustrate the very low queue delay. 
 
 ![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn_2.png)
 
