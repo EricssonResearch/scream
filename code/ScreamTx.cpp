@@ -708,7 +708,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			*/
 			bytesMarkedThisRtt += ecnCeMarkedBytes;
 			bytesDeliveredThisRtt += bytesNewlyAcked;
-			if (lastL4sAlphaUpdateT_ntp - time_ntp > sRtt_ntp) {
+			if (time_ntp - lastL4sAlphaUpdateT_ntp > sRtt_ntp) {
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				if (bytesDeliveredThisRtt > 0) {
 					float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
