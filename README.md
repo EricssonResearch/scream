@@ -29,9 +29,11 @@ In addition SCReAM also supports L4S, i.e that the sending rate is reduced propo
 
 Below is shown three examples with a simple 50Mbps bottleneck that changes to 25Mbps after 50s, the min RTT is 20ms. 
 
-The graphs show that ECN improves on the e2e delay and that the use of L4S reduces the delay considerably more. L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, given the varying output rate of the video encoder. 
+The graphs show that ECN improves on the e2e delay and that the use of L4S reduces the delay considerably more. 
 
-Note carefully that the scales in the graphs differ, especially the delay graph is zoomed in for the L4S alternative to illustrate the very low queue delay. 
+L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, considering the varying output rate of the video encoder. This is self-adjusting by inherent design, the average bitrate would increase if the frame size variations are smaller.
+
+Note carefully that the scales in the graphs differ, especially the delay graph is zoomed in for the L4S alternative to illustrate the very low queue delay. It is obvious that L4S gives a much lower queue delay.
 
 ![Simple bottleneck simulation SCReAM no ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_noecn_2.png)
 
@@ -39,11 +41,11 @@ Figure 2 : SCReAM without ECN support
     
 ![Simple bottleneck simulation SCReAM with ECN support](https://github.com/EricssonResearch/scream/blob/master/images/scream_ecn_2.png)
 
-Figure 3 : SCReAM with ECN support (CoDel)
+Figure 3 : SCReAM with ECN support ECN beta = 0.8. CoDel with default settings (5ms, 100ms)  
 
 ![Simple bottleneck simulation SCReAM with L4S support](https://github.com/EricssonResearch/scream/blob/master/images/scream_l4s_2.png)
 
-Figure 4 : SCReAM with L4S support
+Figure 4 : SCReAM with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
 
 ----------
 
