@@ -261,7 +261,8 @@ void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
 	float txQueueSizeFactor,
 	float queueDelayGuard,
 	float lossEventRateScale,
-	float ecnCeEventRateScale) {
+	float ecnCeEventRateScale,
+	bool isAdaptiveTargetRateScale) {
 	Stream *stream = new Stream(this,
 		rtpQueue,
 		ssrc,
@@ -275,7 +276,8 @@ void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
 		txQueueSizeFactor,
 		queueDelayGuard,
 		lossEventRateScale,
-		ecnCeEventRateScale);
+		ecnCeEventRateScale,
+		isAdaptiveTargetRateScale);
 	streams[nStreams++] = stream;
 }
 
@@ -602,12 +604,14 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 		* read begin_seq and end_seq
 		*/
 		uint16_t begin_seq, end_seq;
+		uint16_t num_reports;
 		memcpy(&begin_seq, buf + ptr, 2);
 		ptr += 2;
-		memcpy(&end_seq, buf + ptr, 2);
+		memcpy(&num_reports, buf + ptr, 2);
 		ptr += 2;
 		begin_seq = ntohs(begin_seq);
-		end_seq = ntohs(end_seq) - 1;
+		num_reports = ntohs(num_reports) + 1;
+    end_seq = begin_seq+num_reports-1;
 
 		/*
 		* Validate RTCP feedback message
@@ -919,7 +923,7 @@ void ScreamTx::getLog(float time, char *s) {
 void ScreamTx::getShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
-		queueDelayMax, sRtt,
+		queueDelay, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
@@ -938,7 +942,7 @@ void ScreamTx::getShortLog(float time, char *s) {
 void ScreamTx::getVeryShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%4.3f, %4.3f, %6d, %6d, %6.0f, ",
-		queueDelayMin, sRtt,
+		queueDelay, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
@@ -1038,9 +1042,8 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 			/*
 			* The cautiousPacing parameter restricts transmission of large key frames when the parameter is set to a value closer to 1.0
 			*/
-			float pacingBitrate = rateTransmittedAvg*kPacketPacingHeadRoom;
-			pacingBitrate = (1.0f - cautiousPacing)*cwnd * 8.0f / std::max(0.001f, sRtt) + cautiousPacing * pacingBitrate;
-			pacingBitrate = std::max(kMinimumBandwidth, pacingBitrate);
+			float pacingBitrate = (1.0f - cautiousPacing)*cwnd * 8.0f / std::max(0.001f, sRtt) + cautiousPacing * rateTransmittedAvg;
+			pacingBitrate = kPacketPacingHeadRoom * std::max(kMinimumBandwidth, pacingBitrate);
 			if (maxTotalBitrate > 0) {
 				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
 			}
@@ -1253,7 +1256,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	else if (time_ntp - lastCongestionDetectedT_ntp > 65536 && // 5s in NTP domain
 		!inFastStart && kEnableConsecutiveFastStart) {
 		/*
-		* The queue delay trend has been low for more than 5.0s, resume fast start
+		* The queue delay trend has been low for more than 1.0s, resume fast start
 		*/
 		inFastStart = true;
 		lastCongestionDetectedT_ntp = time_ntp;
@@ -1597,7 +1600,8 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	float txQueueSizeFactor_,
 	float queueDelayGuard_,
 	float lossEventRateScale_,
-	float ecnCeEventRateScale_) {
+	float ecnCeEventRateScale_,
+    bool isAdaptiveTargetRateScale_) {
 	parent = parent_;
 	rtpQueue = rtpQueue_;
 	ssrc = ssrc_;
@@ -1613,6 +1617,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	queueDelayGuard = queueDelayGuard_;
 	lossEventRateScale = lossEventRateScale_;
 	ecnCeEventRateScale = ecnCeEventRateScale_;
+	isAdaptiveTargetRateScale = isAdaptiveTargetRateScale_;
 	targetBitrateHistUpdateT_ntp = 0;
 	targetBitrateI = 1.0f;
 	credit = 0;
@@ -1689,26 +1694,20 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 		rateAcked /= kRateUpDateSize;
 		rateLost /= kRateUpDateSize;
 		rateRtp /= kRateUpDateSize;
-		if (rateRtp > 0) {
+		if (rateRtp > 0 && isAdaptiveTargetRateScale) {
 			/*
 			* Video coders are strange animals.. In certain cases the average bitrate is
 			* consistently lower or higher than the target bitare. This additonal scaling compensates
 			* for this anomaly.
 			*/
-			/*
-			* Lets face it.. it is nearly impossible to try to patch odd behavior in video coders
-			* The effort below solves the problem but the problem is that the target rate 
-			*  overshoots when the coder bitrate matches the target rate with excessive RTPqueue
-			*  delay as a result
-		
-			const float diff =  targetBitrate / rateRtp;
-			float alpha = 0.01f;
+
+			const float diff = targetBitrate / rateRtp;
+			float alpha = 0.02f;
 			if (diff < 0)
-			  alpha = 1.0;
+				alpha = 1.0;
 			targetRateScale *= (1.0f - alpha);
 			targetRateScale += alpha * targetBitrate / rateRtp;
-			targetRateScale = std::min(1.1f, std::max(0.9f, targetRateScale));
-			*/
+			targetRateScale = std::min(1.1f, std::max(0.8f, targetRateScale));
 		}
 	}
 
@@ -1774,7 +1773,6 @@ void ScreamTx::Stream::updateTargetBitrateI(float br) {
 	for (int n = 0; n < kTargetBitrateHistSize; n++) {
 		targetBitrateI = std::max(targetBitrateI, targetBitrateHist[n]);
 	}
-
 }
 
 /*
@@ -1819,7 +1817,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			targetBitrate = std::max(minBitrate, targetBitrate*lossEventRateScale);
 		else if (ecnCeEventFlag) {
 			if (parent->isL4s) {
-				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 2.0f));
+				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 4.0f));
 				//updateTargetBitrateI(targetBitrate);
 			}
 			else {
@@ -1857,7 +1855,8 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		*/
 		float sclI = (targetBitrate - targetBitrateI) / targetBitrateI;
 		sclI *= 4;
-		sclI = std::max(0.2f, std::min(1.0f, sclI*sclI));
+                sclI = sclI*sclI;
+		sclI = std::max(0.05f, std::min(1.0f, sclI));
 		float increment = 0.0f;
 
 		/*
@@ -1914,10 +1913,19 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			*/
 			increment *= sclI * sqrt(targetPriority);
 			/*
-			* No increase if the actual coder rate is lower than the target
+			* Limited increase if the actual coder rate is lower than the target
 			*/
-			if (targetBitrate > rateRtpLimit*1.25f)
-				increment = 0;
+			if (targetBitrate > rateRtpLimit) {
+				/*
+				 * Limit increase if the target bitrate is considerably higher than the actual
+				 *  bitrate, this is an indication of an idle source.
+				 * It can also be the case that the encoder consistently delivers a lower rate than
+				 *  the target rate. We don't want to deadlock the bitrate rampup because of this so
+				 *  we gradually reduce the increment the larger the difference is
+				 */
+				float scale = std::max(-1.0f, 2.0f*(rateRtpLimit / targetBitrate - 1.0f));
+				increment *= (1.0 + scale);
+			}
 			/*
 			* Add increment
 			*/
@@ -1927,7 +1935,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		else {
 			if (wasFastStart) {
 				wasFastStart = false;
-				if (time_ntp - lastTargetBitrateIUpdateT_ntp > 131072) { // 2s in NTP domain
+				if (time_ntp - lastTargetBitrateIUpdateT_ntp > 65536) { // 1s in NTP domain
 					/*
 					* The timing constraint avoids that targetBitrateI
 					* is set too low in cases where a
@@ -1971,12 +1979,19 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 					increment *= sclI;
 					increment = std::min(increment, (float)(rampUpSpeedTmp*(kRateAdjustInterval_ntp * ntp2SecScaleFactor)));
 				}
-				if (targetBitrate > rateRtpLimit*1.25f) {
+				/*
+				* Limited increase if the actual coder rate is lower than the target
+				*/
+				if (targetBitrate > rateRtpLimit) {
 					/*
-					* Limit increase if the target bitrate is considerably higher than the actual
-					*  bitrate, this is an indication of an idle source.
-					*/
-					increment = 0;
+					 * Limit increase if the target bitrate is considerably higher than the actual
+					 *  bitrate, this is an indication of an idle source.
+					 * It can also be the case that the encoder consistently delivers a lower rate than
+					 *  the target rate. We don't want to deadlock the bitrate rampup because of this so
+					 *  we gradually reduce the increment the larger the difference is
+					 */
+					float scale = std::max(-1.0f, 2.0f*(rateRtpLimit / targetBitrate - 1.0f));
+					increment *= (1.0 + scale);
 				}
 			}
 			else {

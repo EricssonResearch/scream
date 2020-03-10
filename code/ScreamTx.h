@@ -147,7 +147,8 @@ public:
 		float txQueueSizeFactor = kTxQueueSizeFactor,
 		float queueDelayGuard = kQueueDelayGuard,
 		float lossEventRateScale = kLossEventRateScale,
-		float ecnCeEventRateScale = kEcnCeEventRateScale);
+		float ecnCeEventRateScale = kEcnCeEventRateScale,
+		bool isAdaptiveTargetRateScale = false);
 
 	/*
 	 * Updates the min and max bitrates for an existing stream
@@ -341,7 +342,8 @@ private:
 			float txQueueSizeFactor,
 			float queueDelayGuard,
 			float lossEventRateScale,
-			float ecnCeEventRateScale);
+			float ecnCeEventRateScale,
+			bool isAdaptiveTargetRateScale);
 
 		float getMaxRate();
 
@@ -366,6 +368,7 @@ private:
 		float queueDelayGuard;
 		float lossEventRateScale;
 		float ecnCeEventRateScale;
+		bool isAdaptiveTargetRateScale;
 
 		int credit;             // Credit that is received if another stream gets
 		//  priority to transmit
