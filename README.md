@@ -27,7 +27,7 @@ SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result
 
 In addition SCReAM also supports L4S, i.e that the sending rate is reduced proportional to the fraction of the RTP packets that are ECN marked. This enables lower network queue delay.  
 
-Below is shown three examples with a simple 50Mbps bottleneck that changes to 25Mbps after 50s, the min RTT is 20ms. 
+Below is shown three simulation examples with a simple 50Mbps bottleneck that changes to 25Mbps after 50s, the min RTT is 20ms. The video trace is from NVENC.
 
 The graphs show that ECN improves on the e2e delay and that the use of L4S reduces the delay considerably more. 
 
