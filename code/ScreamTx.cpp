@@ -712,7 +712,13 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				if (bytesDeliveredThisRtt > 0) {
 					float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
-					l4sAlpha = kL4sG * F + (1.0f - kL4sG)*l4sAlpha;
+					float l4sG = kL4sG;
+					if (F > l4sAlpha)
+						/*
+						* Adjust alpha a bit faster up than down
+						*/
+						l4sG *= 2.0f;
+					l4sAlpha = l4sG * F + (1.0f - l4sG)*l4sAlpha;
 					bytesDeliveredThisRtt = 0;
 					bytesMarkedThisRtt = 0;
 				}
