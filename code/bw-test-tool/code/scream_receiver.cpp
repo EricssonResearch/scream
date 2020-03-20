@@ -124,7 +124,7 @@ int main(int argc, char* argv[])
   unsigned char buf[BUFSIZE];
   unsigned char buf_rtcp[BUFSIZE];
   if (argc <= 1) {
-    cerr << "SCReAM BW test, receiver. Ericsson AB. Version 2020-03-20" << endl;
+    cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2020-03-20" << endl;
     cerr << "Usage :" << endl << " >scream_bw_test_rx <-ackdiff N> <-nreported N> sender_ip sender_port" << endl;
     cerr << "     -ackdiff sets the max distance in received RTPs to send an ACK " << endl;
     cerr << "     -nreported sets the number of reported RTP packets per ACK " << endl;
@@ -246,9 +246,9 @@ int main(int argc, char* argv[])
     /*
     * Extract ECN bits
     */
+    unsigned char received_ecn;
 #ifdef ECN_CAPABLE
     int recvlen = recvmsg(fd_incoming_rtp, &rcv_msg, 0);
-    bool isEcnCe = false;
     if (recvlen == -1) {
 	    perror("recvmsg()");
 	    close(fd_incoming_rtp);
@@ -256,17 +256,12 @@ int main(int argc, char* argv[])
     } else {
 	    struct cmsghdr *cmptr;
 	    int *ecnptr;
-	    unsigned char received_ecn;
 	    for (cmptr = CMSG_FIRSTHDR(&rcv_msg);
 			  cmptr != NULL;
 			  cmptr = CMSG_NXTHDR(&rcv_msg, cmptr)) {
 		    if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS) {
 			    ecnptr = (int*)CMSG_DATA(cmptr);
 			    received_ecn = *ecnptr;
-                       if (received_ecn == 0x3){
-                          isEcnCe = true;
-                          cerr << "CE" << endl;
-                       }
 		    }
 	    }
       memcpy(buf,rcv_msg.msg_iov[0].iov_base,recvlen);
@@ -311,7 +306,7 @@ int main(int argc, char* argv[])
         * Generate RTCP feedback
         */
         pthread_mutex_lock(&lock_scream);
-        screamRx->receive(getTimeInNtp(), 0, SSRC, recvlen, seqNr, isEcnCe);
+        screamRx->receive(getTimeInNtp(), 0, SSRC, recvlen, seqNr, received_ecn);
         pthread_mutex_unlock(&lock_scream);
 
         if (screamRx->checkIfFlushAck()){
