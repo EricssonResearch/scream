@@ -691,7 +691,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	if (isLast) {
 		detectLoss(time_ntp, txPackets, seqNr, stream);
 
-		if (bytesDeliveredThisRtt != 0 && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
+		if (bytesMarkedThisRtt != 0 && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
 			ecnCeEvent = true;
 			lastLossEventT_ntp = time_ntp;
 		}
