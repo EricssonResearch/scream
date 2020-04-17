@@ -685,6 +685,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	*/
 	uint16_t ecnCeMarkedBytes = 0;
 	markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytes, isLast);
+	stream->ecnCeMarkedBytes += ecnCeMarkedBytes;
 
 	/*
 	* Detect lost packets
@@ -692,7 +693,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	if (isLast) {
 		detectLoss(time_ntp, txPackets, seqNr, stream);
 
-		if (ecnCeMarkedBytes != 0 && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
+		if (bytesDeliveredThisRtt != 0 && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
 			ecnCeEvent = true;
 			lastLossEventT_ntp = time_ntp;
 		}
@@ -706,8 +707,6 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* L4S mode compute a congestion scaling factor that is dependent on the fraction
 			*  of ECN marked packets
 			*/
-			bytesMarkedThisRtt += ecnCeMarkedBytes;
-			bytesDeliveredThisRtt += bytesNewlyAcked;
 			if (time_ntp - lastL4sAlphaUpdateT_ntp > sRtt_ntp) {
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				if (bytesDeliveredThisRtt > 0) {
@@ -779,11 +778,13 @@ void ScreamTx::markAcked(uint32_t time_ntp,
 		* Receiption of packet given by seqNr
 		*/
 		if ((tmp->seqNr == seqNr) & !tmp->isAcked) {
+			bytesDeliveredThisRtt += tmp->size;
 			if (ceBits == 0x03) {
 				/*
 				* Packet was CE marked, increase counter
 				*/
 				encCeMarkedBytes += tmp->size;
+				bytesMarkedThisRtt += tmp->size;
 			}
 			tmp->isAcked = true;
 			ackedOwd = timestamp - tmp->timeTx_ntp;
