@@ -21,7 +21,8 @@ struct sigaction sa;
 using namespace std;
 
 #define BUFSIZE 2048
-#define MIN_PACE_INTERVAL 0.001
+#define MIN_PACE_INTERVAL_S 0.002
+#define MIN_PACE_INTERVAL_US 1900
 
 #define ECN_CAPABLE
 /*
@@ -48,6 +49,7 @@ float dscale = 10.0f;
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
 int mtu = 1200;
+float runTime = -1.0;
 bool stopThread = false;
 pthread_t create_rtp_thread = 0;
 pthread_t transmit_rtp_thread = 0;
@@ -170,6 +172,12 @@ void *transmitRtpThread(void *arg) {
   int sleepTime_us = 10;
   float retVal = 0.0f;
   int sizeOfQueue;
+  struct timeval start, end;
+  useconds_t diff = 0;
+  float paceIntervalFixedRate = 0.0f;
+  if (fixedRate > 0 &! disablePacing) {
+     paceIntervalFixedRate = (mtu+40)*8.0f/(fixedRate*1000)*0.8;
+  }
   for (;;) {
     if (stopThread) {
       return NULL;
@@ -181,19 +189,25 @@ void *transmitRtpThread(void *arg) {
     time_ntp = getTimeInNtp();
     retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
     pthread_mutex_unlock(&lock_scream);
+
     if (retVal != -1.0f) {
       pthread_mutex_lock(&lock_rtp_queue);
       sizeOfQueue = rtpQueue->sizeOfQueue();
       pthread_mutex_unlock(&lock_rtp_queue);
       do {
+         gettimeofday(&start, 0);
          time_ntp = getTimeInNtp();
          retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
-         if ((fixedRate > 0 || disablePacing) && sizeOfQueue > 0 && retVal > 0.0f)
-           retVal = 0.0;
+         //if ((fixedRate > 0 || disablePacing) && sizeOfQueue > 0 && retVal > 0.0f)
+         //  retVal = paceIntervalFixedRate;
 
+         if (fixedRate > 0 && retVal != -1)
+            retVal = paceIntervalFixedRate;
+         if (disablePacing && sizeOfQueue > 0 && retVal > 0.0f)
+            retVal = 0.0f;
          if (retVal > 0.0f)
             accumulatedPaceTime += retVal;
-         if (retVal != -1.0 && accumulatedPaceTime <= MIN_PACE_INTERVAL) {
+         if (retVal != -1.0 && accumulatedPaceTime <= MIN_PACE_INTERVAL_S) {
            pthread_mutex_lock(&lock_rtp_queue);
            rtpQueue->pop(buf, size, seqNr);
            sendPacket(buf,size);
@@ -207,15 +221,20 @@ void *transmitRtpThread(void *arg) {
          pthread_mutex_lock(&lock_rtp_queue);
          sizeOfQueue = rtpQueue->sizeOfQueue();
          pthread_mutex_unlock(&lock_rtp_queue);
-      } while (accumulatedPaceTime <= MIN_PACE_INTERVAL &&
+         gettimeofday(&end, 0);
+         diff = end.tv_usec-start.tv_usec;
+         accumulatedPaceTime = std::max(0.0f, accumulatedPaceTime-diff*1e-6f);
+//cerr << end.tv_usec-start.tv_usec << endl;
+      } while (accumulatedPaceTime <= MIN_PACE_INTERVAL_S &&
            retVal != -1.0f &&
            sizeOfQueue > 0);
       if (accumulatedPaceTime > 0) {
-	sleepTime_us = int (accumulatedPaceTime*1e6f);
+	sleepTime_us = MIN_PACE_INTERVAL_US;
 	accumulatedPaceTime = 0.0f;
       }
     }
     usleep(sleepTime_us);
+    sleepTime_us = 0;
   }
   return NULL;
 }
@@ -261,10 +280,17 @@ void *createRtpThread(void *arg) {
       bytes = 10;
     }
 
+    unsigned char pt = 98;
     while (bytes > 0) {
       int pl_size = min(bytes,mtu);
       int recvlen = pl_size+12;
-      writeRtp(buf_rtp,seqNr,ts,98);
+    
+      bytes = std::max(0, bytes-pl_size);
+      if (bytes == 0) {
+        // Last RTP packet, set marker bit
+        pt |= 0x80;
+      }
+      writeRtp(buf_rtp,seqNr,ts,pt);
       pthread_mutex_lock(&lock_rtp_queue);
       rtpQueue->push(buf_rtp, recvlen, seqNr, (time_ntp)/65536.0f);
       pthread_mutex_unlock(&lock_rtp_queue);
@@ -273,7 +299,6 @@ void *createRtpThread(void *arg) {
       time_ntp = getTimeInNtp();
       screamTx->newMediaFrame(time_ntp, SSRC, recvlen);
       pthread_mutex_unlock(&lock_scream);
-      bytes = std::max(0, bytes-pl_size);
       seqNr++;
     }
 
@@ -475,6 +500,7 @@ int main(int argc, char* argv[]) {
   if (argc <= 1) {
     cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-04-17" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
+    cerr << "     -time value runs for time seconds (default infinite)" << endl;
     cerr << "     -nopace disables packet pacing" << endl;
     cerr << "     -fixedrate sets a fixed 'coder' bitrate " << endl;
     cerr << "     -key option set a given key frame interval [s] and size multiplier " << endl;
@@ -513,6 +539,10 @@ int main(int argc, char* argv[]) {
         exit(0);
 
       }
+    }
+    if (strstr(argv[ix],"-time")) {
+      runTime = atof(argv[ix+1]);
+      ix+=2;
     }
     if (strstr(argv[ix],"-scale")) {
       scaleFactor = atof(argv[ix+1]);
@@ -614,7 +644,7 @@ int main(int argc, char* argv[]) {
     pthread_create(&sierra_python_thread,NULL,sierraPythonThread,(void*)"Sierra Python log thread...");
   }
 
-  while(!stopThread) {
+  while(!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
     uint32_t time_ntp = getTimeInNtp();
     bool isFeedback = time_ntp-rtcp_rx_time_ntp < 65536; // 1s in Q16
     if ((printSummary || !isFeedback) && time_ntp-lastLogT_ntp > 2*65536) { // 2s in Q16
@@ -656,6 +686,7 @@ int main(int argc, char* argv[]) {
     }
     usleep(50000);
   };
+  stopThread = true;
 
   usleep(500000);
   close(fd_outgoing_rtp);
