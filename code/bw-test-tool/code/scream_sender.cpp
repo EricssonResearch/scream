@@ -175,8 +175,8 @@ void *transmitRtpThread(void *arg) {
   struct timeval start, end;
   useconds_t diff = 0;
   float paceIntervalFixedRate = 0.0f;
-  if (fixedRate > 0 &! disablePacing) {
-     paceIntervalFixedRate = (mtu+40)*8.0f/(fixedRate*1000)*0.8;
+  if (fixedRate > 0 && !disablePacing) {
+     paceIntervalFixedRate = (mtu+40)*8.0f/(fixedRate*1000)*0.9;
   }
   for (;;) {
     if (stopThread) {
@@ -198,16 +198,13 @@ void *transmitRtpThread(void *arg) {
          gettimeofday(&start, 0);
          time_ntp = getTimeInNtp();
          retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
-         //if ((fixedRate > 0 || disablePacing) && sizeOfQueue > 0 && retVal > 0.0f)
-         //  retVal = paceIntervalFixedRate;
-
-         if (fixedRate > 0 && retVal != -1)
+         if (fixedRate > 0 && retVal >= 0.0f && sizeOfQueue > 0)
             retVal = paceIntervalFixedRate;
          if (disablePacing && sizeOfQueue > 0 && retVal > 0.0f)
             retVal = 0.0f;
          if (retVal > 0.0f)
             accumulatedPaceTime += retVal;
-         if (retVal != -1.0 && accumulatedPaceTime <= MIN_PACE_INTERVAL_S) {
+         if (retVal != -1.0) {// && accumulatedPaceTime <= MIN_PACE_INTERVAL_S) {
            pthread_mutex_lock(&lock_rtp_queue);
            rtpQueue->pop(buf, size, seqNr);
            sendPacket(buf,size);
@@ -224,12 +221,11 @@ void *transmitRtpThread(void *arg) {
          gettimeofday(&end, 0);
          diff = end.tv_usec-start.tv_usec;
          accumulatedPaceTime = std::max(0.0f, accumulatedPaceTime-diff*1e-6f);
-//cerr << end.tv_usec-start.tv_usec << endl;
       } while (accumulatedPaceTime <= MIN_PACE_INTERVAL_S &&
            retVal != -1.0f &&
            sizeOfQueue > 0);
       if (accumulatedPaceTime > 0) {
-	sleepTime_us = MIN_PACE_INTERVAL_US;
+	sleepTime_us = std::min((int)(accumulatedPaceTime*0.8*1e6f), MIN_PACE_INTERVAL_US*2);
 	accumulatedPaceTime = 0.0f;
       }
     }
