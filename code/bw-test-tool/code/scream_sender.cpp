@@ -15,8 +15,15 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <signal.h>
+#include <sys/timerfd.h>
 struct itimerval timer;
 struct sigaction sa;
+
+struct periodicInfo
+{
+	int timer_fd;
+	unsigned long long wakeupsMissed;
+};
 
 using namespace std;
 
@@ -45,6 +52,7 @@ int initRate = 1000;
 int minRate = 1000;
 int maxRate = 200000;
 int rateIncrease = 10000;
+float rateScale = 0.5f;
 float dscale = 10.0f;
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
@@ -235,16 +243,65 @@ void *transmitRtpThread(void *arg) {
   return NULL;
 }
 
+
+static int makePeriodic (unsigned int period, struct periodicInfo *info)
+{
+	int ret;
+	unsigned int ns;
+	unsigned int sec;
+	int fd;
+	struct itimerspec itval;
+
+	/* Create the timer */
+	fd = timerfd_create (CLOCK_MONOTONIC, 0);
+	info->wakeupsMissed = 0;
+	info->timer_fd = fd;
+	if (fd == -1)
+		return fd;
+
+	/* Make the timer periodic */
+	sec = period/1000000;
+	ns = (period - (sec * 1000000)) * 1000;
+	itval.it_interval.tv_sec = sec;
+	itval.it_interval.tv_nsec = ns;
+	itval.it_value.tv_sec = sec;
+	itval.it_value.tv_nsec = ns;
+	ret = timerfd_settime (fd, 0, &itval, NULL);
+	return ret;
+}
+
+static void waitPeriod (struct periodicInfo *info)
+{
+	unsigned long long missed;
+	int ret;
+
+	/* Wait for the next timer event. If we have missed any the
+	   number is written to "missed" */
+	ret = read (info->timer_fd, &missed, sizeof (missed));
+	if (ret == -1)
+	{
+		perror ("read timer");
+		return;
+	}
+
+	/* "missed" should always be >= 1, but just to be sure, check it is not 0 anyway */
+	if (missed > 0)
+		info->wakeupsMissed += (missed - 1);
+}
+
 void *createRtpThread(void *arg) {
-  uint32_t dT_us= (uint32_t) (1e6/FPS);
   uint32_t keyFrameInterval_ntp = (uint32_t) (keyFrameInterval * 65536.0f);
   float rateScale = 1.0f;
   if (isKeyFrame) {
     rateScale = 1.0f+0.0*keyFrameSize/(FPS*keyFrameInterval)/2.0;
     rateScale = (1.0f/rateScale);
   }
-  float dComp = 1.0f;
+  uint32_t dT_us= (uint32_t) (1e6/FPS);
+  unsigned char pt = 98;
+  struct periodicInfo info;
 
+  makePeriodic (dT_us, &info);
+  
   /*
   * Infinite loop that generates RTP packets
   */
@@ -255,8 +312,8 @@ void *createRtpThread(void *arg) {
     uint32_t time_ntp = getTimeInNtp();
 
     uint32_t ts = (uint32_t) (time_ntp/65536.0*90000);
-    float rate = dComp*screamTx->getTargetBitrate(SSRC)*rateScale;
-    int bytes = (int) (rate/FPS/8);
+    float rateTx = screamTx->getTargetBitrate(SSRC)*rateScale;
+    int bytes = (int) (rateTx/FPS/8);
 
     if (isKeyFrame && time_ntp-lastKeyFrameT_ntp >= keyFrameInterval_ntp) {
       /*
@@ -275,8 +332,8 @@ void *createRtpThread(void *arg) {
       */
       bytes = 10;
     }
-
-    unsigned char pt = 98;
+    
+    
     while (bytes > 0) {
       int pl_size = min(bytes,mtu);
       int recvlen = pl_size+12;
@@ -297,13 +354,13 @@ void *createRtpThread(void *arg) {
       pthread_mutex_unlock(&lock_scream);
       seqNr++;
     }
+    waitPeriod (&info);
 
-    dComp = 1.0;
-    usleep(dT_us);
   }
 
   return NULL;
 }
+
 uint32_t rtcp_rx_time_ntp = 0;
 #define KEEP_ALIVE_PKT_SIZE 1
 void *readRtcpThread(void *arg) {
@@ -468,7 +525,7 @@ int setup() {
                                 minRate*1000,
                                 initRate*1000,
                                 maxRate*1000,
-                                rateIncrease*1000, 0.5f,
+                                rateIncrease*1000, rateScale,
                                 0.2f, 0.1f, 0.05f, scaleFactor, scaleFactor);
   }
   return 1;
@@ -494,7 +551,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-04-17" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-05" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -time value runs for time seconds (default infinite)" << endl;
     cerr << "     -nopace disables packet pacing" << endl;
@@ -509,7 +566,10 @@ int main(int argc, char* argv[]) {
     cerr << "       example -maxrate 10000 " << endl;
     cerr << "     -rateincrease sets a max allowed rate increase speed [kbps/s]," << endl;
     cerr << "       default 10000kbps/s" << endl;
-    cerr << "       example -rateinc 1000 " << endl;
+    cerr << "       example -rateincrease 1000 " << endl;
+    cerr << "     -ratescale sets a max allowed rate increase speed as a fraction of the," << endl;
+    cerr << "       current default 0.5" << endl;
+    cerr << "       example -ratescale 1.0 " << endl;
     cerr << "     -ect n ,  ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
     cerr << "       -1 for not-ECT (default)" << endl;
     cerr << "     -scale value, scale factor in case of loss or ECN event (default 0.9) " << endl;
@@ -588,6 +648,10 @@ int main(int argc, char* argv[]) {
     }
     if (strstr(argv[ix],"-rateincrease")) {
       rateIncrease = atoi(argv[ix+1]);
+      ix+=2;
+    }
+    if (strstr(argv[ix],"-ratescale")) {
+      rateScale = atof(argv[ix+1]);
       ix+=2;
     }
     if (strstr(argv[ix],"-verbose")) {

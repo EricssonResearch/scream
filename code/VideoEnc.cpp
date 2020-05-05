@@ -40,8 +40,8 @@ void VideoEnc::setTargetBitrate(float targetBitrate_) {
 
 int VideoEnc::encode(float time) {
     int rtpBytes = 0;
-    int bytes = (int) (frameSize[ix]/nominalBitrate*targetBitrate);
-    nominalBitrate = 0.95*nominalBitrate + 0.05*frameSize[ix] * frameRate * 8;
+	int bytes = (int)(frameSize[ix] / nominalBitrate * targetBitrate);
+	nominalBitrate = 0.95*nominalBitrate + 0.05*frameSize[ix] * frameRate * 8;
     ix++; if (ix == nFrames) ix = 0;
     while (bytes > 0) {
         int rtpSize = std::min(kMaxRtpSize, bytes);

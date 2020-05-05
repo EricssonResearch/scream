@@ -75,11 +75,11 @@ const float ntp2SecScaleFactor = 1.0 / 65536;
 
 /*
 * Max number of RTP packets in flight
-* With and MSS = 1200 byte and an RTT = 200ms
-* this is enount to support media bitrates of ~50Mbps
+* With an MSS = 1200 byte and an RTT = 50ms
+* this is enount to support media bitrates of ~800Mbps
 * Note, 65536 % kMaxTxPackets must be zero
 */
-static const int kMaxTxPackets = 2048;
+static const int kMaxTxPackets = 4096;
 /*
 * Max number of streams
 */
@@ -147,7 +147,8 @@ public:
 		float txQueueSizeFactor = kTxQueueSizeFactor,
 		float queueDelayGuard = kQueueDelayGuard,
 		float lossEventRateScale = kLossEventRateScale,
-		float ecnCeEventRateScale = kEcnCeEventRateScale);
+		float ecnCeEventRateScale = kEcnCeEventRateScale,
+		bool isAdaptiveTargetRateScale = false);
 
 	/*
 	 * Updates the min and max bitrates for an existing stream
@@ -341,7 +342,8 @@ private:
 			float txQueueSizeFactor,
 			float queueDelayGuard,
 			float lossEventRateScale,
-			float ecnCeEventRateScale);
+			float ecnCeEventRateScale,
+			bool isAdaptiveTargetRateScale);
 
 		float getMaxRate();
 
@@ -366,6 +368,7 @@ private:
 		float queueDelayGuard;
 		float lossEventRateScale;
 		float ecnCeEventRateScale;
+		bool isAdaptiveTargetRateScale;
 
 		int credit;             // Credit that is received if another stream gets
 		//  priority to transmit
@@ -376,9 +379,11 @@ private:
 		int bytesTransmitted;   // Number of bytes transmitted
 		int bytesAcked;         // Number of ACKed bytes
 		int bytesLost;          // Number of lost bytes
+		int bytesCe;          // Number of lost bytes
 		float rateTransmitted;  // Transmitted rate
 		float rateAcked;        // ACKed rate
 		float rateLost;         // Lost packets (bit)rate
+		float rateCe;         // Lost packets (bit)rate
 		uint16_t hiSeqAck;      // Highest sequence number ACKed
 		uint16_t hiSeqTx;       // Highest sequence number transmitted
 		float minBitrate;       // Min bitrate
@@ -401,6 +406,7 @@ private:
 		float rateRtpHist[kRateUpDateSize];
 		float rateAckedHist[kRateUpDateSize];
 		float rateLostHist[kRateUpDateSize];
+		float rateCeHist[kRateUpDateSize];
 		float rateTransmittedHist[kRateUpDateSize];
 		int rateUpdateHistPtr;
 		float targetBitrateHist[kTargetBitrateHistSize];
@@ -464,7 +470,7 @@ private:
 	* Estimate one way delay [jiffy] and updated base delay
 	* Base delay is not subtracted
 	*/
-	uint32_t estimateOwd(uint32_t time_ntp);
+	void estimateOwd(uint32_t time_ntp);
 
 	/*
 	* return base delay [jiffy]
@@ -551,6 +557,7 @@ private:
 	uint32_t baseOwdHist[kBaseOwdHistSize];
 	int baseOwdHistPtr;
 	uint32_t baseOwdHistMin;
+	uint32_t clockDriftCompensation;
 	float queueDelay;
 	float queueDelayFractionAvg;
 	float queueDelayFractionHist[kQueueDelayFractionHistSize];

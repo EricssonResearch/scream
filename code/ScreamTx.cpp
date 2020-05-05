@@ -40,7 +40,7 @@ static const float kQueueDelayTargetMax = 0.3f; //ms
 
 // Congestion window validation
 static const float kBytesInFlightHistInterval_ntp = 65536; // Time (s) between stores=1s in NTP doain
-static const float kMaxBytesInFlightHeadRoom = 1.1f;
+static const float kMaxBytesInFlightHeadRoom = 1.2f;
 // Queue delay trend and shared bottleneck detection
 static const uint32_t kQueueDelayFractionHistInterval_us = 3277; // 50ms in NTP domain
 // video rate estimation update period
@@ -55,6 +55,9 @@ static const uint32_t kBaseDelayUpdateInterval_ntp = 655360; // 10s in NTP doain
 
 // L4S alpha gain factor, for scalable congestion control
 static const float kL4sG = 0.125f;
+
+// L4S alpha max value, for scalable congestion control
+static const float kL4sAlphaMax = 0.25;
 
 // Min CWND in MSS
 static int kMinCwndMss = 3;
@@ -141,6 +144,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	lastBaseDelayRefreshT_ntp(0),
 	maxRate(0.0f),
 	baseOwdHistMin(UINT32_MAX),
+	clockDriftCompensation(0),
 	fp_log(0),
 	completeLogItem(false)
 {
@@ -458,6 +462,13 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 		if (!openWindow)
 			cwndMin = std::max(cwndMinLow,kMinCwndMss * mss);
 		cwnd = max(cwnd, cwndMin);
+
+		/*
+		* Add a small 15us/s clock drift compensation 
+		*  for the case that the receiver clock is faster
+		* The reverse case is less problematic
+		*/
+		clockDriftCompensation += 1;
 	}
 
 	int sizeOfNextRtp = stream->rtpQueue->sizeOfNextRtp();
@@ -513,6 +524,7 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 	uint16_t seqNr) {
 	if (!isInitialized)
 		initialize(time_ntp);
+
 
 	int id;
 	Stream *stream = getStream(ssrc, id);
@@ -699,7 +711,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 		}
 
 		if (fp_log && completeLogItem) {
-			fprintf(fp_log, " %d,%d,%1.0f,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%s", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ecnCeMarkedBytes, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost,detailedLogExtraData);
+			fprintf(fp_log, " %d,%d,%1.0f,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%s", cwnd, bytesInFlight, rateTransmitted, streamId, bytesNewlyAcked, ecnCeMarkedBytes, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe, detailedLogExtraData);
 		}
 
 		if (isL4s) {
@@ -712,12 +724,20 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 				if (bytesDeliveredThisRtt > 0) {
 					float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
 					float l4sG = kL4sG;
-					if (F > l4sAlpha)
+					if (F > l4sAlpha) {
 						/*
 						* Adjust alpha a bit faster up than down
 						*/
-						l4sG *= 2.0f;
-					l4sAlpha = l4sG * F + (1.0f - l4sG)*l4sAlpha;
+						l4sG = std::min(1.0f, l4sG*4.0f);
+					}
+					/*
+					 * L4S alpha (backoff factor) is averaged and limited
+					 * It makes sense to limit the backoff because
+					 *   1) source is rate limited
+					 *   2) delay estimation algorithm also works in parallel
+					 *   3) L4S marking algorithm can lag behind a little and potentially overmark
+					 */
+					l4sAlpha = std::min(kL4sAlphaMax, l4sG * F + (1.0f - l4sG)*l4sAlpha);
 					bytesDeliveredThisRtt = 0;
 					bytesMarkedThisRtt = 0;
 				}
@@ -785,14 +805,36 @@ void ScreamTx::markAcked(uint32_t time_ntp,
 				*/
 				encCeMarkedBytes += tmp->size;
 				bytesMarkedThisRtt += tmp->size;
+				stream->bytesCe += tmp->size;
 			}
 			tmp->isAcked = true;
 			ackedOwd = timestamp - tmp->timeTx_ntp;
 			/*
+			* Small compensation for positive clock drift
+			*/
+			ackedOwd -= clockDriftCompensation;
+
+			/*
 			* Compute the queue delay i NTP domain (Q16)
 			*/
-			uint32_t qDel = estimateOwd(time_ntp);
-			qDel -= getBaseOwd();
+			estimateOwd(time_ntp);
+			uint32_t qDel = ackedOwd - getBaseOwd();
+
+			if (qDel > 0xFFFF0000) { 
+				/*
+				* TX and RX clock diff made qDel wrap around
+			    *  reset history
+				*/
+				queueDelayMinAvg = 0.0f;
+				queueDelay = 0.0f;
+				for (int n = 0; n < kBaseOwdHistSize; n++)
+					baseOwdHist[n] = UINT32_MAX;
+				baseOwd = UINT32_MAX;
+				baseOwdHistMin = UINT32_MAX;
+				baseOwdResetT_ntp = time_ntp;
+				qDel = 0;
+			}
+
 			/*
 			* Convert from NTP domain OWD to an OWD in [s]
 			*/
@@ -917,11 +959,11 @@ void ScreamTx::getLog(float time, char *s) {
 	for (int n = 0; n < nStreams; n++) {
 		Stream *tmp = streams[n];
 		char s2[200];
-		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %6.0f, %5.0f, %5d, ",
+		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f, %5d, ",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
 			tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
-			tmp->rateLost / 1000.0f,
+			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f,
 			tmp->hiSeqAck);
 		strcat(s, s2);
 	}
@@ -937,11 +979,11 @@ void ScreamTx::getShortLog(float time, char *s) {
 	for (int n = 0; n < nStreams; n++) {
 		Stream *tmp = streams[n];
 		char s2[200];
-		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, ",
+		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f, ",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
 			tmp->rateTransmitted / 1000.0f,
-			tmp->rateLost / 1000.0f);
+			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
 		strcat(s, s2);
 	}
 }
@@ -956,8 +998,8 @@ void ScreamTx::getVeryShortLog(float time, char *s) {
 	for (int n = 0; n < 1; n++) {
 		Stream *tmp = streams[n];
 		char s2[200];
-		sprintf(s2, "%5.0f, ",
-			tmp->rateLost / 1000.0f);
+		sprintf(s2, "%5.0f, %5.0f, ",
+			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
 		strcat(s, s2);
 	}
 }
@@ -1275,7 +1317,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 * Update base OWD (if needed) and return the
 * last estimated OWD (without offset compensation)
 */
-uint32_t ScreamTx::estimateOwd(uint32_t time_ntp) {
+void ScreamTx::estimateOwd(uint32_t time_ntp) {
 	baseOwd = std::min(baseOwd, ackedOwd);
 	if (time_ntp - lastBaseOwdAddT_ntp >= kBaseDelayUpdateInterval_ntp) {
 		baseOwdHist[baseOwdHistPtr] = baseOwd;
@@ -1294,7 +1336,6 @@ uint32_t ScreamTx::estimateOwd(uint32_t time_ntp) {
 			lastBaseDelayRefreshT_ntp = time_ntp;
 		}
 	}
-	return ackedOwd;
 }
 
 /*
@@ -1637,6 +1678,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	rateTransmitted = 0.0f;
 	rateAcked = 0.0f;
 	rateLost = 0.0f;
+	rateCe = 0.0;
 	lossEventFlag = false;
 	ecnCeEventFlag = false;
 	txSizeBitsAvg = 0.0f;
@@ -1653,6 +1695,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 		rateRtpHist[n] = 0.0f;
 		rateAckedHist[n] = 0.0f;
 		rateLostHist[n] = 0.0f;
+		rateCeHist[n] = 0.0f;
 		rateTransmittedHist[n] = 0.0f;
 	}
 	rateUpdateHistPtr = 0;
@@ -1666,8 +1709,8 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	initTime_ntp = 0;
 	rtpQueueDiscard = false;
 	lastRtpQueueDiscardT_ntp = 0;
-	rateLost = 0.0;
 	bytesLost = 0;
+	bytesCe = 0;
 	wasRepairLoss = false;
 	repairLoss = false;
 	for (int n = 0; n < kMaxTxPackets; n++)
@@ -1685,6 +1728,7 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 		rateTransmittedHist[rateUpdateHistPtr] = bytesTransmitted * 8.0f / tDelta;
 		rateAckedHist[rateUpdateHistPtr] = bytesAcked * 8.0f / tDelta;
 		rateLostHist[rateUpdateHistPtr] = bytesLost * 8.0f / tDelta;
+		rateCeHist[rateUpdateHistPtr] = bytesCe * 8.0f / tDelta;
 		rateRtpHist[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
 		rateUpdateHistPtr = (rateUpdateHistPtr + 1) % kRateUpDateSize;
 		rateTransmitted = 0.0f;
@@ -1695,11 +1739,13 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 			rateTransmitted += rateTransmittedHist[n];
 			rateAcked += rateAckedHist[n];
 			rateLost += rateLostHist[n];
+			rateCe += rateCeHist[n];
 			rateRtp += rateRtpHist[n];
 		}
 		rateTransmitted /= kRateUpDateSize;
 		rateAcked /= kRateUpDateSize;
 		rateLost /= kRateUpDateSize;
+		rateCe /= kRateUpDateSize;
 		rateRtp /= kRateUpDateSize;
 		if (rateRtp > 0 && isAdaptiveTargetRateScale) {
 			/*
@@ -1722,6 +1768,7 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 	bytesAcked = 0;
 	bytesRtp = 0;
 	bytesLost = 0;
+	bytesCe = 0;
 	lastRateUpdateT_ntp = time_ntp;
 }
 
@@ -1824,8 +1871,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			targetBitrate = std::max(minBitrate, targetBitrate*lossEventRateScale);
 		else if (ecnCeEventFlag) {
 			if (parent->isL4s) {
-				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 4.0f));
-				//updateTargetBitrateI(targetBitrate);
+				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 2.0f));
 			}
 			else {
 				targetBitrate = std::max(minBitrate, targetBitrate*ecnCeEventRateScale);
@@ -1961,7 +2007,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			float incrementScale = 1.0f + 0.05f*std::min(1.0f, 50000.0f / targetBitrate);
 
 			float increment = incrementScale * br;
-			if (!parent->isL4s || parent->l4sAlpha < 0.001) {
+			if (!parent->isL4s || parent->l4sAlpha < 0.01) {
 				/*
 				* Apply the extra precaution with respect to queue delay and
 				* RTP queue only if L4S is not running or when ECN marking does not occur for a longer period

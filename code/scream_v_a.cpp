@@ -10,7 +10,7 @@
 
 using namespace std;
 
-const float Tmax = 20;
+const float Tmax = 100;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = false;
@@ -20,35 +20,37 @@ int swprio = -1;
 #define TRACEFILE "../traces/trace_no_key_smooth.txt"
 //#define TRACEFILE "../traces/trace_key.txt"
 //#define TRACEFILE "../traces/trace_no_key.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
-const int mode = 0x01;
+const int mode = 0x03;
 const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.03f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false);
 
 	screamTx->setCwndMinLow(5000);
 
-    ScreamRx *screamRx = new ScreamRx(0,8,64);
+    ScreamRx *screamRx = new ScreamRx(0,1,1);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
-    NetQueue *netQueueDelay = new NetQueue(0.02f, 0.0f, 0.0f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 50e6, 0.0f, isL4s);
-    videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE);
+    NetQueue *netQueueDelay = new NetQueue(0.04f, 0.0f, 0.0f);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 40e6, 0.0f, isL4s);
+    videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
 	//videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
     if (mode & 0x01)
-        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 2e6f, 10e6f, 100e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
+        screamTx->registerNewStream(rtpQueue[0], 10, 0.7f, 1e6f, 1e6f, 20e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
         //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 20e3f, 200e3f, 200e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x02)
 		//screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 2056e3f, 10024e3f, 80192e3f, 10e6f, 0.5f, 0.2f, 0.1f, 0.1f);
-	    screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
+		screamTx->registerNewStream(rtpQueue[1], 11, 0.6f, 1e6f, 1e6f, 100e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
+	    //screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x04)
         screamTx->registerNewStream(rtpQueue[2], 12, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
 
@@ -68,9 +70,9 @@ int main(int argc, char* argv[])
     while (time <= Tmax) {
         float retVal = -1.0;
         time = n / timeBase;
-        time_ntp = n*(65536 / timeBase);
+        time_ntp = n*(65536 / timeBase) + 100;
         time = time_ntp / 65536.0f;
-        time_ntp_rx = time_ntp;
+        time_ntp_rx = n * (65570.0f / timeBase);
         netQueueRate->updateRate(time);
         bool isEvent = false;
 
@@ -105,7 +107,7 @@ int main(int argc, char* argv[])
 
         if (true || time < 30.0 || time > 30.1) {
             if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
-                if ((seqNr % 1000 == 19 || seqNr % 1000 == 21) && false) {
+                if (seqNr % 200 == 19 && false) {
                     cerr << "lost " << seqNr << endl;
                 }
                 else {

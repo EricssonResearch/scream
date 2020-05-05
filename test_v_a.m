@@ -6,10 +6,10 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
         
     figure(1);
     subplot(2,1,1);
-    plot(T,a(:,2));%,T,a(:,4)); 
+    plot(T,a(:,2),T,a(:,3));%,T,a(:,4)); 
     set(gca,'FontSize',12);grid on;
     set(gca,'XTickLabel',[]);    
-    axis([0 Tmax 0 0.05]);grid on;
+    axis([0 Tmax 0 0.2]);grid on;
     title('qdel[s]');
     
     subplot(2,1,2);
@@ -24,7 +24,7 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     subplot(2,1,1);
     plot(T,a(:,8)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.05]);grid on;
+    axis([0 Tmax 0 0.2]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay [s]');
     subplot(2,1,2);
@@ -36,16 +36,16 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     xlabel('T [s]');
     end
     if I>1
-    K = 5;    
+    K = 6;    
     figure(3);
     subplot(2,1,1);
     plot(T,a(:,8+K)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.1]);grid on;
+    axis([0 Tmax 0 0.2]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,9+K),T,a(:,11+K),T,a(:,10+K));
+    plot(T,a(:,9+K)/1000,T,a(:,11+K)/1000,T,a(:,10+K)/1000);
     set(gca,'FontSize',12);grid on;
     axis([0 Tmax 0 Bmax(2)]);grid on;
     title('Bitrate [kbps]');    
@@ -53,7 +53,7 @@ function test_v_a(a,Tmax,I,Bmax,Cmax)
     xlabel('T [s]');
     end
     if I>2        
-    K = 10;    
+    K = 12;    
     figure(4);
     subplot(2,1,1);
     plot(T,a(:,8+K)); 
