@@ -123,7 +123,8 @@ public:
 		float cautiousPacing = 0.0f,
 		int bytesInFlightHistSize = 5,
 		bool isL4s = false,
-		bool openWindow = false);
+		bool openWindow = false,
+		bool enableClockDriftCompensation = false);
 
 	~ScreamTx();
 
@@ -558,6 +559,8 @@ private:
 	int baseOwdHistPtr;
 	uint32_t baseOwdHistMin;
 	uint32_t clockDriftCompensation;
+	uint32_t clockDriftCompensationInc;
+
 	float queueDelay;
 	float queueDelayFractionAvg;
 	float queueDelayFractionHist[kQueueDelayFractionHistSize];
@@ -581,6 +584,7 @@ private:
 	int cwndMin;
 	int cwndMinLow;
 	bool openWindow;
+	bool enableClockDriftCompensation;
 	int bytesInFlight;
 	int bytesInFlightLog;
 	int bytesInFlightHistLo[kBytesInFlightHistSizeMax];

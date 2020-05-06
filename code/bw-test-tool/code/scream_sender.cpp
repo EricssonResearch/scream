@@ -54,6 +54,7 @@ int maxRate = 200000;
 int rateIncrease = 10000;
 float rateScale = 0.5f;
 float dscale = 10.0f;
+bool enableClockDriftCompensation = false;
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
 int mtu = 1200;
@@ -495,7 +496,8 @@ int setup() {
                             0.0f,
                             20,
                             ect==1,
-                            true);
+                            true,
+                            enableClockDriftCompensation);
   else
     screamTx = new ScreamTx(scaleFactor, scaleFactor,
                             delayTarget,
@@ -505,7 +507,8 @@ int setup() {
                             0.0f,
                             20,
                             ect==1,
-                            false);
+                            false,
+                            enableClockDriftCompensation);
   rtpQueue = new RtpQueue();
   screamTx->setCwndMinLow(5000);
 
@@ -551,7 +554,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-05" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-06" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -time value runs for time seconds (default infinite)" << endl;
     cerr << "     -nopace disables packet pacing" << endl;
@@ -577,6 +580,8 @@ int main(int argc, char* argv[]) {
     cerr << "     -delaytarget sets a queue delay target (default = 0.06s) " << endl;
     cerr << "     -mtu sets the max RTP payload size (default 1200 byte)" << endl;
     cerr << "     -fps sets the frame rate (default 50)"  << endl;
+    cerr << "     -clockdrift enable clock drift compensation for the case that the"  << endl;
+    cerr << "       receiver end clock is faster" << endl;
     cerr << "     -verbose print a more extensive log" << endl;
     cerr << "     -nosummary don't print summary" << endl;
     cerr << "     -log log_file  save detailed per-ACK log to file" << endl;
@@ -670,6 +675,11 @@ int main(int argc, char* argv[]) {
       sierraLog = true;
       ix++;
     }
+    if (strstr(argv[ix],"-clockdrift")) {
+      enableClockDriftCompensation = true;
+      ix++;
+    }
+
   }
   if (minRate > initRate)
     initRate = minRate;

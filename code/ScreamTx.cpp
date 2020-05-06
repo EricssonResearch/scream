@@ -60,7 +60,10 @@ static const float kL4sG = 0.125f;
 static const float kL4sAlphaMax = 0.25;
 
 // Min CWND in MSS
-static int kMinCwndMss = 3;
+static const int kMinCwndMss = 3;
+
+// Compensate for max 33/65536 = 0.05% clock drift
+static const uint32_t kMaxClockdriftCompensation = 33;
 
 ScreamTx::ScreamTx(float lossBeta_,
 	float ecnCeBeta_,
@@ -72,7 +75,8 @@ ScreamTx::ScreamTx(float lossBeta_,
 	float cautiousPacing_,
 	int bytesInFlightHistSize_,
 	bool isL4s_,
-	bool openWindow_
+	bool openWindow_,
+	bool enableClockDriftCompensation_
 ) :
 	sRttSh_ntp(0),
 	lossBeta(lossBeta_),
@@ -83,8 +87,9 @@ ScreamTx::ScreamTx(float lossBeta_,
 	gainDown(gainDown_),
 	cautiousPacing(cautiousPacing_),
 	bytesInFlightHistSize(bytesInFlightHistSize_),
-	openWindow(openWindow_),
 	isL4s(isL4s_),
+	openWindow(openWindow_),
+	enableClockDriftCompensation(enableClockDriftCompensation_),
 	sRtt_ntp(0),
 	sRtt(0.0f),
 	ackedOwd(0),
@@ -145,6 +150,8 @@ ScreamTx::ScreamTx(float lossBeta_,
 	maxRate(0.0f),
 	baseOwdHistMin(UINT32_MAX),
 	clockDriftCompensation(0),
+	clockDriftCompensationInc(0),
+
 	fp_log(0),
 	completeLogItem(false)
 {
@@ -464,11 +471,10 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 		cwnd = max(cwnd, cwndMin);
 
 		/*
-		* Add a small 15us/s clock drift compensation 
+		* Add a small clock drift compensation
 		*  for the case that the receiver clock is faster
-		* The reverse case is less problematic
 		*/
-		clockDriftCompensation += 1;
+		clockDriftCompensation += clockDriftCompensationInc;
 	}
 
 	int sizeOfNextRtp = stream->rtpQueue->sizeOfNextRtp();
@@ -623,7 +629,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 		ptr += 2;
 		begin_seq = ntohs(begin_seq);
 		num_reports = ntohs(num_reports) + 1;
-    end_seq = begin_seq+num_reports-1;
+        end_seq = begin_seq+num_reports-1;
 
 		/*
 		* Validate RTCP feedback message
@@ -809,22 +815,35 @@ void ScreamTx::markAcked(uint32_t time_ntp,
 			}
 			tmp->isAcked = true;
 			ackedOwd = timestamp - tmp->timeTx_ntp;
-			/*
-			* Small compensation for positive clock drift
-			*/
-			ackedOwd -= clockDriftCompensation;
 
 			/*
 			* Compute the queue delay i NTP domain (Q16)
 			*/
 			estimateOwd(time_ntp);
+			/*
+			* Small compensation for positive clock drift
+			*/
+			ackedOwd -= clockDriftCompensation;
+
 			uint32_t qDel = ackedOwd - getBaseOwd();
 
-			if (qDel > 0xFFFF0000) { 
+			if (qDel > 0xFFFF0000 && clockDriftCompensation != 0) {
+				/*
+				* We have the case that the clock drift compensation is too large as it gives negative queue delays
+				*  reduce the clock drift compensation and restore qDel to 0
+				*/
+				uint32_t diff = 0 - qDel;
+				clockDriftCompensation -= diff;
+				qDel = 0;
+			}
+
+			if (qDel > 0xFFFF0000 || clockDriftCompensation > 0xFFFF0000) {
 				/*
 				* TX and RX clock diff made qDel wrap around
 			    *  reset history
 				*/
+				clockDriftCompensation = 0;
+				clockDriftCompensationInc = 0;
 				queueDelayMinAvg = 0.0f;
 				queueDelay = 0.0f;
 				for (int n = 0; n < kBaseOwdHistSize; n++)
@@ -1056,6 +1075,8 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		* The base OWD is likely wrong, for instance due to
 		* a channel change or clock drift, reset base OWD history
 		*/
+		clockDriftCompensation = 0;
+		clockDriftCompensationInc = 0;
 		queueDelayMinAvg = 0.0f;
 		queueDelay = 0.0f;
 		for (int n = 0; n < kBaseOwdHistSize; n++)
@@ -1320,8 +1341,44 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 void ScreamTx::estimateOwd(uint32_t time_ntp) {
 	baseOwd = std::min(baseOwd, ackedOwd);
 	if (time_ntp - lastBaseOwdAddT_ntp >= kBaseDelayUpdateInterval_ntp) {
-		baseOwdHist[baseOwdHistPtr] = baseOwd;
+		if (enableClockDriftCompensation) {
+			/*
+			* The clock drift compensation looks at how the baseOwd increases over time
+			*  and calculates a compensation factor that advanced the sender clock stamps
+			* Only positive drift (receiver side is faster) is compensated as negative
+			* drift is already handled
+			*/
+			int ptr = baseOwdHistPtr;
+			int k = 0;
+			uint32_t bw0 = UINT32_MAX;
+			for (k = 0; k < kBaseOwdHistSize - 1; k++) {
+				if (baseOwdHist[ptr] != UINT32_MAX) {
+					bw0 = baseOwdHist[ptr];
+					ptr = ptr - 1;
+					if (ptr < 0) ptr += kBaseOwdHistSize;
+				}
+				else
+					break;
+			}
+
+			uint32_t bw1 = baseOwd;
+			if (k > 0) {
+				if ((bw1 > bw0))
+					clockDriftCompensationInc = (bw1 - bw0) / (kBaseDelayUpdateInterval_ntp / 65536 * k);
+				else
+					clockDriftCompensationInc = 0;
+				clockDriftCompensationInc = std::min(kMaxClockdriftCompensation, clockDriftCompensationInc);
+				if (clockDriftCompensation == 0) {
+					/*
+					* Two update periods delayed with compensation so we add one update period worth of
+					*  clock drift compensation
+					*/
+					clockDriftCompensation += clockDriftCompensationInc * (kBaseDelayUpdateInterval_ntp / 65536);
+				}
+			}
+		}
 		baseOwdHistPtr = (baseOwdHistPtr + 1) % kBaseOwdHistSize;
+		baseOwdHist[baseOwdHistPtr] = baseOwd;
 		lastBaseOwdAddT_ntp = time_ntp;
 		baseOwd = UINT32_MAX;
 		baseOwdHistMin = UINT32_MAX;

@@ -25,13 +25,13 @@ int swprio = -1;
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
-const int mode = 0x03;
+const int mode = 0x01;
 const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.03f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 0, 0.0f, 20, isL4s, false, false);
 
 	screamTx->setCwndMinLow(5000);
 
@@ -45,11 +45,11 @@ int main(int argc, char* argv[])
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
     if (mode & 0x01)
-        screamTx->registerNewStream(rtpQueue[0], 10, 0.7f, 1e6f, 1e6f, 20e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
+        screamTx->registerNewStream(rtpQueue[0], 10, 0.7f, 1e6f, 1e6f, 150e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
         //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 20e3f, 200e3f, 200e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x02)
 		//screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 2056e3f, 10024e3f, 80192e3f, 10e6f, 0.5f, 0.2f, 0.1f, 0.1f);
-		screamTx->registerNewStream(rtpQueue[1], 11, 0.6f, 1e6f, 1e6f, 100e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
+		screamTx->registerNewStream(rtpQueue[1], 11, 0.6f, 1e6f, 1e6f, 15e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
 	    //screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
     if (mode & 0x04)
         screamTx->registerNewStream(rtpQueue[2], 12, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
         time = n / timeBase;
         time_ntp = n*(65536 / timeBase) + 100;
         time = time_ntp / 65536.0f;
-        time_ntp_rx = n * (65570.0f / timeBase);
+        time_ntp_rx = n * (65558.0f / timeBase);
         netQueueRate->updateRate(time);
         bool isEvent = false;
 
