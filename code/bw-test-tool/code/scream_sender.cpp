@@ -554,7 +554,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-06" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-11" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -time value runs for time seconds (default infinite)" << endl;
     cerr << "     -nopace disables packet pacing" << endl;
