@@ -76,7 +76,7 @@ const float ntp2SecScaleFactor = 1.0 / 65536;
 /*
 * Max number of RTP packets in flight
 * With an MSS = 1200 byte and an RTT = 50ms
-* this is enount to support media bitrates of ~800Mbps
+* this is enough to support media bitrates up to ~800Mbps
 * Note, 65536 % kMaxTxPackets must be zero
 */
 static const int kMaxTxPackets = 4096;

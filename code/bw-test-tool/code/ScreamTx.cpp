@@ -48,7 +48,7 @@ static const uint32_t kRateUpdateInterval_ntp = 3277;  // 50ms in NTP domain
 
 // Packet reordering margin (us)
 static const uint32_t kReordertime_ntp = 655;  // 10ms in NTP domain
-static const uint32_t kMinRtpQueueDiscardInterval_ntp = 65536; // 1s in NTP doain
+static const uint32_t kMinRtpQueueDiscardInterval_ntp = 16384; // 0.25s in NTP doain
 
 // Update interval for base delay history
 static const uint32_t kBaseDelayUpdateInterval_ntp = 655360; // 10s in NTP doain
@@ -749,8 +749,6 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 				}
 			}
 		}
-
-		stream->ecnCeMarkedBytes += ecnCeMarkedBytes;
 
 		if (lossEvent || ecnCeEvent) {
 			lastLossEventT_ntp = time_ntp;
@@ -1791,6 +1789,7 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 		rateTransmitted = 0.0f;
 		rateAcked = 0.0f;
 		rateLost = 0.0f;
+		rateCe = 0.0f;
 		rateRtp = 0.0f;
 		for (int n = 0; n < kRateUpDateSize; n++) {
 			rateTransmitted += rateTransmittedHist[n];
