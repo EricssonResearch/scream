@@ -860,7 +860,7 @@ void ScreamTx::markAcked(uint32_t time_ntp,
 			uint32_t rtt = time_ntp - tmp->timeTx_ntp;
 
 			if (fp_log && isLast) {
-				fprintf(fp_log, "%1.3f,%1.3f,%1.3f,", time_ntp*ntp2SecScaleFactor, queueDelay, rtt*ntp2SecScaleFactor);
+				fprintf(fp_log, "%s,%1.3f,%1.3f,", timeString, queueDelay, rtt*ntp2SecScaleFactor);
 				completeLogItem = true;
 			}
 			if (rtt < 1000000 && isLast) {

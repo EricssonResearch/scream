@@ -55,6 +55,13 @@ int rateIncrease = 10000;
 float rateScale = 0.5f;
 float dscale = 10.0f;
 bool enableClockDriftCompensation = false;
+float burstTime = -1.0;
+float burstSleep = -1.0;
+bool isBurst = false;
+float burstStartTime = -1.0;
+float burstSleepTime = -1.0;
+
+
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
 int mtu = 1200;
@@ -107,6 +114,9 @@ pthread_mutex_t lock_rtp_queue;
 pthread_mutex_t lock_pace;
 
 FILE *fp_log = 0;
+
+bool ntp = false;
+bool append = false;
 
 double t0=0;
 /*
@@ -324,15 +334,37 @@ void *createRtpThread(void *arg) {
       lastKeyFrameT_ntp = time_ntp;
     }
 
-    if ((time_ntp/6554) % 300 > 298) {
-      /*
-      * Drop bitrate for 100ms every 30s
-      *  this ensures that the queue delay is estimated correctly
-      * A normal video encoder use does not necessitate this as the
-      *  video stream typically drops in bitrate every once in a while
-      */
-      bytes = 10;
+    if (burstTime < 0) {
+      if ((time_ntp/6554) % 300 > 298) {
+        /*
+        * Drop bitrate for 100ms every 30s
+        *  this ensures that the queue delay is estimated correctly
+        * A normal video encoder use does not necessitate this as the
+        *  video stream typically drops in bitrate every once in a while
+        */
+        bytes = 10;
+      }
+    } else {
+      float time_s = time_ntp/65536.0f;
+      if (burstStartTime < 0) {
+        burstStartTime = time_s;
+        isBurst = true;
+      } 
+      if (time_s > burstStartTime+burstTime && isBurst) {
+        isBurst = false;
+        burstSleepTime = time_s;
+      }
+      if (time_s > burstSleepTime+burstSleep && !isBurst) {
+        isBurst = true;
+        burstStartTime = time_s;
+      }
+      if (!isBurst)
+        bytes=0;
+
+
+
     }
+
     
     
     while (bytes > 0) {
@@ -375,6 +407,17 @@ void *readRtcpThread(void *arg) {
     if (recvlen > KEEP_ALIVE_PKT_SIZE) {
       pthread_mutex_lock(&lock_scream);
       uint32_t time_ntp = getTimeInNtp(); // We need time in microseconds, roughly ms granularity is OK
+      char s[100];
+      if (ntp) {
+         struct timeval tp;
+         gettimeofday(&tp, NULL);
+         double time = tp.tv_sec + tp.tv_usec*1e-6;
+         sprintf(s,"%1.6f", time);
+      } else {
+         sprintf(s,"%1.3f",time_ntp/65536.0f);
+      }
+      screamTx->setTimeString(s);
+
       screamTx->incomingStandardizedFeedback(time_ntp, buf_rtcp, recvlen);
 
       pthread_mutex_unlock(&lock_scream);
@@ -554,9 +597,11 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-11" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-13" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -time value runs for time seconds (default infinite)" << endl;
+    cerr << "     -burst bursts media for a given time and then sleeps a given time" << endl;
+    cerr << "       example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
     cerr << "     -nopace disables packet pacing" << endl;
     cerr << "     -fixedrate sets a fixed 'coder' bitrate " << endl;
     cerr << "     -key option set a given key frame interval [s] and size multiplier " << endl;
@@ -585,11 +630,14 @@ int main(int argc, char* argv[]) {
     cerr << "     -verbose print a more extensive log" << endl;
     cerr << "     -nosummary don't print summary" << endl;
     cerr << "     -log log_file  save detailed per-ACK log to file" << endl;
+    cerr << "     -ntp use NTP timestamp in logfile" << endl;
+    cerr << "     -append append logfile" << endl;
     cerr << "     -sierralog get logs from python script that logs a sierra modem" << endl;
     exit(-1);
   }
   int ix = 1;
   bool verbose = false;
+  char *logFile = 0; 
   /* First find options */
   while (strstr(argv[ix],"-")) {
     if (strstr(argv[ix],"-ect")) {
@@ -624,6 +672,11 @@ int main(int argc, char* argv[]) {
     if (strstr(argv[ix],"-fixedrate")) {
       fixedRate = atoi(argv[ix+1]);
       ix+=2;
+    }
+    if (strstr(argv[ix],"-burst")) {
+      burstTime = atof(argv[ix+1]);
+      burstSleep = atof(argv[ix+2]);
+      ix+=3;
     }
     if (strstr(argv[ix],"-key")) {
       isKeyFrame = true;
@@ -668,11 +721,19 @@ int main(int argc, char* argv[]) {
       ix++;
     }
     if (strstr(argv[ix],"-log")) {
-      fp_log = fopen(argv[ix+1],"w");
+      logFile = argv[ix+1];
       ix+=2;
     }
     if (strstr(argv[ix],"-sierralog")) {
       sierraLog = true;
+      ix++;
+    }
+    if (strstr(argv[ix],"-ntp")) {
+      ntp = true;
+      ix++;
+    }
+    if (strstr(argv[ix],"-append")) {
+      append = true;
       ix++;
     }
     if (strstr(argv[ix],"-clockdrift")) {
@@ -680,6 +741,12 @@ int main(int argc, char* argv[]) {
       ix++;
     }
 
+  }
+  if (logFile) {
+      if (append)
+         fp_log = fopen(logFile,"a");
+      else
+         fp_log = fopen(logFile,"w");
   }
   if (minRate > initRate)
     initRate = minRate;

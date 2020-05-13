@@ -276,6 +276,10 @@ public:
 		fp_log = fp;
 	}
 
+        void setTimeString(char *s) {
+          strcpy(timeString,s);
+        } 
+
 	/*
 	* extra data to be appended to detailed log
 	*/
@@ -672,6 +676,7 @@ private:
 	*/
 	FILE *fp_log;
 	bool completeLogItem;
+        char timeString[100];
 
 };
 }
