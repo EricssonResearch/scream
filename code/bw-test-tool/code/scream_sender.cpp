@@ -37,6 +37,7 @@ using namespace std;
 * -1 = Not-ECT
 * 0 = ECT(0)
 * 1 = ECT(1)
+* 3 = CE
 */
 int ect = -1;
 
@@ -117,6 +118,9 @@ FILE *fp_log = 0;
 
 bool ntp = false;
 bool append = false;
+bool itemlist = false;
+bool detailed = false;
+float randRate = 0.0f;
 
 double t0=0;
 /*
@@ -230,7 +234,7 @@ void *transmitRtpThread(void *arg) {
            pthread_mutex_unlock(&lock_rtp_queue);
            pthread_mutex_lock(&lock_scream);
            time_ntp = getTimeInNtp();
-           retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr);
+           retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, (buf[1] & 0x80) != 0);
            pthread_mutex_unlock(&lock_scream);
          }
 
@@ -308,7 +312,7 @@ void *createRtpThread(void *arg) {
     rateScale = (1.0f/rateScale);
   }
   uint32_t dT_us= (uint32_t) (1e6/FPS);
-  unsigned char pt = 98;
+  unsigned char PT = 98;
   struct periodicInfo info;
 
   makePeriodic (dT_us, &info);
@@ -324,7 +328,8 @@ void *createRtpThread(void *arg) {
 
     uint32_t ts = (uint32_t) (time_ntp/65536.0*90000);
     float rateTx = screamTx->getTargetBitrate(SSRC)*rateScale;
-    int bytes = (int) (rateTx/FPS/8);
+    float randVal = float(rand())/RAND_MAX-0.5;
+    int bytes = (int) (rateTx/FPS/8*(1.0+randVal*randRate));
 
     if (isKeyFrame && time_ntp-lastKeyFrameT_ntp >= keyFrameInterval_ntp) {
       /*
@@ -365,18 +370,18 @@ void *createRtpThread(void *arg) {
 
     }
 
-    
-    
     while (bytes > 0) {
       int pl_size = min(bytes,mtu);
       int recvlen = pl_size+12;
     
       bytes = std::max(0, bytes-pl_size);
+      unsigned char pt = PT; 
       if (bytes == 0) {
         // Last RTP packet, set marker bit
         pt |= 0x80;
       }
       writeRtp(buf_rtp,seqNr,ts,pt);
+
       pthread_mutex_lock(&lock_rtp_queue);
       rtpQueue->push(buf_rtp, recvlen, seqNr, (time_ntp)/65536.0f);
       pthread_mutex_unlock(&lock_rtp_queue);
@@ -414,7 +419,7 @@ void *readRtcpThread(void *arg) {
          double time = tp.tv_sec + tp.tv_usec*1e-6;
          sprintf(s,"%1.6f", time);
       } else {
-         sprintf(s,"%1.3f",time_ntp/65536.0f);
+         sprintf(s,"%1.4f",time_ntp/65536.0f);
       }
       screamTx->setTimeString(s);
 
@@ -521,8 +526,10 @@ int setup() {
   */
 #ifdef ECN_CAPABLE
   int iptos = 0;
-  if (ect >= 0)
+  if (ect == 0 || ect == 1)
     iptos = 2-ect;
+  if (ect == 3)
+    iptos = 3;
   int res = setsockopt(fd_outgoing_rtp, IPPROTO_IP, IP_TOS,  &iptos, sizeof(iptos));
   if (res < 0) {
       cerr << "Not possible to set ECN bits" << endl;
@@ -597,7 +604,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-13" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-27" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -time value runs for time seconds (default infinite)" << endl;
     cerr << "     -burst bursts media for a given time and then sleeps a given time" << endl;
@@ -606,6 +613,8 @@ int main(int argc, char* argv[]) {
     cerr << "     -fixedrate sets a fixed 'coder' bitrate " << endl;
     cerr << "     -key option set a given key frame interval [s] and size multiplier " << endl;
     cerr << "       example -key 2.0 5.0 " << endl;
+    cerr << "     -rand value framesizes vary randomly around the nominal " << endl;
+    cerr << "       example -rand 10 framesize vary +/- 10% " << endl;
     cerr << "     -initrate sets a start bitrate [kbps]" << endl;
     cerr << "       example -initrate 2000 " << endl;
     cerr << "     -minrate sets a min bitrate [kbps], default 1000kbps" << endl;
@@ -632,6 +641,8 @@ int main(int argc, char* argv[]) {
     cerr << "     -log log_file  save detailed per-ACK log to file" << endl;
     cerr << "     -ntp use NTP timestamp in logfile" << endl;
     cerr << "     -append append logfile" << endl;
+    cerr << "     -itemlist add item list in beginning of log file" << endl;
+    cerr << "     -detailed detailed log, per ACKed RTP" << endl;
     cerr << "     -sierralog get logs from python script that logs a sierra modem" << endl;
     exit(-1);
   }
@@ -643,8 +654,8 @@ int main(int argc, char* argv[]) {
     if (strstr(argv[ix],"-ect")) {
       ect = atoi(argv[ix+1]);
       ix+=2;
-      if (ect < -1 || ect > 1) {
-        cerr << "ect must be -1, 0 or 1 " << endl;
+      if (!(ect == 1 || ect == 0 || ect == 1 || ect == 3)) {
+        cerr << "ect must be -1, 0, 1 or 3 " << endl;
         exit(0);
 
       }
@@ -692,6 +703,10 @@ int main(int argc, char* argv[]) {
       FPS = atof(argv[ix+1]);
       ix+=2;
     }
+    if (strstr(argv[ix],"-rand")) {
+      randRate = atof(argv[ix+1])/100.0;
+      ix+=2;
+    }
     if (strstr(argv[ix],"-initrate")) {
       initRate = atoi(argv[ix+1]);
       ix+=2;
@@ -736,6 +751,14 @@ int main(int argc, char* argv[]) {
       append = true;
       ix++;
     }
+    if (strstr(argv[ix],"-itemlist")) {
+      itemlist = true;
+      ix++;
+    }
+    if (strstr(argv[ix],"-detailed")) {
+      detailed = true;
+      ix++;
+    }
     if (strstr(argv[ix],"-clockdrift")) {
       enableClockDriftCompensation = true;
       ix++;
@@ -756,6 +779,10 @@ int main(int argc, char* argv[]) {
   if (setup() == 0)
     return 0;
 
+  if (logFile && !append && itemlist) {
+    fprintf(fp_log,"%s\n", screamTx->getDetailedLogItemList());
+  }
+
   struct sigaction action;
   memset(&action, 0, sizeof(struct sigaction));
   action.sa_handler = stopAll;
@@ -764,6 +791,7 @@ int main(int argc, char* argv[]) {
 
   cerr << "Scream sender started! "<<endl;
   screamTx->setDetailedLogFp(fp_log);
+  screamTx->useExtraDetailedLog(detailed);
 
   pthread_mutex_init(&lock_scream, NULL);
   pthread_mutex_init(&lock_rtp_queue, NULL);

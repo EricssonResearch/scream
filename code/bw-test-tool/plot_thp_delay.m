@@ -19,19 +19,21 @@ function plot_thp_delay(a,Tlim,maxThp,maxDelay)
 % >plot_cdf(....
 % 
 T = a(:,1);
-subplot(9,1,1:5);
+subplot(211);%subplot(9,1,1:5);
 K = 5;
 B = ones(1,K)/K;
-ix = find(a(:,13) > 0);
-plr = sum(a(:,13))/sum(a(:,10))*100
+ix = find(a(:,15) > 0);
+plr = sum(a(:,15))/sum(a(:,10))*100
+ixe = find(a(:,16) > 0);
+
 mean(a(:,4))
-plot(T,filter(B,1,a(:,10))/1e6,T(ix),0.1,'r.','linewidth',2)
+plot(T,filter(B,1,a(:,13))/1e6,T(ix),0.5,'r.',T(ixe),0.5,'m.','linewidth',2)
 set(gca,'FontSize',14);grid on;
 set(gca,'XTickLabel',[]);grid on;
 title('Throughput [Mbps], loss events (red)');
 xlim(Tlim);
 ylim([0 maxThp]);
-subplot(9,1,7:9);
+subplot(212);%subplot(9,1,7:9);
 plot(T,a(:,2),T,a(:,3),':','linewidth',2);ylim([0 maxDelay]);
 set(gca,'FontSize',14);grid on;
 title('Network queue delay (blue) and RTT (green) [s]');
