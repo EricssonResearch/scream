@@ -27,7 +27,7 @@ int fd_incoming_rtp;
 int fd_outgoing_rtcp;
 ScreamRx *screamRx = 0;
 
-int fd_local_rtp;
+//int fd_local_rtp;
 
 char* SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
@@ -39,6 +39,8 @@ int LOCAL_PORT = 30124;
 
 int ackDiff = -1;
 int nReportedRtpPackets = 64;
+
+char *ifname = 0;
 
 int nPrint = 0;
 pthread_mutex_t lock_scream;
@@ -124,10 +126,11 @@ int main(int argc, char* argv[])
   unsigned char buf[BUFSIZE];
   unsigned char buf_rtcp[BUFSIZE];
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2020-05-27" << endl;
-    cerr << "Usage :" << endl << " >scream_bw_test_rx <-ackdiff N> <-nreported N> sender_ip sender_port" << endl;
-    cerr << "     -ackdiff sets the max distance in received RTPs to send an ACK " << endl;
-    cerr << "     -nreported sets the number of reported RTP packets per ACK " << endl;
+    cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2020-05-29" << endl;
+    cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
+    cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
+    cerr << "     -nreported          set the number of reported RTP packets per ACK " << endl;
+    cerr << "     -if name            bind to specific interface" << endl;
     exit(-1);
   }
 
@@ -138,6 +141,10 @@ int main(int argc, char* argv[])
   }
   if (strstr(argv[ix],"-nreported")) {
     nReportedRtpPackets = atoi(argv[ix+1]);
+    ix+=2;
+  }
+  if (strstr(argv[ix],"-if")) {
+    ifname = argv[ix+1];
     ix+=2;
   }
   SENDER_IP = argv[ix];
@@ -168,9 +175,13 @@ int main(int argc, char* argv[])
     return 0;
   }
 
-  if ((fd_local_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-    perror("cannot create socket for incoming RTP packets");
-    return 0;
+
+  if (ifname != 0) {
+    const int len = strlen(ifname);
+    if (setsockopt(fd_incoming_rtp, SOL_SOCKET, SO_BINDTODEVICE, ifname, len) < 0) {
+      perror("setsockopt(SO_BINDTODEVICE) failed");
+      return 0;
+    }
   }
 
   int enable = 1;
@@ -181,6 +192,7 @@ int main(int argc, char* argv[])
   unsigned char set = 0x03;
   if (setsockopt(fd_incoming_rtp, IPPROTO_IP, IP_RECVTOS, &set,sizeof(set)) < 0) {
     cerr << "cannot set recvtos on incoming socket" << endl;
+    return 0;
   } else {
     cerr << "socket set to recvtos" << endl;
   }
