@@ -190,7 +190,8 @@ public:
 	float addTransmitted(uint32_t timestamp_ntp, // Wall clock ts when packet is transmitted
 		uint32_t ssrc,
 		int size,
-		uint16_t seqNr);
+		uint16_t seqNr,
+                bool isMark);
 
 	/* New incoming feedback, this function
 	 * triggers a CWND update
@@ -287,13 +288,26 @@ public:
 		strcpy(detailedLogExtraData,s);
 	}
 
-  /*
+        /* 
+        * Get the list of log items 
+        */
+        char *getDetailedLogItemList() {
+           return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
+        }
+
+        /*
+        * Log each ACKed packet, 
+        */
+        void useExtraDetailedLog(bool isUseExtraDetailedLog_) {
+           isUseExtraDetailedLog = isUseExtraDetailedLog_;
+        }
+ 
+  	/*
 	* Set lowest possible cwndMin
 	*/
 	void setCwndMinLow(int aValue) {
 		cwndMinLow = aValue;
 	}
-
 
 private:
 	/*
@@ -303,6 +317,7 @@ private:
 		uint32_t timeTx_ntp;
 		int size;
 		uint16_t seqNr;
+                bool isMark;
 		bool isUsed;
 		bool isAcked;
 		bool isAfterReceivedEdge;
@@ -426,7 +441,6 @@ private:
 		uint32_t lastRtpQueueDiscardT_ntp;
 		bool wasRepairLoss;
 		bool repairLoss;
-		uint16_t ecnCeMarkedBytes;
 
 		Transmitted txPackets[kMaxTxPackets];
 		int txPacketsPtr;
@@ -446,8 +460,9 @@ private:
 		uint32_t timestamp,
 		Stream *stream,
 		uint8_t ceBits,
-		uint16_t &encCeMarkedBytes,
-		bool isLast);
+		int &encCeMarkedBytes,
+		bool isLast,
+                bool &isMark);
 
 	/*
 	* Update CWND
@@ -677,6 +692,10 @@ private:
 	FILE *fp_log;
 	bool completeLogItem;
         char timeString[100];
+        bool isUseExtraDetailedLog;
+	int bytesNewlyAckedLog;
+        int ecnCeMarkedBytesLog;
+
 
 };
 }

@@ -61,6 +61,7 @@ float burstSleep = -1.0;
 bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
+bool pushTraffic = false;
 
 
 uint16_t seqNr = 0;
@@ -342,7 +343,7 @@ void *createRtpThread(void *arg) {
       lastKeyFrameT_ntp = time_ntp;
     }
 
-    if (burstTime < 0) {
+    if (!pushTraffic && burstTime < 0) {
       if ((time_ntp/6554) % 300 > 298) {
         /*
         * Drop bitrate for 100ms every 30s
@@ -382,14 +383,18 @@ void *createRtpThread(void *arg) {
       }
       writeRtp(buf_rtp,seqNr,ts,pt);
 
-      pthread_mutex_lock(&lock_rtp_queue);
-      rtpQueue->push(buf_rtp, recvlen, seqNr, (time_ntp)/65536.0f);
-      pthread_mutex_unlock(&lock_rtp_queue);
+      if (pushTraffic) {
+         sendPacket(buf_rtp,recvlen);
+      } else {
+         pthread_mutex_lock(&lock_rtp_queue);
+         rtpQueue->push(buf_rtp, recvlen, seqNr, (time_ntp)/65536.0f);
+         pthread_mutex_unlock(&lock_rtp_queue);
 
-      pthread_mutex_lock(&lock_scream);
-      time_ntp = getTimeInNtp();
-      screamTx->newMediaFrame(time_ntp, SSRC, recvlen);
-      pthread_mutex_unlock(&lock_scream);
+         pthread_mutex_lock(&lock_scream);
+         time_ntp = getTimeInNtp();
+         screamTx->newMediaFrame(time_ntp, SSRC, recvlen);
+         pthread_mutex_unlock(&lock_scream);
+      }
       seqNr++;
     }
     waitPeriod (&info);
@@ -509,7 +514,8 @@ int setup() {
       perror("bind outgoing_rtp_addr failed");
       return 0;
   } else{
-    cerr<< "Listen on port "<< DECODER_PORT<<" to receive RTCP from decoder "<<endl;
+    if (!pushTraffic)
+       cerr<< "Listen on port "<< DECODER_PORT<<" to receive RTCP from decoder "<<endl;
   }
 
   if (sierraLog) {
@@ -612,7 +618,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-05-29" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-06-09" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -if name            bind to specific interface" << endl;
     cerr << "     -time value         run for time seconds (default infinite)" << endl;
@@ -620,6 +626,8 @@ int main(int argc, char* argv[]) {
     cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
     cerr << "     -nopace             disable packet pacing" << endl;
     cerr << "     -fixedrate value    set a fixed 'coder' bitrate " << endl;
+    cerr << "     -pushtraffic        just pushtraffic at a fixed bitrate, no feedback needed" << endl;
+    cerr << "                           must be used with -fixedrate option" << endl;
     cerr << "     -key val1 val2      set a given key frame interval [s] and size multiplier " << endl;
     cerr << "                          example -key 2.0 5.0 " << endl;
     cerr << "     -rand value         framesizes vary randomly around the nominal " << endl;
@@ -768,6 +776,10 @@ int main(int argc, char* argv[]) {
       detailed = true;
       ix++;
     }
+    if (strstr(argv[ix],"-pushtraffic")) {
+      pushTraffic = true;
+      ix++;
+    }
     if (strstr(argv[ix],"-clockdrift")) {
       enableClockDriftCompensation = true;
       ix++;
@@ -777,6 +789,11 @@ int main(int argc, char* argv[]) {
       ix+=2;
     }
 
+  }
+
+  if (pushTraffic && fixedRate==0) {
+     cerr << "Error : pushtraffic can only be used with fixedrate" << endl;
+     exit(-1);
   }
   if (logFile) {
       if (append)
@@ -802,7 +819,6 @@ int main(int argc, char* argv[]) {
   sigaction(SIGTERM, &action, NULL);
   sigaction(SIGINT, &action, NULL);
 
-  cerr << "Scream sender started! "<<endl;
   screamTx->setDetailedLogFp(fp_log);
   screamTx->useExtraDetailedLog(detailed);
 
@@ -812,60 +828,68 @@ int main(int argc, char* argv[]) {
 
   /* Create RTP thread */
   pthread_create(&create_rtp_thread,NULL,createRtpThread,(void*)"Create RTP thread...");
-  /* Create RTCP thread */
-  pthread_create(&rtcp_thread,NULL,readRtcpThread,(void*)"RTCP thread...");
-  /* Transmit RTP thread */
-  pthread_create(&transmit_rtp_thread,NULL,transmitRtpThread,(void*)"Transmit RTP thread...");
+  if (pushTraffic) {
+    cerr << "Scream sender started in push traffic mode " << fixedRate << "kbps" <<endl;
 
-  if (sierraLog) {
-    /* Sierra python log thread */
-    pthread_create(&sierra_python_thread,NULL,sierraPythonThread,(void*)"Sierra Python log thread...");
+    while (!stopThread) {
+       usleep(50000);
+    }
+  } else {
+     cerr << "Scream sender started! "<<endl;
+
+     /* Create RTCP thread */
+     pthread_create(&rtcp_thread,NULL,readRtcpThread,(void*)"RTCP thread...");
+     /* Transmit RTP thread */
+     pthread_create(&transmit_rtp_thread,NULL,transmitRtpThread,(void*)"Transmit RTP thread...");
+     if (sierraLog) {
+       /* Sierra python log thread */
+       pthread_create(&sierra_python_thread,NULL,sierraPythonThread,(void*)"Sierra Python log thread...");
+     }
+
+     while(!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
+       uint32_t time_ntp = getTimeInNtp();
+       bool isFeedback = time_ntp-rtcp_rx_time_ntp < 65536; // 1s in Q16
+       if ((printSummary || !isFeedback) && time_ntp-lastLogT_ntp > 2*65536) { // 2s in Q16
+         if (!isFeedback) {
+	        cerr << "No RTCP feedback received" << endl;
+         } else {
+	        float time_s = time_ntp/65536.0f;
+           char s[500];
+           screamTx->getStatistics(time_s, s);
+           if (sierraLog)
+             cout << s << endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << endl << endl;
+           else
+             cout << s << endl;
+         }
+         lastLogT_ntp = time_ntp;
+       }
+       if (verbose && time_ntp-lastLogTv_ntp > 13107) { // 0.2s in Q16
+         if (isFeedback) {
+           float time_s = time_ntp/65536.0f;
+           char s[500];
+           char s1[500];
+           screamTx->getVeryShortLog(time_s, s1);
+           if (sierraLog)
+             sprintf(s,"%8.3f, %s %s ", time_s, s1, sierraLogString);
+           else
+             sprintf(s,"%8.3f, %s ", time_s, s1);
+
+           cout << s << endl;
+           /*
+            * Send statistics to receiver this can be used to
+            * verify reliability of remote control
+            */
+           s1[0] = 0x80;
+           s1[1] = 0x7F; // Set PT = 0x7F for statistics packet
+           memcpy(&s1[2],s,strlen(s));
+           sendPacket(s1, strlen(s)+2);
+         }
+         lastLogTv_ntp = time_ntp;
+       }
+       usleep(50000);
+     };
+     stopThread = true;
   }
-
-  while(!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
-    uint32_t time_ntp = getTimeInNtp();
-    bool isFeedback = time_ntp-rtcp_rx_time_ntp < 65536; // 1s in Q16
-    if ((printSummary || !isFeedback) && time_ntp-lastLogT_ntp > 2*65536) { // 2s in Q16
-      if (!isFeedback) {
-	      cerr << "No RTCP feedback received" << endl;
-      } else {
-	      float time_s = time_ntp/65536.0f;
-        char s[500];
-        screamTx->getStatistics(time_s, s);
-        if (sierraLog)
-          cout << s << endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << endl << endl;
-        else
-          cout << s << endl;
-      }
-      lastLogT_ntp = time_ntp;
-    }
-    if (verbose && time_ntp-lastLogTv_ntp > 13107) { // 0.2s in Q16
-      if (isFeedback) {
-        float time_s = time_ntp/65536.0f;
-        char s[500];
-        char s1[500];
-        screamTx->getVeryShortLog(time_s, s1);
-        if (sierraLog)
-          sprintf(s,"%8.3f, %s %s ", time_s, s1, sierraLogString);
-        else
-          sprintf(s,"%8.3f, %s ", time_s, s1);
-
-        cout << s << endl;
-        /*
-         * Send statistics to receiver this can be used to
-         * verify reliability of remote control
-         */
-        s1[0] = 0x80;
-        s1[1] = 0x7F; // Set PT = 0x7F for statistics packet
-        memcpy(&s1[2],s,strlen(s));
-        sendPacket(s1, strlen(s)+2);
-      }
-      lastLogTv_ntp = time_ntp;
-    }
-    usleep(50000);
-  };
-  stopThread = true;
-
   usleep(500000);
   close(fd_outgoing_rtp);
   if (fp_log)
