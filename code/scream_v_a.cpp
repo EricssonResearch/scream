@@ -162,7 +162,8 @@ int main(int argc, char* argv[])
                 break;
             }
             netQueueDelay->insert(time, rtpPacket, ssrc, size, seqNr);
-            retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr);
+            bool isMark = false; //XXX TODO: figure out correct value
+            retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark);
             nextCallN = n + max(1, (int)(1000.0*retVal));
             isEvent = true;
         }
