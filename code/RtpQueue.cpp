@@ -6,7 +6,6 @@ using namespace std;
 * Implements a simple RTP packet queue
 */
 
-const int RtpSize = 1500;
 RtpQueueItem::RtpQueueItem() {
     packet = 0;
     used = false;
