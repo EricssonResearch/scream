@@ -16,7 +16,6 @@ install-sh
 libtool
 ltmain.sh
 missing
-src/*.lo
 src/.deps/
 src/.libs/
 src/Makefile
