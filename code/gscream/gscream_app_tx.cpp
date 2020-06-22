@@ -4,40 +4,6 @@
 #include <glib.h>
 #include <gst/rtp/rtp.h>
 
-
-static gboolean bus_call (GstBus *bus, GstMessage *msg, gpointer data)
-{
-  GMainLoop *loop = (GMainLoop *) data;
-
-  switch (GST_MESSAGE_TYPE (msg)) {
-
-    case GST_MESSAGE_EOS:
-      g_print ("End of stream\n");
-      g_main_loop_quit (loop);
-      break;
-
-    case GST_MESSAGE_ERROR: {
-      gchar  *debug;
-      GError *error;
-
-      gst_message_parse_error (msg, &error, &debug);
-      g_free (debug);
-
-      g_printerr ("Error: %s\n", error->message);
-      g_error_free (error);
-
-      g_main_loop_quit (loop);
-      break;
-    }
-    default:
-      break;
-  }
-
-  return TRUE;
-}
-
-
-
 int main (int argc, char *argv[])
 {
   g_printerr(" \n --- Initializing gscream_app_tx \n");
@@ -53,9 +19,7 @@ int main (int argc, char *argv[])
   GstElement *pipeline, *videosrc, *videoconvert, *capsfilter, *rtpsink, *rtcpsink,
    *videoencode, *videopayload, *gscreamtx;
   GstElement *rtpbin, *rtcpsrc;
-  GstBus *bus;
   GstPad *srcpad, *sinkpad;
-  guint bus_watch_id;
   GstCaps *capsfiltercaps;
 
   /* Initialisation */
@@ -110,7 +74,7 @@ int main (int argc, char *argv[])
 
 
   GstElement *enc = gst_bin_get_by_name_recurse_up(GST_BIN(pipeline), "encoder");
-  g_print("%s %d \n", gst_element_get_name(videoencode), enc);
+  g_print("%s %p \n", gst_element_get_name(videoencode), enc);
   g_assert(enc);
   g_object_set(G_OBJECT(enc), "bitrate", 200, NULL);
   //g_object_set(G_OBJECT(enc), "intra-refresh", true, NULL);
@@ -119,7 +83,6 @@ int main (int argc, char *argv[])
   g_object_set(G_OBJECT(enc), "vbv-buf-capacity", 200, NULL);
 
 
-  char s[100];
   //g_object_set (G_OBJECT(videosrc),"is-live", 1,  "horizontal-speed", 5, "pattern", 11, NULL);
   g_object_set (G_OBJECT(videosrc),"device", argv[1],  NULL);
 
@@ -195,7 +158,6 @@ int main (int argc, char *argv[])
 
   g_print ("Deleting pipeline\n");
   gst_object_unref (GST_OBJECT (pipeline));
-  g_source_remove (bus_watch_id);
   g_main_loop_unref (loop);
 
   return 0;

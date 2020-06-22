@@ -1,5 +1,9 @@
+*.o
 CMakeCache.txt
 CMakeFiles/
 Makefile
 bin/
 cmake_install.cmake
+code/gscream/gscream_app_rpi_tx
+code/gscream/gscream_app_rx
+code/gscream/gscream_app_tx

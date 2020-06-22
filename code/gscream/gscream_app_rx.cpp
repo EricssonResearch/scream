@@ -35,21 +35,6 @@ static gboolean bus_call (GstBus *bus, GstMessage *msg, gpointer data)
   return TRUE;
 }
 
-static void on_pad_added (GstElement *element,
-              GstPad     *pad,
-              gpointer    data){
-  GstPad *sinkpad;
-  GstElement *videoconvert = (GstElement *) data;
-
-  /* We can now link this pad with the vorbis-decoder sink pad */
-  g_print ("Dynamic pad created, linking decodebin and videoconvert\n");
-
-  sinkpad = gst_element_get_static_pad (videoconvert, "sink");
-
-  gst_pad_link (pad, sinkpad);
-  gst_object_unref (sinkpad);
-}
-
 /* will be called when rtpbin signals on-ssrc-active. It means that an RTCP
  * packet was received from another source. */
 static void
@@ -94,13 +79,11 @@ int main (int argc, char *argv[])
 
   GMainLoop *loop;
 
-  GstElement *rtpbin, *pipeline, *capsfilter, *rtpsrc, *rtcpsrc, *rtcpsink, *rtpdepay,
+  GstElement *rtpbin, *pipeline, *rtpsrc, *rtcpsrc, *rtcpsink, *rtpdepay,
     *decodebin, *videoconvert, *videosink, *gscreamrx, *rtpjitterbuffer;
   GstBus *bus;
   guint bus_watch_id;
   GstCaps *udpcaps;
-  GstPadLinkReturn lres;
-  GstPad *srcpad, *sinkpad;
 
   /* Initialisation */
   gst_init (&argc, &argv);
@@ -186,7 +169,7 @@ int main (int argc, char *argv[])
   rtpbin_ = gst_bin_get_by_name_recurse_up(GST_BIN(pipe), "rtpbin");
   g_assert(rtpbin_);
   g_signal_emit_by_name(rtpbin_,"get_internal_session", 0, &rtp_session);
-  std::printf("\n    SESSION     %d  \n", rtp_session);
+  std::printf("\n    SESSION     %p  \n", rtp_session);
   g_assert(rtp_session);
 
 
