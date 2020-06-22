@@ -1,3 +1,6 @@
+*.a
+*.la
+*.lo
 *.o
 CMakeCache.txt
 CMakeFiles/
