@@ -291,7 +291,7 @@ public:
         /* 
         * Get the list of log items 
         */
-        const char *getDetailedLogItemList() {
+        char *getDetailedLogItemList() {
            return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
         }
 
