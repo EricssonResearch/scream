@@ -242,10 +242,11 @@ gboolean txTimerEvent(GstClock *clock, GstClockTime t, GstClockID id, gpointer u
     pthread_mutex_unlock(&filter->lock_scream);
   }
 #endif
+  return FALSE;
 }
 
 /* GstElement vmethod implementations */
-static gboolean
+static void
 on_receiving_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *object)
 {
   //GstgScreamTx *filter = GST_GSCREAMTX (object);
