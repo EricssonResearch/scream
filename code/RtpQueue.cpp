@@ -21,14 +21,16 @@ RtpQueue::RtpQueue() {
     head = -1;
     tail = 0;
     nItems = 0;
-	sizeOfLastFrame = 0;
+    sizeOfLastFrame = 0;
     bytesInQueue_ = 0;
     sizeOfQueue_ = 0;
     sizeOfNextRtp_ = -1;
 }
 
 void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
-    head++; if (head == kRtpQueueSize) head = 0;
+    int ix = head+1;
+    if (ix == kRtpQueueSize) ix = 0;
+    head = ix;
     items[head]->packet = rtpPacket;
     items[head]->seqNr = seqNr;
     items[head]->size = size;
@@ -44,13 +46,13 @@ bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
         sizeOfNextRtp_ = -1;
         return false;
     } else {
-        rtpPacket = items[tail]->packet;
         size = items[tail]->size;
+        rtpPacket = items[tail]->packet;
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
-        tail++; if (tail == kRtpQueueSize) tail = 0;
         bytesInQueue_ -= size;
         sizeOfQueue_ -= 1;
+        tail++; if (tail == kRtpQueueSize) tail = 0;
         computeSizeOfNextRtp();
         return true;
     }
@@ -90,7 +92,6 @@ float RtpQueue::getDelay(float currTs) {
     } else {
         return currTs-items[tail]->ts;
     }
-
 }
 
 bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
