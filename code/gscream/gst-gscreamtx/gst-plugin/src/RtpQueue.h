@@ -7,7 +7,7 @@
  * Implements a simple RTP packet queue, one RTP queue
  * per stream {SSRC,PT}
  */
-extern "C" {
+
 class RtpQueueIface {
 public:
     virtual void clear() = 0;
@@ -60,5 +60,5 @@ public:
     int sizeOfQueue_;
     int sizeOfNextRtp_;
 };
-}
+
 #endif
