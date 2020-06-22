@@ -46,15 +46,15 @@ public:
     float getDelay(float currTs);
     bool sendPacket(void *rtpPacket, int &size, unsigned short &seqNr);
     void clear();
+    void setSizeOfLastFrame(int sz) { sizeOfLastFrame = sz; };
     int getSizeOfLastFrame() {return sizeOfLastFrame;};
-    void setSizeOfLastFrame(int sz) {sizeOfLastFrame=sz;};
     void computeSizeOfNextRtp();
 
     RtpQueueItem *items[kRtpQueueSize];
     int head; // Pointer to last inserted item
     int tail; // Pointer to the oldest item
     int nItems;
-    int sizeOfLastFrame;
+    int sizeOfLastFrame; // Size of last frame in bytes
 
     int bytesInQueue_;
     int sizeOfQueue_;

@@ -16,7 +16,7 @@ RtpQueueItem::RtpQueueItem() {
 
 
 RtpQueue::RtpQueue() {
-    for (int n=0; n < RtpQueueSize; n++) {
+    for (int n=0; n < kRtpQueueSize; n++) {
         items[n] = new RtpQueueItem();
     }
     head = -1;
@@ -29,7 +29,7 @@ RtpQueue::RtpQueue() {
 }
 
 void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
-    head++; if (head == RtpQueueSize) head = 0;
+    head++; if (head == kRtpQueueSize) head = 0;
     items[head]->packet = rtpPacket;
     items[head]->seqNr = seqNr;
     items[head]->size = size;
@@ -49,7 +49,7 @@ bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
         size = items[tail]->size;
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
-        tail++; if (tail == RtpQueueSize) tail = 0;
+        tail++; if (tail == kRtpQueueSize) tail = 0;
         bytesInQueue_ -= size;
         sizeOfQueue_ -= 1;
         computeSizeOfNextRtp();
@@ -103,7 +103,7 @@ bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
 }
 
 void RtpQueue::clear() {
-    for (int n=0; n < RtpQueueSize; n++) {
+    for (int n=0; n < kRtpQueueSize; n++) {
         items[n]->used = false;
     }
     head = -1;
