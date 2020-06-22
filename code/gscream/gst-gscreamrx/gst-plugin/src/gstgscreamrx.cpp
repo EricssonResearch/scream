@@ -323,6 +323,7 @@ gboolean rtcpPeriodicTimer(GstClock *clock, GstClockTime, GstClockID id, gpointe
     g_signal_emit_by_name(filter->rtpSession,"send-rtcp",20000000);
    // g_print(" SF \n");
   }
+  return FALSE;
 }
 
 static gboolean on_sending_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *object)
