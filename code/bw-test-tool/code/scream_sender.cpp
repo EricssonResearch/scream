@@ -86,9 +86,9 @@ RtpQueue *rtpQueue = 0;
 
 // We don't bother about SSRC in this implementation, it is only one stream
 
-char *DECODER_IP = "192.168.0.21";
+const char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
-char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
+const char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
 
 int SIERRA_PYTHON_PORT = 35000;
 
@@ -182,7 +182,7 @@ void writeRtp(unsigned char *buf, uint16_t seqNr, uint32_t timeStamp, unsigned c
 }
 
 
-void sendPacket(char* buf, int size) {
+void sendPacket(const void *buf, int size) {
   sendto(fd_outgoing_rtp, buf, size, 0, (struct sockaddr *)&outgoing_rtp_addr, sizeof(outgoing_rtp_addr));
 }
 
