@@ -2,9 +2,9 @@
 #define RTP_QUEUE
 
 /*
-* Implements a simple RTP packet queue, one RTP queue 
-* per stream {SSRC,PT}
-*/
+ * Implements a simple RTP packet queue, one RTP queue
+ * per stream {SSRC,PT}
+ */
 
 class RtpQueueIface {
 public:

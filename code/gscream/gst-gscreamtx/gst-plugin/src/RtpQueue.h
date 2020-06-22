@@ -2,10 +2,11 @@
 #define RTP_QUEUE
 
 #include <gst/gst.h>
+
 /*
-* Implements a simple RTP packet queue, one RTP queue
-* per stream {SSRC,PT}
-*/
+ * Implements a simple RTP packet queue, one RTP queue
+ * per stream {SSRC,PT}
+ */
 extern "C" {
 class RtpQueueIface {
 public:

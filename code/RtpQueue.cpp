@@ -104,7 +104,7 @@ bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
 
 void RtpQueue::clear() {
     for (int n=0; n < RtpQueueSize; n++) {
-        items[n]->used = false;  
+        items[n]->used = false;
     }
     head = -1;
     tail = 0;
