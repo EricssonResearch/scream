@@ -236,7 +236,8 @@ gboolean txTimerEvent(GstClock *clock, GstClockTime t, GstClockID id, gpointer u
 
     pthread_mutex_lock(&filter->lock_scream);
     getTime(filter,&time,&time_ntp);
-    filter->screamTx->addTransmitted(time_ntp, ssrc, size, sn);
+    bool isMark = false; //XXX TODO: figure out correct value
+    filter->screamTx->addTransmitted(time_ntp, ssrc, size, sn, isMark);
     retVal = filter->screamTx->isOkToTransmit(time_ntp, ssrc);
     pthread_mutex_unlock(&filter->lock_scream);
   }
@@ -366,7 +367,8 @@ on_receiving_rtcp(GObject *session, GstBuffer *buffer, gboolean early, GObject *
 
             pthread_mutex_lock(&filter_->lock_scream);
             getTime(filter_,&time,&time_ntp);
-            filter_->screamTx->addTransmitted(time_ntp, ssrc, size, sn);
+            bool isMark = false; //XXX TODO: figure out correct value
+            filter_->screamTx->addTransmitted(time_ntp, ssrc, size, sn, isMark);
             retVal = filter_->screamTx->isOkToTransmit(time_ntp, ssrc);
             pthread_mutex_unlock(&filter_->lock_scream);
           }
@@ -481,7 +483,8 @@ gst_g_scream_tx_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
     pthread_mutex_lock(&filter->lock_scream);
     getTime(filter,&time,&time_ntp);
-    filter->screamTx->addTransmitted(time_ntp, ssrc_h, size, sn_h);
+    bool isMark = false; //XXX TODO: figure out correct value
+    filter->screamTx->addTransmitted(time_ntp, ssrc_h, size, sn_h, isMark);
     retVal = filter->screamTx->isOkToTransmit(time_ntp, ssrc_h);
     pthread_mutex_unlock(&filter->lock_scream);
 
