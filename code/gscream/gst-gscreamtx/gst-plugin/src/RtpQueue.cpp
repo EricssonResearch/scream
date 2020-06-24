@@ -1,4 +1,4 @@
- #include "RtpQueue.h"
+#include "RtpQueue.h"
 #include <iostream>
 #include <string.h>
 using namespace std;
@@ -68,16 +68,16 @@ void RtpQueue::push(GstBuffer *buffer, int size, unsigned short seqNr, float ts)
 
 bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
     if (items[tail]->used == false) {
-        return false;
         sizeOfNextRtp_ = -1;
+        return false;
     } else {
         size = items[tail]->size;
         memcpy(rtpPacket,items[tail]->packet,size);
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
-        tail++; if (tail == kRtpQueueSize) tail = 0;
         bytesInQueue_ -= size;
         sizeOfQueue_ -= 1;
+        tail++; if (tail == kRtpQueueSize) tail = 0;
         computeSizeOfNextRtp();
         return true;
     }
@@ -85,12 +85,12 @@ bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
 
 GstBuffer* RtpQueue::pop(unsigned short& seqNr) {
     if (items[tail]->used == false) {
-        return 0;
         sizeOfNextRtp_ = -1;
+        return 0;
     } else {
+        GstBuffer *buffer = items[tail]->buffer;
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
-        GstBuffer *buffer = items[tail]->buffer;
         bytesInQueue_ -= items[tail]->size;
         sizeOfQueue_ -= 1;
         tail++; if (tail == kRtpQueueSize) tail = 0;

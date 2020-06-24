@@ -2,9 +2,9 @@
 #define RTP_QUEUE
 
 /*
-* Implements a simple RTP packet queue, one RTP queue 
-* per stream {SSRC,PT}
-*/
+ * Implements a simple RTP packet queue, one RTP queue
+ * per stream {SSRC,PT}
+ */
 
 class RtpQueueIface {
 public:
@@ -27,7 +27,7 @@ public:
     bool used;
 };
 
-const int RtpQueueSize = 20000;
+const int kRtpQueueSize = 20000;
 class RtpQueue : public RtpQueueIface {
 public:
     RtpQueue();
@@ -41,11 +41,11 @@ public:
     float getDelay(float currTs);
     bool sendPacket(void *rtpPacket, int &size, unsigned short &seqNr);
     void clear();
-    void setSizeOfLastFrame(int aSize) { sizeOfLastFrame = aSize;};
+    void setSizeOfLastFrame(int sz) { sizeOfLastFrame = sz; };
     int getSizeOfLastFrame() {return sizeOfLastFrame;};
     void computeSizeOfNextRtp();
 
-    RtpQueueItem *items[RtpQueueSize];
+    RtpQueueItem *items[kRtpQueueSize];
     int head; // Pointer to last inserted item
     int tail; // Pointer to the oldest item
     int nItems;
