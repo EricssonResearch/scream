@@ -308,7 +308,7 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, unsigned char *buf,
         * stream in the first iteration, a bit unnecessary.
         */
         Stream *stream = NULL;
-        uint32_t minT_ntp = ULONG_MAX;
+        uint32_t minT_ntp = UINT32_MAX;
         for (auto it = streams.begin(); it != streams.end(); ++it) {
             uint32_t diffT_ntp = time_ntp - (*it)->lastFeedbackT_ntp;
             if (((*it)->nRtpSinceLastRtcp >= std::min(8,ackDiff) || diffT_ntp > 655) && // 10ms in Q16
