@@ -26,14 +26,10 @@ export GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0/
 
 3a) Make gscreamtx plugin
 cd ./gst-gscreamtx/gst-plugin
-chmod +x autogen.sh
-chmod +x config.status
 ./autogen.sh
 
 3b) Make gscreamrx plugin
 cd ./gst-gscreamrx/gst-plugin
-chmod +x autogen.sh
-chmod +x config.status
 ./autogen.sh
 
 4) Run sender and receiver pipelines
@@ -66,7 +62,7 @@ gst-launch-1.0 rtpbin name=rtpbin ! v4l2src device=/dev/video1 ! image/jpeg,widt
 ======================================================
 Comments
 ======================================================
-The application is written to work with x264enc,rpicamsrc,uvch264src,omxh264enc and vaapih264enc 
+The application is written to work with x264enc,rpicamsrc,uvch264src,omxh264enc and vaapih264enc
 1) Simple bottlenecks with 50ms RTT, with rate limits ranging between 500kbps and infinity
 2) Home network over WiFi with RTT ~5ms
 3) LTE (Telia MBB) with receiver on publix fixed IP
@@ -93,18 +89,7 @@ https://thepihut.com/blogs/raspberry-pi-tutorials/16021420-how-to-install-use-th
 
 
 Issue. File glibconfig.h is missing when gscream plugin is built.
-Solution copy file glibconfig.h from 
+Solution copy file glibconfig.h from
 /usr/lib/arm-linux-gnueabihf/glib-2.0/include
-to 
+to
 /usr/include/glib-2.0
-
-
-
-
-
-
-
-
-
-
-
