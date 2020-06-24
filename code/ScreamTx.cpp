@@ -22,7 +22,7 @@
 static const bool kEnableConsecutiveFastStart = true;
 // Packet pacing reduces jitter
 static const bool kEnablePacketPacing = true;
-static const float kPacketPacingHeadRoom = 1.5f;
+static const float kPacketPacingHeadRoom = 1.25f;
 
 // Rate update interval
 static const uint32_t kRateAdjustInterval_ntp = 13107; // 200ms in NTP domain
@@ -40,7 +40,7 @@ static const float kQueueDelayTargetMax = 0.3f; //ms
 
 // Congestion window validation
 static const float kBytesInFlightHistInterval_ntp = 65536; // Time (s) between stores=1s in NTP doain
-static const float kMaxBytesInFlightHeadRoom = 1.2f;
+static const float kMaxBytesInFlightHeadRoom = 1.25f;
 // Queue delay trend and shared bottleneck detection
 static const uint32_t kQueueDelayFractionHistInterval_us = 3277; // 50ms in NTP domain
 // video rate estimation update period
@@ -1057,6 +1057,14 @@ void ScreamTx::initialize(uint32_t time_ntp) {
 	initTime_ntp = time_ntp;
 }
 
+float ScreamTx::getTotalTargetBitrate() {
+     float totalTargetBitrate = 0.0f;
+     for (int n = 0; n < nStreams; n++) {
+         totalTargetBitrate += streams[n]->targetBitrate; 
+     }
+     return totalTargetBitrate;
+}
+
 /*
 * Update the  congestion window
 */
@@ -1126,8 +1134,11 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 			/*
 			* The cautiousPacing parameter restricts transmission of large key frames when the parameter is set to a value closer to 1.0
 			*/
+/*
 			float pacingBitrate = (1.0f - cautiousPacing)*cwnd * 8.0f / std::max(0.001f, sRtt) + cautiousPacing * rateTransmittedAvg;
 			pacingBitrate = kPacketPacingHeadRoom * std::max(kMinimumBandwidth, pacingBitrate);
+*/
+                        float pacingBitrate = std::max(1.0e5f, kPacketPacingHeadRoom*getTotalTargetBitrate());
 			if (maxTotalBitrate > 0) {
 				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
 			}
@@ -1942,7 +1953,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			targetBitrate = std::max(minBitrate, targetBitrate*lossEventRateScale);
 		else if (ecnCeEventFlag) {
 			if (parent->isL4s) {
-				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 2.0f));
+				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 4.0f));
 			}
 			else {
 				targetBitrate = std::max(minBitrate, targetBitrate*ecnCeEventRateScale);
