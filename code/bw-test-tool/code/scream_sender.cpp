@@ -86,9 +86,9 @@ RtpQueue *rtpQueue = 0;
 
 // We don't bother about SSRC in this implementation, it is only one stream
 
-const char *DECODER_IP = "192.168.0.21";
+char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
-const char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
+char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
 
 int SIERRA_PYTHON_PORT = 35000;
 
@@ -182,7 +182,7 @@ void writeRtp(unsigned char *buf, uint16_t seqNr, uint32_t timeStamp, unsigned c
 }
 
 
-void sendPacket(const void *buf, int size) {
+void sendPacket(char* buf, int size) {
   sendto(fd_outgoing_rtp, buf, size, 0, (struct sockaddr *)&outgoing_rtp_addr, sizeof(outgoing_rtp_addr));
 }
 
@@ -618,7 +618,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-06-10" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-06-24" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -if name            bind to specific interface" << endl;
     cerr << "     -time value         run for time seconds (default infinite)" << endl;

@@ -29,12 +29,12 @@ ScreamRx *screamRx = 0;
 
 //int fd_local_rtp;
 
-const char *SENDER_IP = "192.168.0.20";
+char* SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
 struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr, sender_rtcp_addr;
 struct sockaddr_in local_rtp_addr;
 
-const char *LOCAL_IP = "127.0.0.1";
+char* LOCAL_IP = "127.0.0.1";
 int LOCAL_PORT = 30124;
 
 int ackDiff = -1;
@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
   unsigned char buf[BUFSIZE];
   unsigned char buf_rtcp[BUFSIZE];
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2020-06-10" << endl;
+    cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2020-06-24" << endl;
     cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
     cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
     cerr << "     -nreported          set the number of reported RTP packets per ACK " << endl;
