@@ -105,12 +105,12 @@ void *rtcpPeriodicThread(void *arg) {
       cerr << "." << endl;
     }
     uint32_t time_ntp = getTimeInNtp();
+    rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
     if (screamRx->isFeedback(time_ntp) &&
          (screamRx->checkIfFlushAck() ||
          (time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp))) {
-      rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
       pthread_mutex_lock(&lock_scream);
-      bool isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), buf, rtcpSize);
+      bool isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), true, buf, rtcpSize);
       pthread_mutex_unlock(&lock_scream);
       if (isFeedback) {
         sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
   unsigned char buf[BUFSIZE];
   unsigned char buf_rtcp[BUFSIZE];
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2020-06-25" << endl;
+    cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2020-06-26" << endl;
     cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
     cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
     cerr << "     -nreported          set the number of reported RTP packets per ACK " << endl;
@@ -309,6 +309,7 @@ int main(int argc, char* argv[])
         uint16_t seqNr;
         uint32_t ts;
         parseRtp(buf,&seqNr, &ts);
+        bool isMark = (buf[1] & 0x80) != 0;
         uint16_t diff = seqNr-lastSn;
         if (diff > 1) {
           fprintf(stderr,"Packet(s) lost or reordered : %5d was received, previous rcvd is %5d \n",seqNr,lastSn);
@@ -321,10 +322,10 @@ int main(int argc, char* argv[])
         screamRx->receive(getTimeInNtp(), 0, SSRC, recvlen, seqNr, received_ecn);
         pthread_mutex_unlock(&lock_scream);
 
-        if (screamRx->checkIfFlushAck()){
+        if (screamRx->checkIfFlushAck() || isMark){
           pthread_mutex_lock(&lock_scream);
           int rtcpSize;
-          bool isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), buf_rtcp, rtcpSize);
+          bool isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), isMark, buf_rtcp, rtcpSize);
           pthread_mutex_unlock(&lock_scream);
           if (isFeedback) {
             sendto(fd_incoming_rtp, buf_rtcp, rtcpSize, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));

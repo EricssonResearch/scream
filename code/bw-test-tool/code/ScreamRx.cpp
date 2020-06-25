@@ -285,7 +285,7 @@ int ScreamRx::getIx(uint32_t ssrc) {
     return -1;
 }
 
-bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, unsigned char *buf, int &size) {
+bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsigned char *buf, int &size) {
 
     uint16_t tmp_s;
     uint32_t tmp_l;
@@ -311,7 +311,7 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, unsigned char *buf,
         uint32_t minT_ntp = ULONG_MAX;
         for (auto it = streams.begin(); it != streams.end(); ++it) {
             uint32_t diffT_ntp = time_ntp - (*it)->lastFeedbackT_ntp;
-            if (((*it)->nRtpSinceLastRtcp >= std::min(8,ackDiff) || diffT_ntp > 655) && // 10ms in Q16
+            if (((*it)->nRtpSinceLastRtcp >= std::min(8,ackDiff) || diffT_ntp > 655 || isMark) && // 10ms in Q16
                 (*it)->lastFeedbackT_ntp < minT_ntp) {
                 stream = *it;
                 minT_ntp = (*it)->lastFeedbackT_ntp;

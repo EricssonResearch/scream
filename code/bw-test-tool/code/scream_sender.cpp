@@ -225,6 +225,7 @@ void *transmitRtpThread(void *arg) {
       do {
          gettimeofday(&start, 0);
          time_ntp = getTimeInNtp();
+
          retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
          if (fixedRate > 0 && retVal >= 0.0f && sizeOfQueue > 0)
             retVal = paceIntervalFixedRate;
@@ -320,7 +321,7 @@ void *createRtpThread(void *arg) {
   struct periodicInfo info;
 
   makePeriodic (dT_us, &info);
-  
+
   /*
   * Infinite loop that generates RTP packets
   */
@@ -358,7 +359,7 @@ void *createRtpThread(void *arg) {
       if (burstStartTime < 0) {
         burstStartTime = time_s;
         isBurst = true;
-      } 
+      }
       if (time_s > burstStartTime+burstTime && isBurst) {
         isBurst = false;
         burstSleepTime = time_s;
@@ -374,9 +375,9 @@ void *createRtpThread(void *arg) {
     while (bytes > 0) {
       int pl_size = min(bytes,mtu);
       int recvlen = pl_size+12;
-    
+
       bytes = std::max(0, bytes-pl_size);
-      unsigned char pt = PT; 
+      unsigned char pt = PT;
       if (bytes == 0) {
         // Last RTP packet, set marker bit
         pt |= 0x80;
@@ -618,7 +619,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-06-25" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-06-26" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -if name            bind to specific interface" << endl;
     cerr << "     -time value         run for time seconds (default infinite)" << endl;
@@ -666,7 +667,7 @@ int main(int argc, char* argv[]) {
   }
   int ix = 1;
   bool verbose = false;
-  char *logFile = 0; 
+  char *logFile = 0;
   /* First find options */
   while (strstr(argv[ix],"-")) {
     if (strstr(argv[ix],"-ect")) {
