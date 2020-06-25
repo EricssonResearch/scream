@@ -22,7 +22,6 @@
 static const bool kEnableConsecutiveFastStart = true;
 // Packet pacing reduces jitter
 static const bool kEnablePacketPacing = true;
-static const float kPacketPacingHeadRoom = 1.25f;
 
 // Rate update interval
 static const uint32_t kRateAdjustInterval_ntp = 13107; // 200ms in NTP domain
@@ -72,7 +71,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	float gainUp_,
 	float gainDown_,
 	int cwnd_,
-	float cautiousPacing_,
+	float packetPacingHeadroom_,
 	int bytesInFlightHistSize_,
 	bool isL4s_,
 	bool openWindow_,
@@ -85,7 +84,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	enableSbd(enableSbd_),
 	gainUp(gainUp_),
 	gainDown(gainDown_),
-	cautiousPacing(cautiousPacing_),
+	packetPacingHeadroom(packetPacingHeadroom_),
 	bytesInFlightHistSize(bytesInFlightHistSize_),
 	isL4s(isL4s_),
 	openWindow(openWindow_),
@@ -1131,14 +1130,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		*/
 		paceInterval = kMinPaceInterval;
 		if ((queueDelayFractionAvg > 0.02f || isL4s || maxTotalBitrate > 0) && kEnablePacketPacing) {
-			/*
-			* The cautiousPacing parameter restricts transmission of large key frames when the parameter is set to a value closer to 1.0
-			*/
-/*
-			float pacingBitrate = (1.0f - cautiousPacing)*cwnd * 8.0f / std::max(0.001f, sRtt) + cautiousPacing * rateTransmittedAvg;
-			pacingBitrate = kPacketPacingHeadRoom * std::max(kMinimumBandwidth, pacingBitrate);
-*/
-                        float pacingBitrate = std::max(1.0e5f, kPacketPacingHeadRoom*getTotalTargetBitrate());
+                        float pacingBitrate = std::max(1.0e5f, packetPacingHeadroom*getTotalTargetBitrate());
 			if (maxTotalBitrate > 0) {
 				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
 			}
@@ -1176,9 +1168,8 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		int maxBytesInFlightHi = (int)(std::max(bytesInFlightMaxHi, bytesInFlightHistHiMem));
 		int maxBytesInFlightLo = (int)(std::max(bytesInFlight, bytesInFlightHistLoMem));
 
-		float alpha = std::max(queueDelayTrend, cautiousPacing);
 		maxBytesInFlight =
-			(maxBytesInFlightHi*(1.0f - alpha) + maxBytesInFlightLo * alpha)*
+			(maxBytesInFlightHi*(1.0f - queueDelayTrend) + maxBytesInFlightLo * queueDelayTrend)*
 			kMaxBytesInFlightHeadRoom;
 		if (enableSbd) {
 			/*

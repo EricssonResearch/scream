@@ -62,6 +62,7 @@ bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 bool pushTraffic = false;
+float packetPacingHeadroom=1.25f;
 
 
 uint16_t seqNr = 0;
@@ -231,7 +232,7 @@ void *transmitRtpThread(void *arg) {
             retVal = 0.0f;
          if (retVal > 0.0f)
             accumulatedPaceTime += retVal;
-         if (retVal != -1.0) {// && accumulatedPaceTime <= MIN_PACE_INTERVAL_S) {
+         if (retVal != -1.0) {
            pthread_mutex_lock(&lock_rtp_queue);
            rtpQueue->pop(buf, size, seqNr);
            sendPacket(buf,size);
@@ -246,13 +247,13 @@ void *transmitRtpThread(void *arg) {
          sizeOfQueue = rtpQueue->sizeOfQueue();
          pthread_mutex_unlock(&lock_rtp_queue);
          gettimeofday(&end, 0);
-         diff = end.tv_usec-start.tv_usec;
+         //diff = end.tv_usec-start.tv_usec;
          accumulatedPaceTime = std::max(0.0f, accumulatedPaceTime-diff*1e-6f);
       } while (accumulatedPaceTime <= MIN_PACE_INTERVAL_S &&
            retVal != -1.0f &&
            sizeOfQueue > 0);
       if (accumulatedPaceTime > 0) {
-	sleepTime_us = std::min((int)(accumulatedPaceTime*0.8*1e6f), MIN_PACE_INTERVAL_US*2);
+	sleepTime_us = std::min((int)(accumulatedPaceTime*1e6f+0.5), MIN_PACE_INTERVAL_US);
 	accumulatedPaceTime = 0.0f;
       }
     }
@@ -261,7 +262,6 @@ void *transmitRtpThread(void *arg) {
   }
   return NULL;
 }
-
 
 static int makePeriodic (unsigned int period, struct periodicInfo *info)
 {
@@ -557,7 +557,7 @@ int setup() {
                             false,
                             1.0f,2.0f,
                             (fixedRate*100)/8,
-                            0.0f,
+                            1.5f,
                             20,
                             ect==1,
                             true,
@@ -568,7 +568,7 @@ int setup() {
                             false,
                             1.0f,dscale,
                             (initRate*100)/8,
-                            0.0f,
+                            packetPacingHeadroom,
                             20,
                             ect==1,
                             false,
@@ -618,7 +618,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-06-24" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-06-25" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -if name            bind to specific interface" << endl;
     cerr << "     -time value         run for time seconds (default infinite)" << endl;
@@ -649,6 +649,7 @@ int main(int argc, char* argv[]) {
     cerr << "     -scale value        scale factor in case of loss or ECN event (default 0.9) " << endl;
     cerr << "     -dscale value       scale factor in case of increased delay (default 10.0) " << endl;
     cerr << "     -delaytarget value  set a queue delay target (default = 0.06s) " << endl;
+    cerr << "     -paceheadroom value set a packet pacing headroom (default = 1.25s) " << endl;
     cerr << "     -mtu value          set the max RTP payload size (default 1200 byte)" << endl;
     cerr << "     -fps value          set the frame rate (default 50)"  << endl;
     cerr << "     -clockdrift         enable clock drift compensation for the case that the"  << endl;
@@ -693,6 +694,12 @@ int main(int argc, char* argv[]) {
       delayTarget = atof(argv[ix+1]);
       ix+=2;
     }
+
+    if (strstr(argv[ix],"-paceheadroom")) {
+      packetPacingHeadroom = atof(argv[ix+1]);
+      ix+=2;
+    }
+
     if (strstr(argv[ix],"-mtu")) {
       mtu = atoi(argv[ix+1]);
       ix+=2;
@@ -790,6 +797,7 @@ int main(int argc, char* argv[]) {
     }
 
   }
+
 
   if (pushTraffic && fixedRate==0) {
      cerr << "Error : pushtraffic can only be used with fixedrate" << endl;
