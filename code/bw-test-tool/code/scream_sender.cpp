@@ -183,7 +183,7 @@ void writeRtp(unsigned char *buf, uint16_t seqNr, uint32_t timeStamp, unsigned c
 }
 
 
-void sendPacket(char* buf, int size) {
+void sendPacket(void* buf, int size) {
   sendto(fd_outgoing_rtp, buf, size, 0, (struct sockaddr *)&outgoing_rtp_addr, sizeof(outgoing_rtp_addr));
 }
 
@@ -248,13 +248,13 @@ void *transmitRtpThread(void *arg) {
          sizeOfQueue = rtpQueue->sizeOfQueue();
          pthread_mutex_unlock(&lock_rtp_queue);
          gettimeofday(&end, 0);
-         //diff = end.tv_usec-start.tv_usec;
+         diff = end.tv_usec-start.tv_usec;
          accumulatedPaceTime = std::max(0.0f, accumulatedPaceTime-diff*1e-6f);
       } while (accumulatedPaceTime <= MIN_PACE_INTERVAL_S &&
            retVal != -1.0f &&
            sizeOfQueue > 0);
       if (accumulatedPaceTime > 0) {
-	sleepTime_us = std::min((int)(accumulatedPaceTime*1e6f+0.5), MIN_PACE_INTERVAL_US);
+	sleepTime_us = std::min((int)(accumulatedPaceTime*1e6f), MIN_PACE_INTERVAL_US);
 	accumulatedPaceTime = 0.0f;
       }
     }
@@ -345,7 +345,7 @@ void *createRtpThread(void *arg) {
     }
 
     if (!pushTraffic && burstTime < 0) {
-      if ((time_ntp/6554) % 300 > 298) {
+      if ((time_ntp/6554) % 600 > 598) {
         /*
         * Drop bitrate for 100ms every 30s
         *  this ensures that the queue delay is estimated correctly
@@ -678,125 +678,155 @@ int main(int argc, char* argv[]) {
         exit(0);
 
       }
+			continue;
     }
     if (strstr(argv[ix],"-time")) {
       runTime = atof(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-scale")) {
       scaleFactor = atof(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-dscale")) {
       dscale = atof(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-delaytarget")) {
       delayTarget = atof(argv[ix+1]);
       ix+=2;
+			continue;
     }
 
     if (strstr(argv[ix],"-paceheadroom")) {
       packetPacingHeadroom = atof(argv[ix+1]);
       ix+=2;
+			continue;
     }
 
     if (strstr(argv[ix],"-mtu")) {
       mtu = atoi(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-fixedrate")) {
       fixedRate = atoi(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-burst")) {
       burstTime = atof(argv[ix+1]);
       burstSleep = atof(argv[ix+2]);
       ix+=3;
+			continue;
     }
     if (strstr(argv[ix],"-key")) {
       isKeyFrame = true;
       keyFrameInterval = atof(argv[ix+1]);
       keyFrameSize = atof(argv[ix+2]);
       ix+=3;
+			continue;
     }
     if (strstr(argv[ix],"-nopace")) {
       disablePacing = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-fps")) {
       FPS = atof(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-rand")) {
       randRate = atof(argv[ix+1])/100.0;
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-initrate")) {
       initRate = atoi(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-minrate")) {
       minRate = atoi(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-maxrate")) {
       maxRate = atoi(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-rateincrease")) {
       rateIncrease = atoi(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-ratescale")) {
       rateScale = atof(argv[ix+1]);
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-verbose")) {
       verbose = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-nosummary")) {
       printSummary = false;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-log")) {
       logFile = argv[ix+1];
       ix+=2;
+			continue;
     }
     if (strstr(argv[ix],"-sierralog")) {
       sierraLog = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-ntp")) {
       ntp = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-append")) {
       append = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-itemlist")) {
       itemlist = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-detailed")) {
       detailed = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-pushtraffic")) {
       pushTraffic = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-clockdrift")) {
       enableClockDriftCompensation = true;
       ix++;
+			continue;
     }
     if (strstr(argv[ix],"-if")) {
       ifname = argv[ix+1];
       ix+=2;
+			continue;
     }
-
+		cerr << "unexpected arg " << argv[ix] << endl;
+		exit(0);
   }
 
 
