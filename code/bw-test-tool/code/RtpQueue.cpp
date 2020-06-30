@@ -48,8 +48,8 @@ void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
 
 bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
     if (items[tail]->used == false) {
-        return false;
         sizeOfNextRtp_ = -1;
+        return false;
     } else {
         size = items[tail]->size;
         memcpy(rtpPacket,items[tail]->packet,size);
