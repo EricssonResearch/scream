@@ -1,4 +1,4 @@
- #include "RtpQueue.h"
+#include "RtpQueue.h"
 #include <iostream>
 #include <string.h>
 using namespace std;
@@ -55,9 +55,9 @@ bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
         memcpy(rtpPacket,items[tail]->packet,size);
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
-        tail++; if (tail == kRtpQueueSize) tail = 0;
         bytesInQueue_ -= size;
         sizeOfQueue_ -= 1;
+        tail++; if (tail == kRtpQueueSize) tail = 0;
         computeSizeOfNextRtp();
         return true;
     }

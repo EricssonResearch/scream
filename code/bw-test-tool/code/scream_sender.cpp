@@ -87,9 +87,9 @@ RtpQueue *rtpQueue = 0;
 
 // We don't bother about SSRC in this implementation, it is only one stream
 
-char *DECODER_IP = "192.168.0.21";
+const char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
-char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
+const char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
 
 int SIERRA_PYTHON_PORT = 35000;
 

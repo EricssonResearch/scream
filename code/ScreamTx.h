@@ -50,7 +50,7 @@ static const float kGainDown = 2.0f;
 // Max video rampup speed in bps/s (bits per second increase per second)
 static const float kRampUpSpeed = 200000.0f; // bps/s
 // Max video rampup scale as fraction of the current target bitrate
-static const float kRampUpScale = 0.2f; 
+static const float kRampUpScale = 0.2f;
 // Max RTP queue delay, RTP queue is cleared if this value is exceeded
 static const float kMaxRtpQueueDelay = 0.1;  // 0.1s
 // Compensation factor for RTP queue size
@@ -279,7 +279,7 @@ public:
 
         void setTimeString(char *s) {
           strcpy(timeString,s);
-        } 
+        }
 
 	/*
 	* extra data to be appended to detailed log
@@ -288,20 +288,20 @@ public:
 		strcpy(detailedLogExtraData,s);
 	}
 
-        /* 
-        * Get the list of log items 
+        /*
+        * Get the list of log items
         */
-        char *getDetailedLogItemList() {
+        const char *getDetailedLogItemList() {
            return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
         }
 
         /*
-        * Log each ACKed packet, 
+        * Log each ACKed packet,
         */
         void useExtraDetailedLog(bool isUseExtraDetailedLog_) {
            isUseExtraDetailedLog = isUseExtraDetailedLog_;
         }
- 
+
   	/*
 	* Set lowest possible cwndMin
 	*/
