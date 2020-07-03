@@ -1,4 +1,4 @@
-#include "RtpQueue.h"
+ #include "RtpQueue.h"
 #include <iostream>
 #include <string.h>
 using namespace std;
@@ -7,7 +7,6 @@ using namespace std;
 */
 
 RtpQueueItem::RtpQueueItem() {
-    packet = 0;
     used = false;
     size = 0;
     seqNr = 0;
@@ -30,29 +29,35 @@ RtpQueue::RtpQueue() {
 void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
     int ix = head+1;
     if (ix == kRtpQueueSize) ix = 0;
+    if (items[ix]->used) {
+      /*
+      * RTP queue is full, do a drop tail i.e ignore new RTP packets
+      */
+      return;
+    }
     head = ix;
-    items[head]->packet = rtpPacket;
     items[head]->seqNr = seqNr;
     items[head]->size = size;
     items[head]->ts = ts;
     items[head]->used = true;
     bytesInQueue_ += size;
     sizeOfQueue_ += 1;
+    memcpy(items[head]->packet, rtpPacket, size);
     computeSizeOfNextRtp();
 }
 
 bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
     if (items[tail]->used == false) {
-        sizeOfNextRtp_ = -1;
         return false;
+        sizeOfNextRtp_ = -1;
     } else {
         size = items[tail]->size;
-        rtpPacket = items[tail]->packet;
+        memcpy(rtpPacket,items[tail]->packet,size);
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
+        tail++; if (tail == kRtpQueueSize) tail = 0;
         bytesInQueue_ -= size;
         sizeOfQueue_ -= 1;
-        tail++; if (tail == kRtpQueueSize) tail = 0;
         computeSizeOfNextRtp();
         return true;
     }
