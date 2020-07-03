@@ -74,4 +74,4 @@ INCLUDE_DIRECTORIES(
 ${scream_SOURCE_DIR}/../include
 )
 
-ADD_SUBDIRECTORY( code) 
+ADD_SUBDIRECTORY( code)

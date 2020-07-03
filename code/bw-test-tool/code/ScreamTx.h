@@ -4,7 +4,7 @@
 #include <string.h>
 #include <iostream>
 #include <cstdint>
-extern "C" {
+
 using namespace std;
 
 /*
@@ -193,7 +193,7 @@ public:
 		uint32_t ssrc,
 		int size,
 		uint16_t seqNr,
-                bool isMark);
+		bool isMark);
 
 	/* New incoming feedback, this function
 	 * triggers a CWND update
@@ -279,9 +279,9 @@ public:
 		fp_log = fp;
 	}
 
-        void setTimeString(char *s) {
-          strcpy(timeString,s);
-        }
+	void setTimeString(char *s) {
+	  strcpy(timeString,s);
+	}
 
 	/*
 	* extra data to be appended to detailed log
@@ -290,21 +290,21 @@ public:
 		strcpy(detailedLogExtraData,s);
 	}
 
-        /*
-        * Get the list of log items
-        */
-        const char *getDetailedLogItemList() {
-           return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
-        }
+	/*
+	* Get the list of log items
+	*/
+	const char *getDetailedLogItemList() {
+	   return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
+	}
 
-        /*
-        * Log each ACKed packet,
-        */
-        void useExtraDetailedLog(bool isUseExtraDetailedLog_) {
-           isUseExtraDetailedLog = isUseExtraDetailedLog_;
-        }
+	/*
+	* Log each ACKed packet,
+	*/
+	void useExtraDetailedLog(bool isUseExtraDetailedLog_) {
+	   isUseExtraDetailedLog = isUseExtraDetailedLog_;
+	}
 
-  	/*
+	/*
 	* Set lowest possible cwndMin
 	*/
 	void setCwndMinLow(int aValue) {
@@ -319,7 +319,7 @@ private:
 		uint32_t timeTx_ntp;
 		int size;
 		uint16_t seqNr;
-                bool isMark;
+		bool isMark;
 		bool isUsed;
 		bool isAcked;
 		bool isAfterReceivedEdge;
@@ -464,12 +464,12 @@ private:
 		uint8_t ceBits,
 		int &encCeMarkedBytes,
 		bool isLast,
-                bool &isMark);
+		bool &isMark);
 
-        /*
-        * Get total target bitrate for all streams
-        */
-        float getTotalTargetBitrate();
+	/*
+	* Get total target bitrate for all streams
+	*/
+	float getTotalTargetBitrate();
 
 	/*
 	* Update CWND
@@ -698,12 +698,11 @@ private:
 	*/
 	FILE *fp_log;
 	bool completeLogItem;
-        char timeString[100];
-        bool isUseExtraDetailedLog;
+	char timeString[100];
+	bool isUseExtraDetailedLog;
 	int bytesNewlyAckedLog;
-        int ecnCeMarkedBytesLog;
+	int ecnCeMarkedBytesLog;
 
 
 };
-}
 #endif

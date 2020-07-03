@@ -54,4 +54,3 @@ int VideoEnc::encode(float time) {
     rtpQueue->setSizeOfLastFrame(rtpBytes);
     return rtpBytes;
 }
-
