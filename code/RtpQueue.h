@@ -20,14 +20,14 @@ public:
 class RtpQueueItem {
 public:
     RtpQueueItem();
-    void* packet;
+    char packet[2000];
     int size;
     unsigned short seqNr;
     float ts;
     bool used;
 };
 
-const int kRtpQueueSize = 20000;
+const int kRtpQueueSize = 1024;
 class RtpQueue : public RtpQueueIface {
 public:
     RtpQueue();

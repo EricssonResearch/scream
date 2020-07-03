@@ -79,6 +79,11 @@ A video from the experiment is found at the link below. The artifacts and overal
 
 Link to video : [SCReAM live demo](https://youtu.be/YYaox26WhKo "SCReAM Live demo")
 
+SCReAM is also implemented in a remote controlled car prototype. The two videos below show how it works in different situations
+
+- [Boliden Kankberg mine](https://www.youtube.com/watch?v=r7QxdTP3jB0 "Boliden Kankberg mine")
+- [Winter wonderland](https://www.youtube.com/watch?v=eU1crtEvMv4 "Winter wonderland")
+
 ## The code
 The main SCReAM algorithm components are found in the C++ classes:
 
@@ -133,28 +138,26 @@ The feedback overhead depends on the media bitrate. The table below shows the IP
        |                30000 |                          500 |
        +-----------------------------------------------------+
 
-
 # How to build this repository?
 
 We assume you have git already installed, since you checked this out.
-Install some generic build dependencies first:
+
+The SCReAM code comes in two (three) applications
+
+- Windows-based test application: This application implements a simple bottleneck and does only local simulation. Open the scream.sln application in Visual studio and build.
+- Linux-based bandwidth test application:  Makes in possible to benchmark the throughput live networks and test beds. The tool models a video encoder. See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx for further instructions.
+- gstreamer plugin: This application is kept in ./code/gscream . It is however currently not maintained and may not work properly
+
+## BW test tool
+
+To build the bandwidth test application (this has been tested on Debian buster and Ubuntu 16.04 and later), install some generic build dependencies first:
 
     sudo apt-get install autoconf autopoint bison build-essential cmake flex gettext libtool pkg-config yasm
 
-## main code
-
     cmake . && make
 
-creates `bin/scream` executable
-
-## `bw-test-tool`
-
-    cd code/bw-test-tool
-    cmake . && make
-    cd ../..
-
-creates `code/bw-test-tool/bin/scream_bw_test_rx`
-and `code/bw-test-tool/bin/scream_bw_test_tx`
+creates `bin/scream_bw_test_rx`
+and `bin/scream_bw_test_tx`
 
 ## gscream
 

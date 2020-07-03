@@ -65,6 +65,8 @@ static const float kQueueDelayGuard = 0.1f;
 static const float kLossEventRateScale = 0.9f;
 // Video rate scaling due to ECN marking events
 static const float kEcnCeEventRateScale = 0.95f;
+// Headroom for packet pacing
+static const float kPacketPacingHeadRoom = 1.25f;
 
 // Constants
 /*
@@ -120,7 +122,7 @@ public:
 		float gainUp = kGainUp,
 		float gainDown = kGainDown,
 		int cwnd = 0,  // An initial cwnd larger than 2*mss
-		float cautiousPacing = 0.0f,
+		float packetPacingHeadroom = kPacketPacingHeadRoom,
 		int bytesInFlightHistSize = 5,
 		bool isL4s = false,
 		bool openWindow = false,
@@ -453,8 +455,9 @@ private:
 
 	/*
 	* Mark ACKed RTP packets
+	* Return true if CE
 	*/
-	void markAcked(uint32_t time_ntp,
+	bool markAcked(uint32_t time_ntp,
 		struct Transmitted *txPackets,
 		uint16_t seqNr,
 		uint32_t timestamp,
@@ -571,7 +574,7 @@ private:
 	bool enableSbd;
 	float gainUp;
 	float gainDown;
-	float cautiousPacing;
+	float packetPacingHeadroom;
 
 	uint32_t sRttSh_ntp;
 	uint32_t sRtt_ntp;
