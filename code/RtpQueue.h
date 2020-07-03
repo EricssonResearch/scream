@@ -1,6 +1,10 @@
 #ifndef RTP_QUEUE
 #define RTP_QUEUE
 
+#ifdef GSCREAM
+#include <gst/gst.h>
+#endif
+
 /*
  * Implements a simple RTP packet queue, one RTP queue
  * per stream {SSRC,PT}
@@ -25,6 +29,9 @@ public:
     unsigned short seqNr;
     float ts;
     bool used;
+#ifdef GSCREAM
+    GstBuffer *buffer;
+#endif
 };
 
 const int kRtpQueueSize = 1024;
@@ -34,6 +41,10 @@ public:
 
     void push(void *rtpPacket, int size, unsigned short seqNr, float ts);
     bool pop(void *rtpPacket, int &size, unsigned short &seqNr);
+#ifdef GSCREAM
+    void push(GstBuffer *buf, int size, unsigned short seqNr, float ts);
+    GstBuffer* pop(unsigned short &seqNr);
+#endif
     int sizeOfNextRtp();
     int seqNrOfNextRtp();
     int bytesInQueue(); // Number of bytes in queue
