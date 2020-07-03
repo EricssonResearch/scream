@@ -648,6 +648,7 @@ private:
 	* ECN-CE
 	*/
 	bool ecnCeEvent;
+	bool isCeThisFeedback;
 
 	/*
 	* Fast start
