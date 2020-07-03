@@ -79,6 +79,11 @@ A video from the experiment is found at the link below. The artifacts and overal
 
 Link to video : [SCReAM live demo](https://youtu.be/YYaox26WhKo "SCReAM Live demo")
 
+SCReAM is also implemented in a remote controlled car prototype. The two videos below show how it works in different situations
+
+- [Boliden Kankberg mine](https://www.youtube.com/watch?v=r7QxdTP3jB0 "Boliden Kankberg mine")
+- [Winter wonderland](https://www.youtube.com/watch?v=eU1crtEvMv4 "Winter wonderland")
+
 ## The code
 The main SCReAM algorithm components are found in the C++ classes:
 
@@ -133,3 +138,9 @@ The feedback overhead depends on the media bitrate. The table below shows the IP
        |                30000 |                          500 |
        +-----------------------------------------------------+
 
+## Build
+The SCReAM code comes in two applications
+
+- Windows based test application : Open the scream.sln application in Visual studio and build. This application implements a simple bottleneck and does only local simulation.
+
+- Linux based BW test application :  Makes in possible to benchmark the throughput live networks and test beds. The tool models a video encoder. See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx for further instructions.
