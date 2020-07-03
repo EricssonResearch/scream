@@ -13,7 +13,7 @@ using namespace std;
 const float Tmax = 100;
 const bool isChRate = false;
 const bool printLog = true;
-const bool ecnCapable = true;
+const bool ecnCapable = false;
 const bool isL4s = false;
 const float FR = 50.0f;
 int swprio = -1;
@@ -30,7 +30,7 @@ const double timeBase = 10000.0;
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 0, 1.5f, 20, isL4s, false, false);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 0, 1.25f, 20, isL4s, false, false);
 
 	screamTx->setCwndMinLow(5000);
 

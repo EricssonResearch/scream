@@ -117,6 +117,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	wasLossEvent(false),
 	lossEventRate(0.0),
 	ecnCeEvent(false),
+	isCeThisFeedback(false),
 	l4sAlpha(0.1f),
 	bytesMarkedThisRtt(0),
 	bytesDeliveredThisRtt(0),
@@ -706,7 +707,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	 * Mark received packets, given by the ACK vector
 	 */
 	bool isMark = false;
-	bool isCe = markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
+	isCeThisFeedback |= markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
 
 	/*
 	 * Detect lost packets
@@ -716,10 +717,11 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	}
 
 	if (isLast) {
-		if (isCe && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
+		if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
 			ecnCeEvent = true;
 			lastLossEventT_ntp = time_ntp;
 		}
+		isCeThisFeedback = false;
 		if (isL4s) {
 			/*
 			* L4S mode compute a congestion scaling factor that is dependent on the fraction
