@@ -139,8 +139,19 @@ The feedback overhead depends on the media bitrate. The table below shows the IP
        +-----------------------------------------------------+
 
 ## Build
-The SCReAM code comes in two applications
+The SCReAM code comes in two (three) applications
 
-- Windows based test application : Open the scream.sln application in Visual studio and build. This application implements a simple bottleneck and does only local simulation.
-
+- Windows based test application : This application implements a simple bottleneck and does only local simulation. Open the scream.sln application in Visual studio and build.
 - Linux based BW test application :  Makes in possible to benchmark the throughput live networks and test beds. The tool models a video encoder. See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx for further instructions.
+- gstreamer plugin : This application is kept in ./code/gscream . It is however currently not maintained and may not work properly
+
+### Build SCReAM BW test application
+
+The SCReAM BW test application runs on e.g Ubuntu 16.04 and later. The build steps are:
+
+```
+cmake .
+make
+```
+
+You need git, cmake, make and g++ installed  
