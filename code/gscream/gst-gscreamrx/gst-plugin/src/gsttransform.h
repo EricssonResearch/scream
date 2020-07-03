@@ -1,4 +1,4 @@
-/* 
+/*
  * GStreamer
  * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
  * Copyright (C) YEAR AUTHOR_NAME AUTHOR_EMAIL
@@ -18,7 +18,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
- 
+
 #ifndef __GST_PLUGIN_TEMPLATE_H__
 #define __GST_PLUGIN_TEMPLATE_H__
 

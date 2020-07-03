@@ -1062,7 +1062,7 @@ void ScreamTx::initialize(uint32_t time_ntp) {
 float ScreamTx::getTotalTargetBitrate() {
      float totalTargetBitrate = 0.0f;
      for (int n = 0; n < nStreams; n++) {
-         totalTargetBitrate += streams[n]->targetBitrate; 
+         totalTargetBitrate += streams[n]->targetBitrate;
      }
      return totalTargetBitrate;
 }
