@@ -154,4 +154,4 @@ cmake .
 make
 ```
 
-You need git, cmake, make and g++ installed  
+You need git, cmake, make and g++ installed
