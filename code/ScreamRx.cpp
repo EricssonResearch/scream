@@ -311,7 +311,8 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsign
         uint32_t minT_ntp = ULONG_MAX;
         for (auto it = streams.begin(); it != streams.end(); ++it) {
             uint32_t diffT_ntp = time_ntp - (*it)->lastFeedbackT_ntp;
-            if (((*it)->nRtpSinceLastRtcp >= std::min(8,ackDiff) || diffT_ntp > 655 || isMark) && // 10ms in Q16
+			int nRtpSinceLastRtcp = (*it)->nRtpSinceLastRtcp;
+            if ((nRtpSinceLastRtcp >= std::min(8,ackDiff) || diffT_ntp > 655 || (isMark && nRtpSinceLastRtcp > 0)) && 
                 (*it)->lastFeedbackT_ntp < minT_ntp) {
                 stream = *it;
                 minT_ntp = (*it)->lastFeedbackT_ntp;
