@@ -11,7 +11,7 @@
 using namespace std;
 
 const float Tmax = 100;
-const bool isChRate = false;
+const bool isChRate = true;
 const bool printLog = true;
 const bool ecnCapable = false;
 const bool isL4s = false;
@@ -187,11 +187,11 @@ int main(int argc, char* argv[])
         screamTx->setTargetPriority(11, 0.5);
         */
         if (isChRate) {
-            if ((time > 20.0 && time < 30) && isChRate) {
-                netQueueRate->rate = 20000e3;
+            if ((time > 40.0 && time < 50) && isChRate) {
+                netQueueRate->rate = 10000e3;
             }
             else {
-                netQueueRate->rate = 50000e3;
+                netQueueRate->rate = 20000e3;
             }
         }
         

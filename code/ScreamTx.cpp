@@ -24,7 +24,7 @@ static const bool kEnableConsecutiveFastStart = true;
 static const bool kEnablePacketPacing = true;
 
 // Rate update interval
-static const uint32_t kRateAdjustInterval_ntp = 13107; // 200ms in NTP domain
+static const uint32_t kRateAdjustInterval_ntp = 3277; // 50ms in NTP domain
 
 // ==== Less important tuning parameters ====
 // Min pacing interval and min pacing rate
