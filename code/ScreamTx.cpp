@@ -1832,12 +1832,10 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 			* for this anomaly.
 			*/
 
-			const float diff = targetBitrate / rateRtp;
-			float alpha = 0.02f;
-			if (diff < 0)
-				alpha = 1.0;
+			const float diff = (targetBitrate*targetRateScale) / rateRtp;
+			float alpha = 0.05f;
 			targetRateScale *= (1.0f - alpha);
-			targetRateScale += alpha * targetBitrate / rateRtp;
+			targetRateScale += alpha * diff;
 			targetRateScale = std::min(1.1f, std::max(0.8f, targetRateScale));
 		}
 	}
