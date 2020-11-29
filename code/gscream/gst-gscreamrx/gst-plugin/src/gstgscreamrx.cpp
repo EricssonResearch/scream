@@ -375,7 +375,8 @@ static gboolean on_sending_rtcp(GObject *session, GstBuffer *buffer, gboolean ea
     guint8 buf[2000];
     pthread_mutex_lock(&filter->lock_scream);
     getTime(filter, &time, &time_ntp);
-    bool isFb = filter->screamRx->createStandardizedFeedback(time_ntp, buf , rtcpSize);
+    bool isMark = false; //XXX TODO: figure out correct value
+    bool isFb = filter->screamRx->createStandardizedFeedback(time_ntp, isMark, buf, rtcpSize);
     pthread_mutex_unlock(&filter->lock_scream);
     if (isFb && time - filter->lastRxTime < 2.0) {
       //g_print("TS %X \n",(time_ntp));

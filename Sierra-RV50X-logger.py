@@ -1,4 +1,3 @@
-
 import requests
 import json
 import datetime
@@ -81,12 +80,12 @@ def send_to_udp_socket(result):
     UDP_IP = "127.0.0.1"
     UDP_PORT = 35000
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.sendto(bytes(result, 'utf-8'), (UDP_IP, UDP_PORT)) 
+    sock.sendto(bytes(result, 'utf-8'), (UDP_IP, UDP_PORT))
 
 # params = ['Cellular IP Address', 'ESN/EID/IMEI']
 params = param_ids.keys()
 try:
-    while True:    
+    while True:
         result = make_request(params)
         #result = make_request(payload)
         #print('result:', json.dumps(result, indent=4))

@@ -1,7 +1,6 @@
 #ifndef NET_QUEUE
 #define NET_QUEUE
 
-
 class NetQueueItem {
 public:
     NetQueueItem();
@@ -26,10 +25,10 @@ public:
         int size,
         unsigned short seqNr,
         bool isCe = false);
-    bool extract(float time, 
-        void *rtpPacket, 
+    bool extract(float time,
+        void *rtpPacket,
         unsigned int &ssrc,
-        int& size, 
+        int& size,
         unsigned short &seqNr,
         bool &isCe);
     int sizeOfQueue();

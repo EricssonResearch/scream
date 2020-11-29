@@ -154,7 +154,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 
 	bytesNewlyAckedLog(0),
 	ecnCeMarkedBytesLog(0),
-        isUseExtraDetailedLog(false),
+	isUseExtraDetailedLog(false),
 	fp_log(0),
 	completeLogItem(false)
 {
@@ -531,7 +531,7 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 	uint32_t ssrc,
 	int size,
 	uint16_t seqNr,
-        bool isMark) {
+	bool isMark) {
 	if (!isInitialized)
 		initialize(time_ntp);
 
@@ -634,7 +634,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 		ptr += 2;
 		begin_seq = ntohs(begin_seq);
 		num_reports = ntohs(num_reports) + 1;
-        end_seq = begin_seq+num_reports-1;
+	end_seq = begin_seq+num_reports-1;
 
 		/*
 		* Validate RTCP feedback message
@@ -704,17 +704,17 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	Transmitted *txPackets = stream->txPackets;
 	completeLogItem = false;
 	/*
-	* Mark received packets, given by the ACK vector
-	*/
-    bool isMark = false;
+	 * Mark received packets, given by the ACK vector
+	 */
+	bool isMark = false;
 	isCeThisFeedback |= markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
 
 	/*
-	* Detect lost packets
-	*/
+	 * Detect lost packets
+	 */
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		detectLoss(time_ntp, txPackets, seqNr, stream);
-        }
+	}
 
 	if (isLast) {
 		if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
@@ -780,16 +780,16 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 
 		if (fp_log && completeLogItem) {
 			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d", cwnd, bytesInFlight, inFastStart, rateTransmitted, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe,isMark);
-                        if (strlen(detailedLogExtraData) > 0) {
-                          fprintf(fp_log, ",%s", detailedLogExtraData);
-                        }
-                        bytesNewlyAckedLog = 0;
-                        ecnCeMarkedBytesLog = 0;
+			if (strlen(detailedLogExtraData) > 0) {
+			  fprintf(fp_log, ",%s", detailedLogExtraData);
+			}
+			bytesNewlyAckedLog = 0;
+			ecnCeMarkedBytesLog = 0;
 		}
 		if (fp_log && completeLogItem) {
 			fprintf(fp_log, "\n");
 		}
-        }
+	}
 
 }
 
@@ -819,7 +819,7 @@ bool ScreamTx::markAcked(uint32_t time_ntp,
 		*/
 		if ((tmp->seqNr == seqNr) & !tmp->isAcked) {
 			bytesDeliveredThisRtt += tmp->size;
-                        isMark = tmp->isMark;
+			isMark = tmp->isMark;
 			if (ceBits == 0x03) {
 				/*
 				* Packet was CE marked, increase counter
@@ -1064,7 +1064,7 @@ void ScreamTx::initialize(uint32_t time_ntp) {
 float ScreamTx::getTotalTargetBitrate() {
      float totalTargetBitrate = 0.0f;
      for (int n = 0; n < nStreams; n++) {
-         totalTargetBitrate += streams[n]->targetBitrate; 
+	 totalTargetBitrate += streams[n]->targetBitrate;
      }
      return totalTargetBitrate;
 }
@@ -1135,7 +1135,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		*/
 		paceInterval = kMinPaceInterval;
 		if ((queueDelayFractionAvg > 0.02f || isL4s || maxTotalBitrate > 0) && kEnablePacketPacing) {
-                        float pacingBitrate = std::max(1.0e5f, packetPacingHeadroom*getTotalTargetBitrate());
+			float pacingBitrate = std::max(1.0e5f, packetPacingHeadroom*getTotalTargetBitrate());
 			if (maxTotalBitrate > 0) {
 				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
 			}
@@ -1984,7 +1984,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		*/
 		float sclI = (targetBitrate - targetBitrateI) / targetBitrateI;
 		sclI *= 4;
-                sclI = sclI*sclI;
+		sclI = sclI*sclI;
 		sclI = std::max(0.05f, std::min(1.0f, sclI));
 		float increment = 0.0f;
 

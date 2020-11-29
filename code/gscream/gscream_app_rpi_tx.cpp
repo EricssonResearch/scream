@@ -39,7 +39,7 @@ int main (int argc, char *argv[])
 #ifdef SCREAM
   gscreamtx       = gst_element_factory_make ("gscreamtx",      "scream-tx");
   g_assert (gscreamtx);
-#endif  
+#endif
 
   g_assert (videoencode);
   g_assert (capsfilter);
@@ -105,7 +105,7 @@ int main (int argc, char *argv[])
   srcpad = gst_element_get_static_pad (gscreamtx, "src");
 #else
   srcpad = gst_element_get_static_pad (videopayload, "src");
-#endif  
+#endif
   if (gst_pad_link (srcpad, sinkpad) != GST_PAD_LINK_OK)
     g_error ("Failed to link video payloader to rtpbin");
   gst_object_unref (srcpad);

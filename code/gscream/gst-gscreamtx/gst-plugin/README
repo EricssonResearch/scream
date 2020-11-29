@@ -9,7 +9,7 @@ of how to set up autotools and your source tree.
 This template demonstrates :
 - what to do in autogen.sh
 - how to setup configure.ac (your package name and version, GStreamer flags)
-- how to setup your source dir 
+- how to setup your source dir
 - what to put in Makefile.am
 
 More features and templates might get added later on.
@@ -31,4 +31,3 @@ one element called 'myfilter' too. Also look for "FIXME:" markers that point you
 to places where you need to edit the code.
 
 You still need to adjust the Makefile.am.
-

@@ -528,8 +528,8 @@ gst_g_scream_tx_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     //g_print("CALLBACK\n");
     filter->encoder = gst_bin_get_by_name_recurse_up(GST_BIN(pipe), "video");
     g_assert(filter->encoder);
-    
-    
+
+
     //g_object_set(G_OBJECT(filter->encoder), "bitrate", 200, NULL);
 
     //filter->encoder = gst_bin_get_by_name_recurse_up(GST_BIN(pipe), "encoder");

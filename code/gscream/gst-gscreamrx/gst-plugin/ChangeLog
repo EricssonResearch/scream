@@ -104,7 +104,7 @@
 
 2006-04-20  Stefan Kost  <ensonic@users.sf.net>
 
-        Patch by: Johan Rydberg <jrydberg@gnu.org>
+	Patch by: Johan Rydberg <jrydberg@gnu.org>
 
 	* src/gstplugin.c: (gst_plugin_template_get_type),
 	(gst_plugin_template_base_init), (gst_plugin_template_class_init),
@@ -116,7 +116,7 @@
 	(gst_plugin_template_get_property):
 	* tools/make_element:
 	remove double gst_get_, fix '_' in names
-	
+
 
 2006-02-26  Tim-Philipp Müller  <tim at centricular dot net>
 
@@ -190,8 +190,8 @@
 	* autogen.sh:
 	* configure.ac:
 	* src/Makefile.am:
-          use proper LDFLAGS for plugins
-          run in maintainer mode by default
+	  use proper LDFLAGS for plugins
+	  run in maintainer mode by default
 
 2004-04-22  Thomas Vander Stichele  <thomas at apestaart dot org>
 
@@ -210,8 +210,8 @@
 
 2003-02-06  Thomas Vander Stichele <thomas at apestaart dot org>
 
-        * updated for GStreamer 0.6.0
+	* updated for GStreamer 0.6.0
 
 2002-07-17  Thomas Vander Stichele <thomas at apestaart dot org>
 
-  	* initial creation on a flight to New York
+	* initial creation on a flight to New York

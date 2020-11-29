@@ -184,7 +184,7 @@ gst_plugin_template_transform_ip (GstBaseTransform * base, GstBuffer * outbuf)
 
   if (filter->silent == FALSE)
     g_print ("I'm plugged, therefore I'm in.\n");
-  
+
   /* FIXME: do something interesting here.  This simply copies the source
    * to the destination. */
 

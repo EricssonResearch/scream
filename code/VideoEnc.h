@@ -21,5 +21,4 @@ public:
     int ix;
 };
 
-
 #endif

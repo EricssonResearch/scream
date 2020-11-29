@@ -1,4 +1,4 @@
- #include "RtpQueue.h"
+#include "RtpQueue.h"
 #include <iostream>
 #include <string.h>
 using namespace std;
@@ -48,20 +48,58 @@ void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
 
 bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
     if (items[tail]->used == false) {
-        return false;
         sizeOfNextRtp_ = -1;
+        return false;
     } else {
         size = items[tail]->size;
         memcpy(rtpPacket,items[tail]->packet,size);
         seqNr = items[tail]->seqNr;
         items[tail]->used = false;
-        tail++; if (tail == kRtpQueueSize) tail = 0;
         bytesInQueue_ -= size;
         sizeOfQueue_ -= 1;
+        tail++; if (tail == kRtpQueueSize) tail = 0;
         computeSizeOfNextRtp();
         return true;
     }
 }
+
+#ifdef GSCREAM
+void RtpQueue::push(GstBuffer *buffer, int size, unsigned short seqNr, float ts) {
+    int ix = head+1;
+    if (ix == kRtpQueueSize) ix = 0;
+    if (items[ix]->used) {
+      /*
+      * RTP queue is full, do a drop tail i.e ignore new RTP packets
+      */
+      return;
+    }
+    head = ix;
+    items[head]->seqNr = seqNr;
+    items[head]->size = size;
+    items[head]->ts = ts;
+    items[head]->used = true;
+    items[head]->buffer = buffer;
+    bytesInQueue_ += size;
+    sizeOfQueue_ += 1;
+    computeSizeOfNextRtp();
+}
+
+GstBuffer* RtpQueue::pop(unsigned short& seqNr) {
+    if (items[tail]->used == false) {
+        sizeOfNextRtp_ = -1;
+        return 0;
+    } else {
+        GstBuffer *buffer = items[tail]->buffer;
+        seqNr = items[tail]->seqNr;
+        items[tail]->used = false;
+        bytesInQueue_ -= items[tail]->size;
+        sizeOfQueue_ -= 1;
+        tail++; if (tail == kRtpQueueSize) tail = 0;
+        computeSizeOfNextRtp();
+        return buffer;
+    }
+}
+#endif
 
 void RtpQueue::computeSizeOfNextRtp() {
     if (!items[tail]->used) {

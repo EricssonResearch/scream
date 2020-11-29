@@ -29,12 +29,12 @@ ScreamRx *screamRx = 0;
 
 //int fd_local_rtp;
 
-char* SENDER_IP = "192.168.0.20";
+const char *SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
 struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr, sender_rtcp_addr;
 struct sockaddr_in local_rtp_addr;
 
-char* LOCAL_IP = "127.0.0.1";
+const char *LOCAL_IP = "127.0.0.1";
 int LOCAL_PORT = 30124;
 
 int ackDiff = -1;
