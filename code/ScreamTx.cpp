@@ -1833,7 +1833,7 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 			*/
 
 			const float diff = (targetBitrate*targetRateScale) / rateRtp;
-			float alpha = 0.05f;
+			float alpha = 0.02f;
 			targetRateScale *= (1.0f - alpha);
 			targetRateScale += alpha * diff;
 			targetRateScale = std::min(1.1f, std::max(0.8f, targetRateScale));
@@ -1906,7 +1906,14 @@ void ScreamTx::Stream::updateTargetBitrateI(float br) {
 }
 
 /*
-* Update the target bitrate, the target bitrate includes the RTP overhead
+* Update target bitrate, most of the time spent on developing SCReAM has been here.
+* Video coders can behave very odd. The actual bitrate naturally varies around the target
+*  bitrate by some +/-20% or even more, I frames can be real large all this is manageable
+*  to at least some degree.
+* What is more problematic is a systematic error where the video codec rate is consistently higher
+*  or lower than the target rate.
+* Various fixes in the code below (as well as the isAdaptiveTargetRateScale) seek to make
+*  rate adaptive streaming with SCReAM work despite these anomalies.
 */
 void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	/*
@@ -1914,7 +1921,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	*/
 
 	float br = getMaxRate();
-	float rateRtpLimit = br;
+	float rateRtpLimit = std::max(rateRtp, br);
 	if (initTime_ntp == 0) {
 		/*
 		* Initialize if the first time
@@ -2124,12 +2131,15 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				}
 			}
 			else {
-				/*
-				* Avoid that the target bitrate is reduced if it actually is the media
-				* coder that limits the output rate e.g due to inactivity
-				*/
-				if (rateRtp < targetBitrate)
-					increment = 0.0f;
+				if (rateRtpLimit < targetBitrate) {
+					/*
+					 * Limit decrease if target bitrate is higher than actuall bitrate,
+					 *  this a possible indication of an idle source, but it may also be the case
+					 *  that the video coder consistently delivers a lower bitrate than the target
+					 */
+					float scale = std::max(-1.0f, 2.0f*(rateRtpLimit / targetBitrate - 1.0f));
+					increment *= (1.0 + scale);
+				}
 				/*
 				* Also avoid that the target bitrate is reduced if
 				* the coder bitrate is higher
@@ -2137,7 +2147,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				* The possible reason is that a large I frame is transmitted, another reason is
 				* complex dynamic content.
 				*/
-				if (rateRtp > targetBitrate*2.0f)
+				if (rateRtpLimit > targetBitrate*2.0f)
 					increment = 0.0f;
 			}
 			targetBitrate += increment;
