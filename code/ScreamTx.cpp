@@ -1331,11 +1331,6 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		cwnd = std::min(cwnd, (int)maxBytesInFlight);
 	}
 
-	if (sRtt < 0.01f && queueDelayTrend < 0.1) {
-		int tmp = int(rateTransmitted*0.01f / 8);
-		tmp = std::max(tmp, (int)(maxBytesInFlight*1.5f));
-		cwnd = std::max(cwnd, tmp);
-	}
 	cwnd = std::max(cwndMin, cwnd);
 
 	/*
