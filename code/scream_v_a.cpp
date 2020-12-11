@@ -32,12 +32,12 @@ int main(int argc, char* argv[])
     int tick = (int)(timeBase / FR);
     ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 0, 1.25f, 20, isL4s, false, false);
 
-	screamTx->setCwndMinLow(5000);
+	screamTx->setCwndMinLow(15000);
 
     ScreamRx *screamRx = new ScreamRx(0,1,1);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
-    NetQueue *netQueueDelay = new NetQueue(0.04f, 0.0f, 0.0f);
+    NetQueue *netQueueDelay = new NetQueue(0.02f, 0.0f, 0.0f);
     NetQueue *netQueueRate = new NetQueue(0.0f, 20e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
 	//videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE);

@@ -435,6 +435,7 @@ private:
 		int targetBitrateHistPtr;
 		uint32_t targetBitrateHistUpdateT_ntp;
 		float targetRateScale;
+		uint32_t numberOfUpdateRate;
 
 		bool isActive;
 		uint32_t lastFrameT_ntp;

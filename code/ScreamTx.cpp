@@ -731,13 +731,6 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				if (bytesDeliveredThisRtt > 0) {
 					float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
-					float l4sG = kL4sG;
-					if (F > l4sAlpha) {
-						/*
-						* Adjust alpha a bit faster up than down
-						*/
-						l4sG = std::min(1.0f, l4sG*4.0f);
-					}
 					/*
 					 * L4S alpha (backoff factor) is averaged and limited
 					 * It makes sense to limit the backoff because
@@ -745,7 +738,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 					 *   2) delay estimation algorithm also works in parallel
 					 *   3) L4S marking algorithm can lag behind a little and potentially overmark
 					 */
-					l4sAlpha = std::min(kL4sAlphaMax, l4sG * F + (1.0f - l4sG)*l4sAlpha);
+					l4sAlpha = std::min(kL4sAlphaMax, kL4sG * F + (1.0f - kL4sG)*l4sAlpha);
 					bytesDeliveredThisRtt = 0;
 					bytesMarkedThisRtt = 0;
 				}
@@ -1135,7 +1128,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		*/
 		paceInterval = kMinPaceInterval;
 		if ((queueDelayFractionAvg > 0.02f || isL4s || maxTotalBitrate > 0) && kEnablePacketPacing) {
-                        float pacingBitrate = std::max(1.0e5f, packetPacingHeadroom*getTotalTargetBitrate());
+            float pacingBitrate = std::max(1.0e5f, packetPacingHeadroom*getTotalTargetBitrate());
 			if (maxTotalBitrate > 0) {
 				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
 			}
@@ -1762,7 +1755,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	rateRtp = 0.0f;
 	timeTxAck_ntp = 0;
 	lastTransmitT_ntp = 0;
-
+	numberOfUpdateRate = 0;
 	for (int n = 0; n < kRateUpDateSize; n++) {
 		rateRtpHist[n] = 0.0f;
 		rateAckedHist[n] = 0.0f;
@@ -1795,13 +1788,14 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 */
 void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 	if (lastRateUpdateT_ntp != 0) {
+		numberOfUpdateRate++;
 		float tDelta = (time_ntp - lastRateUpdateT_ntp) * ntp2SecScaleFactor;
-
 		rateTransmittedHist[rateUpdateHistPtr] = bytesTransmitted * 8.0f / tDelta;
 		rateAckedHist[rateUpdateHistPtr] = bytesAcked * 8.0f / tDelta;
 		rateLostHist[rateUpdateHistPtr] = bytesLost * 8.0f / tDelta;
 		rateCeHist[rateUpdateHistPtr] = bytesCe * 8.0f / tDelta;
 		rateRtpHist[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
+
 		rateUpdateHistPtr = (rateUpdateHistPtr + 1) % kRateUpDateSize;
 		rateTransmitted = 0.0f;
 		rateAcked = 0.0f;
@@ -1820,7 +1814,7 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 		rateLost /= kRateUpDateSize;
 		rateCe /= kRateUpDateSize;
 		rateRtp /= kRateUpDateSize;
-		if (rateRtp > 0 && isAdaptiveTargetRateScale) {
+		if (rateRtp > 0 && isAdaptiveTargetRateScale && numberOfUpdateRate > kRateUpDateSize) {
 			/*
 			* Video coders are strange animals.. In certain cases the average bitrate is
 			* consistently lower or higher than the target bitare. This additonal scaling compensates
@@ -1949,7 +1943,12 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			targetBitrate = std::max(minBitrate, targetBitrate*lossEventRateScale);
 		else if (ecnCeEventFlag) {
 			if (parent->isL4s) {
-				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - parent->l4sAlpha / 4.0f));
+				/*
+				 * scale backoff factor with RTT
+				 */
+				float rttScale = 2.0*std::min(1.0f, std::max(0.2f, parent->sRtt / 0.1f));
+				float backOff = std::min(0.25f, rttScale * parent->l4sAlpha / 2.0f);
+				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - backOff));
 			}
 			else {
 				targetBitrate = std::max(minBitrate, targetBitrate*ecnCeEventRateScale);
@@ -1983,11 +1982,17 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		/*
 		* A scale factor that is dependent on the inflection point
 		* i.e the last known highest video bitrate
+		* This reduces rate and delay overshoot
+		* L4S allows for a faster trajectory
 		*/
 		float sclI = (targetBitrate - targetBitrateI) / targetBitrateI;
-		sclI *= 4;
-                sclI = sclI*sclI;
-		sclI = std::max(0.05f, std::min(1.0f, sclI));
+		if (parent->isL4s)
+			sclI *= 32;
+		else
+			sclI *= 4;
+		sclI = sclI * sclI;
+		sclI = std::max(0.1f, std::min(1.0f, sclI));
+
 		float increment = 0.0f;
 
 		/*
