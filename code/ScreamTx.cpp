@@ -151,6 +151,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	baseOwdHistMin(UINT32_MAX),
 	clockDriftCompensation(0),
 	clockDriftCompensationInc(0),
+	enableRateUpdate(true),
 
 	bytesNewlyAckedLog(0),
 	ecnCeMarkedBytesLog(0),
@@ -379,7 +380,8 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 		rateAcked = 0.0f;
 		float rateRtp = 0.0f;
 		for (int n = 0; n < nStreams; n++) {
-			streams[n]->updateRate(time_ntp);
+			if (enableRateUpdate)
+				streams[n]->updateRate(time_ntp);
 			rateTransmitted += streams[n]->rateTransmitted;
 			rateRtp += streams[n]->rateRtp;
 			rateTransmittedAvg = 0.9f*rateTransmittedAvg + 0.1f*rateTransmitted;
@@ -1057,7 +1059,7 @@ void ScreamTx::initialize(uint32_t time_ntp) {
 float ScreamTx::getTotalTargetBitrate() {
      float totalTargetBitrate = 0.0f;
      for (int n = 0; n < nStreams; n++) {
-         totalTargetBitrate += streams[n]->targetBitrate; 
+         totalTargetBitrate += streams[n]->targetBitrate;
      }
      return totalTargetBitrate;
 }

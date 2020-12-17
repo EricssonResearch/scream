@@ -50,7 +50,7 @@ static const float kGainDown = 2.0f;
 // Max video rampup speed in bps/s (bits per second increase per second)
 static const float kRampUpSpeed = 200000.0f; // bps/s
 // Max video rampup scale as fraction of the current target bitrate
-static const float kRampUpScale = 0.2f; 
+static const float kRampUpScale = 0.2f;
 // Max RTP queue delay, RTP queue is cleared if this value is exceeded
 static const float kMaxRtpQueueDelay = 0.1;  // 0.1s
 // Compensation factor for RTP queue size
@@ -279,9 +279,9 @@ public:
 		fp_log = fp;
 	}
 
-        void setTimeString(char *s) {
-          strcpy(timeString,s);
-        } 
+  void setTimeString(char *s) {
+    strcpy(timeString,s);
+  }
 
 	/*
 	* extra data to be appended to detailed log
@@ -290,27 +290,35 @@ public:
 		strcpy(detailedLogExtraData,s);
 	}
 
-        /* 
-        * Get the list of log items 
-        */
-        char *getDetailedLogItemList() {
-           return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
-        }
+	/*
+	* Get the list of log items
+	*/
+	char *getDetailedLogItemList() {
+		return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
+	}
 
-        /*
-        * Log each ACKed packet, 
-        */
-        void useExtraDetailedLog(bool isUseExtraDetailedLog_) {
-           isUseExtraDetailedLog = isUseExtraDetailedLog_;
-        }
- 
-  	/*
+	/*
+	* Log each ACKed packet,
+	*/
+	void useExtraDetailedLog(bool isUseExtraDetailedLog_) {
+		isUseExtraDetailedLog = isUseExtraDetailedLog_;
+	}
+
+	/*
 	* Set lowest possible cwndMin
 	*/
 	void setCwndMinLow(int aValue) {
 		cwndMinLow = aValue;
 	}
 
+	/*
+	* Enable/disable rate update. This function is used with the
+	* SCReAM BW test tool to avoid that the periodic bitrate reduction
+	*  messes up the rate estimation
+	*/
+  void setEnableRateUpdate(bool isEnableRateUpdate) {
+		enableRateUpdate = isEnableRateUpdate;
+	}
 private:
 	/*
 	* Struct for list of RTP packets in flight
@@ -683,6 +691,7 @@ private:
 	uint32_t initTime_ntp;
 	float queueDelayMin;
 	float queueDelayMinAvg;
+	bool enableRateUpdate;
 
 	/*
 	* Variables for multiple steams handling
