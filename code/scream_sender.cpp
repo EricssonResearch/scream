@@ -348,7 +348,9 @@ void *createRtpThread(void *arg) {
     }
 
     if (!pushTraffic && burstTime < 0) {
-      if ((time_ntp/6554) % periodicRateDropInterval > (periodicRateDropInterval-2)) {
+	  int tmp = time_ntp / 6554;
+	  int tmp_mod = tmp % periodicRateDropInterval;
+	  if (tmp_mod > (periodicRateDropInterval-2)) {
         /*
         * Drop bitrate for 100ms every periodicRateDropInterval/10
         *  this ensures that the queue delay is estimated correctly
@@ -356,11 +358,17 @@ void *createRtpThread(void *arg) {
         *  video stream typically drops in bitrate every once in a while
         */
         bytes = 10;
-				screamTx->setEnableRateUpdate(false);
-      } else {
-				screamTx->setEnableRateUpdate(true);
-			}
-    } else {
+      }
+	  if (tmp > 2 && (tmp_mod > (periodicRateDropInterval - 2) || tmp_mod <= 2)) {
+		  /*
+		  * Make sure that the rate drop does not impact on the rate control
+		  *  this extra code locks the rate update to avoid reaction to false
+		  *  rate estimates
+		  */
+		  screamTx->setEnableRateUpdate(false);
+	  } else {
+		  screamTx->setEnableRateUpdate(true);
+	  }
       float time_s = time_ntp/65536.0f;
       if (burstStartTime < 0) {
         burstStartTime = time_s;
@@ -625,7 +633,7 @@ int main(int argc, char* argv[]) {
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-12-17" << endl;
+    cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2020-12-18" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
     cerr << "     -if name              bind to specific interface" << endl;
     cerr << "     -time value           run for time seconds (default infinite)" << endl;
@@ -668,8 +676,8 @@ int main(int argc, char* argv[]) {
     cerr << "     -append               append logfile" << endl;
     cerr << "     -itemlist             add item list in beginning of log file" << endl;
     cerr << "     -detailed             detailed log, per ACKed RTP" << endl;
-		cerr << "     -periodicdropinterval interval [s] between periodic drops in rate (default 60s)" << endl;
-		cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << endl;
+	cerr << "     -periodicdropinterval interval [s] between periodic drops in rate (default 60s)" << endl;
+	cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << endl;
     //cerr << "     -sierralog          get logs from python script that logs a sierra modem" << endl;
     exit(-1);
   }

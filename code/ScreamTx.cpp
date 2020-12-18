@@ -380,8 +380,7 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 		rateAcked = 0.0f;
 		float rateRtp = 0.0f;
 		for (int n = 0; n < nStreams; n++) {
-			if (enableRateUpdate)
-				streams[n]->updateRate(time_ntp);
+		  streams[n]->updateRate(time_ntp);
 			rateTransmitted += streams[n]->rateTransmitted;
 			rateRtp += streams[n]->rateRtp;
 			rateTransmittedAvg = 0.9f*rateTransmittedAvg + 0.1f*rateTransmitted;
@@ -1789,7 +1788,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 * Update the estimated max media rate
 */
 void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
-	if (lastRateUpdateT_ntp != 0) {
+	if (lastRateUpdateT_ntp != 0 && parent->enableRateUpdate) {
 		numberOfUpdateRate++;
 		float tDelta = (time_ntp - lastRateUpdateT_ntp) * ntp2SecScaleFactor;
 		rateTransmittedHist[rateUpdateHistPtr] = bytesTransmitted * 8.0f / tDelta;
