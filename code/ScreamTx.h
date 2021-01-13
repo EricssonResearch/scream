@@ -68,12 +68,6 @@ extern "C" {
 	// Headroom for packet pacing
 	static const float kPacketPacingHeadRoom = 1.25f;
 
-	// Constants
-	/*
-	* Timestamp sampling rate for SCReAM feedback
-	*/
-	static const int kTimeStampAtoScale = 1024;
-	const float ntp2SecScaleFactor = 1.0 / 65536;
 
 	/*
 	* Max number of RTP packets in flight

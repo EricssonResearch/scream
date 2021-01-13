@@ -1,6 +1,5 @@
 #include "RtpQueue.h"
 #include "ScreamTx.h"
-#include "ScreamRx.h"
 #ifdef _MSC_VER
 #define NOMINMAX
 #include <winSock2.h>
@@ -63,6 +62,10 @@ static const int kMinCwndMss = 3;
 
 // Compensate for max 33/65536 = 0.05% clock drift
 static const uint32_t kMaxClockdriftCompensation = 33;
+
+// Time stamp scale
+static const int kTimeStampAtoScale = 1024;
+static const float ntp2SecScaleFactor = 1.0 / 65536;
 
 ScreamTx::ScreamTx(float lossBeta_,
 	float ecnCeBeta_,
