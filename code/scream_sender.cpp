@@ -64,6 +64,8 @@ float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 bool pushTraffic = false;
 float packetPacingHeadroom = 1.25f;
+float txQueueSizeFactor = 0.1f;
+float queueDelayGuard = 0.05f;
 
 int periodicRateDropInterval = 600; // seconds*10
 
@@ -614,7 +616,7 @@ int setup() {
 			initRate * 1000,
 			maxRate * 1000,
 			rateIncrease * 1000, rateScale,
-			0.2f, 0.1f, 0.05f, scaleFactor, scaleFactor);
+			0.2f, txQueueSizeFactor, queueDelayGuard, scaleFactor, scaleFactor);
 	}
 	return 1;
 }
@@ -639,51 +641,53 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2021-01-12" << endl;
+		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2021-01-25" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
-		cerr << "     -if name              bind to specific interface" << endl;
-		cerr << "     -time value           run for time seconds (default infinite)" << endl;
-		cerr << "     -burst val1 val2      burst media for a given time and then sleeps a given time" << endl;
+		cerr << "     -if name                 bind to specific interface" << endl;
+		cerr << "     -time value              run for time seconds (default infinite)" << endl;
+		cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
 		cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
-		cerr << "     -nopace               disable packet pacing" << endl;
-		cerr << "     -fixedrate value      set a fixed 'coder' bitrate " << endl;
-		cerr << "     -pushtraffic          just pushtraffic at a fixed bitrate, no feedback needed" << endl;
-		cerr << "                             must be used with -fixedrate option" << endl;
-		cerr << "     -key val1 val2        set a given key frame interval [s] and size multiplier " << endl;
-		cerr << "                            example -key 2.0 5.0 " << endl;
-		cerr << "     -rand value           framesizes vary randomly around the nominal " << endl;
-		cerr << "                            example -rand 10 framesize vary +/- 10% " << endl;
-		cerr << "     -initrate value       set a start bitrate [kbps]" << endl;
-		cerr << "                            example -initrate 2000 " << endl;
-		cerr << "     -minrate  value       set a min bitrate [kbps], default 1000kbps" << endl;
-		cerr << "                            example -minrate 1000 " << endl;
-		cerr << "     -maxrate value        set a max bitrate [kbps], default 200000kbps" << endl;
-		cerr << "                            example -maxrate 10000 " << endl;
-		cerr << "     -rateincrease value   set a max allowed rate increase speed [kbps/s]," << endl;
-		cerr << "                            default 10000kbps/s" << endl;
-		cerr << "                            example -rateincrease 1000 " << endl;
-		cerr << "     -ratescale value      set a max allowed rate increase speed as a fraction of the " << endl;
-		cerr << "                            current rate, default 0.5" << endl;
-		cerr << "                            example -ratescale 1.0 " << endl;
-		cerr << "     -ect n                ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
-		cerr << "                            -1 for not-ECT (default)" << endl;
-		cerr << "     -scale value          scale factor in case of loss or ECN event (default 0.9) " << endl;
-		cerr << "     -dscale value         scale factor in case of increased delay (default 10.0) " << endl;
-		cerr << "     -delaytarget value    set a queue delay target (default = 0.06s) " << endl;
-		cerr << "     -paceheadroom value   set a packet pacing headroom (default = 1.25s) " << endl;
-		cerr << "     -mtu value            set the max RTP payload size (default 1200 byte)" << endl;
-		cerr << "     -fps value            set the frame rate (default 50)" << endl;
-		cerr << "     -clockdrift           enable clock drift compensation for the case that the" << endl;
-		cerr << "                            receiver end clock is faster" << endl;
-		cerr << "     -verbose              print a more extensive log" << endl;
-		cerr << "     -nosummary            don't print summary" << endl;
-		cerr << "     -log logfile          save detailed per-ACK log to file" << endl;
-		cerr << "     -ntp                  use NTP timestamp in logfile" << endl;
-		cerr << "     -append               append logfile" << endl;
-		cerr << "     -itemlist             add item list in beginning of log file" << endl;
-		cerr << "     -detailed             detailed log, per ACKed RTP" << endl;
-		cerr << "     -periodicdropinterval interval [s] between periodic drops in rate (default 60s)" << endl;
-		cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << endl;
+		cerr << "     -nopace                  disable packet pacing" << endl;
+		cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
+		cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
+		cerr << "                                must be used with -fixedrate option" << endl;
+		cerr << "     -key val1 val2           set a given key frame interval [s] and size multiplier " << endl;
+		cerr << "                               example -key 2.0 5.0 " << endl;
+		cerr << "     -rand value              framesizes vary randomly around the nominal " << endl;
+		cerr << "                               example -rand 10 framesize vary +/- 10% " << endl;
+		cerr << "     -initrate value          set a start bitrate [kbps]" << endl;
+		cerr << "                               example -initrate 2000 " << endl;
+		cerr << "     -minrate  value          set a min bitrate [kbps], default 1000kbps" << endl;
+		cerr << "                               example -minrate 1000 " << endl;
+		cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << endl;
+		cerr << "                               example -maxrate 10000 " << endl;
+		cerr << "     -rateincrease value      set a max allowed rate increase speed [kbps/s]," << endl;
+		cerr << "                               default 10000kbps/s" << endl;
+		cerr << "                               example -rateincrease 1000 " << endl;
+		cerr << "     -ratescale value         set a max allowed rate increase speed as a fraction of the " << endl;
+		cerr << "                               current rate, default 0.5" << endl;
+		cerr << "                               example -ratescale 1.0 " << endl;
+		cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
+		cerr << "                               -1 for not-ECT (default)" << endl;
+		cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << endl;
+		cerr << "     -dscale value            scale factor in case of increased delay (default 10.0) " << endl;
+		cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
+		cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.25s) " << endl;
+		cerr << "     -txqueuesizefactor value reaction to increased RTP queue delay (default 0.1) " << endl;
+		cerr << "     -queuedelayguard value   reaction to increased network queue delay (default 0.05)" << endl;
+		cerr << "     -mtu value               set the max RTP payload size (default 1200 byte)" << endl;
+		cerr << "     -fps value               set the frame rate (default 50)" << endl;
+		cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
+		cerr << "                               receiver end clock is faster" << endl;
+		cerr << "     -verbose                 print a more extensive log" << endl;
+		cerr << "     -nosummary               don't print summary" << endl;
+		cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
+		cerr << "     -ntp                     use NTP timestamp in logfile" << endl;
+		cerr << "     -append                  append logfile" << endl;
+		cerr << "     -itemlist                add item list in beginning of log file" << endl;
+		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
+		cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
+		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
 		//cerr << "     -sierralog          get logs from python script that logs a sierra modem" << endl;
 		exit(-1);
 	}
@@ -729,6 +733,16 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
+		if (strstr(argv[ix], "-txqueuesizefactor")) {
+			txQueueSizeFactor = atoi(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+		if (strstr(argv[ix], "-queuedelayguard")) {
+			queueDelayGuard = atoi(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
 		if (strstr(argv[ix], "-mtu")) {
 			mtu = atoi(argv[ix + 1]);
 			ix += 2;
