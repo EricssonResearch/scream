@@ -20,10 +20,11 @@ public:
 class RtpQueueItem {
 public:
     RtpQueueItem();
-    char packet[2000];
+    void* packet;
     int size;
     unsigned short seqNr;
     float ts;
+    bool isMark;
     bool used;
 };
 
@@ -32,8 +33,8 @@ class RtpQueue : public RtpQueueIface {
 public:
     RtpQueue();
 
-    void push(void *rtpPacket, int size, unsigned short seqNr, float ts);
-    bool pop(void *rtpPacket, int &size, unsigned short &seqNr);
+    bool push(void *rtpPacket, int size, unsigned short seqNr, bool isMark, float ts);
+    bool pop(void **rtpPacket, int &size, unsigned short &seqNr, bool &isMark);
     int sizeOfNextRtp();
     int seqNrOfNextRtp();
     int bytesInQueue(); // Number of bytes in queue

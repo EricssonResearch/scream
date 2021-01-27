@@ -1,4 +1,4 @@
- #include "RtpQueue.h"
+#include "RtpQueue.h"
 #include <iostream>
 #include <string.h>
 using namespace std;
@@ -26,34 +26,38 @@ RtpQueue::RtpQueue() {
     sizeOfNextRtp_ = -1;
 }
 
-void RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr, float ts) {
+bool RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr,  bool isMark, float ts) {
     int ix = head+1;
     if (ix == kRtpQueueSize) ix = 0;
     if (items[ix]->used) {
       /*
       * RTP queue is full, do a drop tail i.e ignore new RTP packets
       */
-      return;
+      return (false);
     }
     head = ix;
     items[head]->seqNr = seqNr;
     items[head]->size = size;
     items[head]->ts = ts;
+    items[head]->isMark = isMark;
     items[head]->used = true;
     bytesInQueue_ += size;
     sizeOfQueue_ += 1;
-    memcpy(items[head]->packet, rtpPacket, size);
+    items[head]->packet = rtpPacket;
     computeSizeOfNextRtp();
+    return (true);
 }
-
-bool RtpQueue::pop(void *rtpPacket, int& size, unsigned short& seqNr) {
+bool RtpQueue::pop(void **rtpPacket, int& size, unsigned short& seqNr, bool &isMark)
+{
     if (items[tail]->used == false) {
+        *rtpPacket = NULL;
         return false;
         sizeOfNextRtp_ = -1;
     } else {
         size = items[tail]->size;
-        memcpy(rtpPacket,items[tail]->packet,size);
+        *rtpPacket = items[tail]->packet;
         seqNr = items[tail]->seqNr;
+        isMark = items[tail]->isMark;
         items[tail]->used = false;
         tail++; if (tail == kRtpQueueSize) tail = 0;
         bytesInQueue_ -= size;
@@ -98,23 +102,24 @@ float RtpQueue::getDelay(float currTs) {
         return currTs-items[tail]->ts;
     }
 }
-
+/*
 bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
     if (sizeOfQueue() > 0) {
-        pop(rtpPacket, size, seqNr);
+        bool isMark;
+        pop(rtpPacket, size, seqNr, isMark);
         return true;
     }
     return false;
 }
-
+*/
+extern void packet_free(void *buf);
 void RtpQueue::clear() {
-    for (int n=0; n < kRtpQueueSize; n++) {
-        items[n]->used = false;
+    uint16_t seqNr;
+    int size;
+    void *buf;
+    while (sizeOfQueue() > 0) {
+        bool isMark;
+        pop(&buf, size, seqNr, isMark);
+        packet_free(buf);
     }
-    head = -1;
-    tail = 0;
-    nItems = 0;
-    bytesInQueue_ = 0;
-    sizeOfQueue_ = 0;
-    sizeOfNextRtp_ = -1;
 }

@@ -92,9 +92,9 @@ RtpQueue *rtpQueue = 0;
 
 // We don't bother about SSRC in this implementation, it is only one stream
 
-char *DECODER_IP = "192.168.0.21";
+const char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
-char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
+const char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
 
 int SIERRA_PYTHON_PORT = 35000;
 
@@ -103,12 +103,9 @@ struct sockaddr_in incoming_rtcp_addr;
 struct sockaddr_in dummy_rtcp_addr;
 struct sockaddr_in sierra_python_addr;
 
-unsigned char buf_rtp[BUFSIZE];     /* receive buffer RTP packets */
-
 unsigned char buf_rtcp[BUFSIZE];     /* receive buffer RTCP packets*/
 
 unsigned char buf_sierra[BUFSIZE];     /* receive buffer RTCP packets*/
-
 
 socklen_t addrlen_outgoing_rtp;
 socklen_t addrlen_dummy_rtcp;
@@ -141,6 +138,11 @@ long getTimeInUs(){
   return us;
 }
 */
+
+void packet_free(void *buf) {
+    free(buf);
+}
+
 uint32_t getTimeInNtp() {
 	struct timeval tp;
 	gettimeofday(&tp, NULL);
@@ -200,6 +202,7 @@ void sendPacket(void* buf, int size) {
 void *transmitRtpThread(void *arg) {
 	int size;
 	uint16_t seqNr;
+    bool isMark;
 	char buf[2000];
 	uint32_t time_ntp = getTimeInNtp();
 	int sleepTime_us = 10;
@@ -239,13 +242,16 @@ void *transmitRtpThread(void *arg) {
 				if (retVal > 0.0f)
 					accumulatedPaceTime += retVal;
 				if (retVal != -1.0) {
+                    void *buf;
 					pthread_mutex_lock(&lock_rtp_queue);
-					rtpQueue->pop(buf, size, seqNr);
+					rtpQueue->pop(&buf, size, seqNr, isMark);
 					sendPacket(buf, size);
 					pthread_mutex_unlock(&lock_rtp_queue);
+                    packet_free(buf);
+                    buf = NULL;
 					pthread_mutex_lock(&lock_scream);
 					time_ntp = getTimeInNtp();
-					retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, (buf[1] & 0x80) != 0);
+					retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, isMark);
 					pthread_mutex_unlock(&lock_scream);
 				}
 
@@ -395,18 +401,25 @@ void *createRtpThread(void *arg) {
 
 			bytes = std::max(0, bytes - pl_size);
 			unsigned char pt = PT;
+            bool isMark;
 			if (bytes == 0) {
 				// Last RTP packet, set marker bit
 				pt |= 0x80;
-			}
+                isMark = true;
+			} else {
+                isMark = false;
+            }
+            uint8_t *buf_rtp = (uint8_t *)malloc(BUFSIZE);
 			writeRtp(buf_rtp, seqNr, ts, pt);
 
 			if (pushTraffic) {
 				sendPacket(buf_rtp, recvlen);
+                packet_free(buf_rtp);
+                buf_rtp = NULL;
 			}
 			else {
 				pthread_mutex_lock(&lock_rtp_queue);
-				rtpQueue->push(buf_rtp, recvlen, seqNr, (time_ntp) / 65536.0f);
+				rtpQueue->push(buf_rtp, recvlen, seqNr, isMark, (time_ntp) / 65536.0f);
 				pthread_mutex_unlock(&lock_rtp_queue);
 
 				pthread_mutex_lock(&lock_scream);
