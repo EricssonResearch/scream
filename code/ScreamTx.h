@@ -287,7 +287,7 @@ extern "C" {
 		/*
 		* Get the list of log items
 		*/
-		char *getDetailedLogItemList() {
+		const char *getDetailedLogItemList() {
 			return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
 		}
 
@@ -323,7 +323,7 @@ extern "C" {
 		/*
 		  * Return true if loss event has occured for the given ssrc
 		  */
-		bool ScreamTx::isLossEpoch(uint32_t ssrc);
+		bool isLossEpoch(uint32_t ssrc);
 
 	private:
 		/*

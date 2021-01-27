@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+const char *log_tag = "scream_lib";
+
 // === Some good to have features, SCReAM works also
 //     with these disabled
 // Fast start can resume if little or no congestion detected
@@ -255,7 +257,8 @@ void ScreamTx::Statistics::getSummary(float time, char s[]) {
 	if (sumRateTx > 100000.0f) {
 		lossRateLong = sumRateLost / sumRateTx * 100.0f;
 	}
-	sprintf(s, "%5.1f  Transmit rate = %5.0fkbps, PLR = %5.2f%%(%5.2f%%), RTT = %5.3fs, Queue delay = %5.3fs",
+	sprintf(s, "%s summary %5.1f  Transmit rate = %5.0fkbps, PLR = %5.2f%%(%5.2f%%), RTT = %5.3fs, Queue delay = %5.3fs",
+        log_tag,
 		time,
 		avgRateTx / 1000.0f,
 		lossRate,
