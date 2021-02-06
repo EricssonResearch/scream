@@ -56,6 +56,7 @@ bool sierraLog;
 float scaleFactor = 0.9f;
 float delayTarget = 0.06f;
 float maxRtpQueueDelayArg = 0.2f;
+bool forceidr = false;
 bool printSummary = true;
 
 ScreamTx *screamTx = 0;
@@ -232,6 +233,7 @@ int tx_plugin_main(int argc, char* argv[])
     cerr << "     -dscale value         scale factor in case of increased delay (default 10.0) " << endl;
     cerr << "     -delaytarget value    set a queue delay target (default = 0.06s) " << endl;
     cerr << "     -paceheadroom value   set a packet pacing headroom (default = 1.25s) " << endl;
+    cerr << "     -forceidr             enable Force-IDR in case of loss"  << endl;
     cerr << "     -clockdrift           enable clock drift compensation for the case that the"  << endl;
     cerr << "                            receiver end clock is faster" << endl;
     cerr << "     -verbose value        print a more extensive log" << endl;
@@ -371,6 +373,11 @@ int tx_plugin_main(int argc, char* argv[])
     }
     if (strstr(argv[ix],"-clockdrift")) {
       enableClockDriftCompensation = true;
+      ix++;
+			continue;
+    }
+    if (strstr(argv[ix],"-forceidr")) {
+      forceidr = true;
       ix++;
 			continue;
     }
@@ -591,9 +598,8 @@ void ScreamSenderGetTargetRate (uint32_t *rate_p, uint32_t *force_idr_p) {
     }
     *rate_p = (uint32_t)(rate * rateMultiply);
     // cerr << " rate " << *rate_p << endl;
-    if (n==0) {
+    if (forceidr) {
         /*
-         * Special for front camera
          * Force-IDR in case of loss
          */
         struct timeval tp;
