@@ -988,8 +988,8 @@ void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
 
 void ScreamTx::getLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
-	sprintf(s, "%4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
-		queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
+	sprintf(s, "%s Log %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
+        log_tag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
@@ -1008,8 +1008,8 @@ void ScreamTx::getLog(float time, char *s) {
 
 void ScreamTx::getShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
-	sprintf(s, "%4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
-		queueDelay, sRtt,
+	sprintf(s, "%s ShortLog %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
+        log_tag, queueDelay, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
@@ -1027,8 +1027,8 @@ void ScreamTx::getShortLog(float time, char *s) {
 
 void ScreamTx::getVeryShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
-	sprintf(s, "%4.3f, %4.3f, %6d, %6d, %6.0f, ",
-		queueDelay, sRtt,
+	sprintf(s, "%s VeryShortLog %4.3f, %4.3f, %6d, %6d, %6.0f, ",
+        log_tag, queueDelay, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
