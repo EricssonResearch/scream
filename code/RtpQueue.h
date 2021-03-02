@@ -8,7 +8,7 @@
 
 class RtpQueueIface {
 public:
-    virtual void clear() = 0;
+    virtual int clear() = 0;
     virtual int sizeOfNextRtp() = 0;
     virtual int seqNrOfNextRtp() = 0;
     virtual int bytesInQueue() = 0; // Number of bytes in queue
@@ -41,7 +41,7 @@ public:
     int sizeOfQueue();  // Number of items in queue
     float getDelay(float currTs);
     bool sendPacket(void *rtpPacket, int &size, unsigned short &seqNr);
-    void clear();
+    int clear();
     int getSizeOfLastFrame() {return sizeOfLastFrame;};
     void setSizeOfLastFrame(int sz) {sizeOfLastFrame=sz;};
     void computeSizeOfNextRtp();

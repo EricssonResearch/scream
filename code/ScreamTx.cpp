@@ -346,10 +346,15 @@ void ScreamTx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp) {
 		* get a good estimate for the min queue delay.
 		* This funtion is executed very seldom so it should not affect overall experience too much
 		*/
-		stream->rtpQueue->clear();
+		int cur_cleared = stream->rtpQueue->clear();
+        if (cur_cleared) {
+            cerr << log_tag << " refresh " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  << " packetes discarded for SSRC " << ssrc << endl;
+            stream->cleared += cur_cleared;
+        }
 	}
 	else {
 		stream->bytesRtp += bytesRtp;
+		stream->packetsRtp++;
 		/*
 		* Need to update MSS here, otherwise it will be nearly impossible to
 		* transmit video packets, this because of the small initial MSS
@@ -779,7 +784,8 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	if (isUseExtraDetailedLog || isLast || isMark) {
 
 		if (fp_log && completeLogItem) {
-			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d", cwnd, bytesInFlight, inFastStart, rateTransmitted, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe, isMark);
+			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d",
+                    cwnd, bytesInFlight, inFastStart, rateTransmitted, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe, isMark);
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
 			}
@@ -959,8 +965,9 @@ void ScreamTx::detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint
 					lossEvent = true;
 				}
 				stream->bytesLost += tmp->size;
+				stream->packetLost++;
 				tmp->isUsed = false;
-				cerr << " LOSS detected by reorder timer SSRC=" << stream->ssrc << " SN=" << tmp->seqNr << endl;
+				cerr << log_tag << " LOSS detected by reorder timer SSRC=" << stream->ssrc << " SN=" << tmp->seqNr << endl;
 				stream->repairLoss = true;
 			}
 			else if (tmp->isAcked) {
@@ -986,9 +993,14 @@ void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
 	stream->targetPriorityInv = 1.0f / priority;
 }
 
+void ScreamTx::getLogHeader(char *s) {
+	sprintf(s,
+            "LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,hiSeqAck,packetetsRtpCleared,packetsLost");
+}
+
 void ScreamTx::getLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
-	sprintf(s, "%s Log %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
+	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
         log_tag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
 	bytesInFlightLog = bytesInFlight;
@@ -996,12 +1008,14 @@ void ScreamTx::getLog(float time, char *s) {
 	for (int n = 0; n < nStreams; n++) {
 		Stream *tmp = streams[n];
 		char s2[200];
-		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f, %5d, ",
+		sprintf(s2, "%4.3f, %6.0f, %6.0f, %lu, %6.0f, %6.0f, %5.0f, %5.0f, %5d, %lu,%lu",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
+            tmp->packetsRtp,
 			tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
 			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f,
-			tmp->hiSeqAck);
+            tmp->hiSeqAck,
+            tmp->cleared, tmp->packetLost);
 		strcat(s, s2);
 	}
 }
@@ -1744,10 +1758,13 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	lastBitrateAdjustT_ntp = 0;
 	lastTargetBitrateIUpdateT_ntp = 0;
 	bytesRtp = 0;
+	packetsRtp = 0;
 	rateRtp = 0.0f;
 	timeTxAck_ntp = 0;
 	lastTransmitT_ntp = 0;
 	numberOfUpdateRate = 0;
+    cleared = 0;
+    packetLost = 0;
 	for (int n = 0; n < kRateUpDateSize; n++) {
 		rateRtpHist[n] = 0.0f;
 		rateAckedHist[n] = 0.0f;
@@ -1953,9 +1970,9 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			* Function is however disabled initially as there is no reliable estimate of the
 			* throughput in the initial phase.
 			*/
-			rtpQueue->clear();
-			cerr << time_ntp / 65536.0f << " RTP queue discarded for SSRC " << ssrc << endl;
-
+			int cur_cleared = rtpQueue->clear();
+			cerr << log_tag << " too large 1 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  << " packetes discarded for SSRC " << ssrc << endl;
+            cleared += cur_cleared;
 			rtpQueueDiscard = true;
 			lossEpoch = true;
 
@@ -2021,9 +2038,9 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			* Function is however disabled initially as there is no reliable estimate of the
 			* throughput in the initial phase.
 			*/
-			rtpQueue->clear();
-			cerr << time_ntp / 65536.0f << " RTP queue discarded for SSRC " << ssrc << endl;
-
+			int cur_cleared = rtpQueue->clear();
+            cerr << log_tag << " too large 2 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  << " packetes discarded for SSRC " << ssrc << endl;
+            cleared += cur_cleared;
 			rtpQueueDiscard = true;
 			lossEpoch = true;
 			lastRtpQueueDiscardT_ntp = time_ntp;

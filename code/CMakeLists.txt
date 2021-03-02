@@ -17,6 +17,7 @@ ScreamRx.cpp
 scream_receiver.cpp
 )
 
+set(CMAKE_BUILD_TYPE Debug)
 
 INCLUDE_DIRECTORIES(
 ${screamIncludes}

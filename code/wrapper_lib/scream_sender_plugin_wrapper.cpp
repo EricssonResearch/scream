@@ -9,6 +9,8 @@
 #include <sys/timerfd.h>
 struct itimerval timer;
 
+extern const char *log_tag;
+
 typedef void (* ScreamSenderPushCallBack)(uint8_t *, uint8_t *, uint8_t);
  ScreamSenderPushCallBack cb;
 uint8_t *cb_data;
@@ -81,6 +83,7 @@ float randRate = 0.0f;
 
 double t0=0;
 
+uint32_t encoder_rate = 0;
 uint32_t getTimeInNtp(){
   struct timeval tp;
   gettimeofday(&tp, NULL);
@@ -434,7 +437,7 @@ int tx_plugin_main(int argc, char* argv[])
            if (sierraLog)
              cout << s << endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << endl << endl;
            else
-             cout << s << endl;
+               cout << s << " encoder_rate " << encoder_rate << endl;
          }
          lastLogT_ntp = time_ntp;
        }
@@ -446,10 +449,14 @@ int tx_plugin_main(int argc, char* argv[])
            if (verbose == 1) {
                screamTx->getVeryShortLog(time_s, s1);
            } else {
+               screamTx->getLogHeader(s1);
+               cout << s1 << endl;
+               screamTx->getLog(time_s, s1);
+               sprintf(s,"%8.3f, %s %12u,", time_s, s1, encoder_rate);
+               cout << s << endl;
                screamTx->getShortLog(time_s, s1);
            }
-           sprintf(s,"%8.3f, %s ", time_s, s1);
-
+           sprintf(s,"%8.3f, %s %12u,", time_s, s1, encoder_rate);
            cout << s << endl;
            /*
             * Send statistics to receiver this can be used to
@@ -532,6 +539,7 @@ ScreamSenderPluginInit (const char *arg_string, uint8_t *cb_data_arg,  ScreamSen
     pthread_create(&scream_sender_plugin_init_thread, NULL, ScreamSenderPluginInitThread, s);
 }
 
+uint64_t rtpqueue_full = 0;
 void ScreamSenderPush (uint8_t *buf_rtp, uint32_t recvlen, uint16_t seq,
                        uint8_t payload_type, uint32_t timestamp, uint32_t ssrc, uint8_t marker)
 {
@@ -541,7 +549,9 @@ void ScreamSenderPush (uint8_t *buf_rtp, uint32_t recvlen, uint16_t seq,
     rc = rtpQueue->push(buf_rtp, recvlen, seq, (marker != 0), (ntp)/65536.0f);
     pthread_mutex_unlock(&lock_rtp_queue);
     if (!rc) {
+        rtpqueue_full++;
         cb(cb_data, (uint8_t *)buf_rtp, 0);
+        cerr << log_tag << " RtpQueue is full " << endl;
     }
     if (rc) {
         pthread_mutex_lock(&lock_scream);
@@ -597,6 +607,9 @@ void ScreamSenderGetTargetRate (uint32_t *rate_p, uint32_t *force_idr_p) {
         cerr << " videoControlThread: rate " << rate_32 << endl;
     }
     *rate_p = (uint32_t)(rate * rateMultiply);
+    if (*rate_p)  {
+        encoder_rate = *rate_p;
+    }
     // cerr << " rate " << *rate_p << endl;
     if (forceidr) {
         /*
@@ -622,6 +635,25 @@ void ScreamSenderGetTargetRate (uint32_t *rate_p, uint32_t *force_idr_p) {
     }
 }
 
+void ScreamSenderStats(char     *s,
+                       uint32_t *len)
+{
+    char buffer[50];
+    uint32_t time_ntp = getTimeInNtp();
+    float time_s = time_ntp/65536.0f;
+    screamTx->getLog(time_s, s);
+    snprintf(buffer, 50, ",%lu", rtpqueue_full);
+    strcat(s, buffer);
+    *len = strlen(s);
+}
+void ScreamSenderStatsHeader(char     *s,
+                             uint32_t *len)
+{
+    const char *extra = ",rtpqueue_full";
+    screamTx->getLogHeader(s);
+    strcat(s, extra);
+    *len = strlen(s);
+}
 #ifdef __cplusplus
 }
 #endif

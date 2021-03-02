@@ -113,13 +113,16 @@ bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
 }
 */
 extern void packet_free(void *buf);
-void RtpQueue::clear() {
+int RtpQueue::clear() {
     uint16_t seqNr;
+    int freed = 0;
     int size;
     void *buf;
     while (sizeOfQueue() > 0) {
         bool isMark;
         pop(&buf, size, seqNr, isMark);
         packet_free(buf);
+        freed++;
     }
+    return (freed);
 }

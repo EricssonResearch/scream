@@ -251,6 +251,11 @@ extern "C" {
 		*/
 		void getLog(float time, char *s);
 
+        /*
+		* Get verbose log header
+		*/
+		void getLogHeader(char *s);
+
 		/*
 		* Get verbose log information
 		*/
@@ -418,6 +423,7 @@ extern "C" {
 			int bytesTransmitted;   // Number of bytes transmitted
 			int bytesAcked;         // Number of ACKed bytes
 			int bytesLost;          // Number of lost bytes
+			uint64_t  packetLost;   // Number of lost packets
 			int bytesCe;          // Number of lost bytes
 			float rateTransmitted;  // Transmitted rate
 			float rateAcked;        // ACKed rate
@@ -441,6 +447,7 @@ extern "C" {
 			uint32_t lastTransmitT_ntp;
 
 			int bytesRtp;           // Number of RTP bytes from media coder
+            uint64_t packetsRtp;
 			float rateRtp;          // Media bitrate
 			float rateRtpHist[kRateUpDateSize];
 			float rateAckedHist[kRateUpDateSize];
@@ -465,6 +472,7 @@ extern "C" {
 			Transmitted txPackets[kMaxTxPackets];
 			int txPacketsPtr;
 			bool lossEpoch;
+            uint64_t cleared;
 		};
 
 		/*
