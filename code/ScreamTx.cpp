@@ -995,7 +995,7 @@ void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
 
 void ScreamTx::getLogHeader(char *s) {
 	sprintf(s,
-            "LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,hiSeqAck,packetetsRtpCleared,packetsLost");
+            "LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,hiSeqAck,packetetsRtpCleared,packetsLost");
 }
 
 void ScreamTx::getLog(float time, char *s) {
@@ -1008,8 +1008,10 @@ void ScreamTx::getLog(float time, char *s) {
 	for (int n = 0; n < nStreams; n++) {
 		Stream *tmp = streams[n];
 		char s2[200];
-		sprintf(s2, "%4.3f, %6.0f, %6.0f, %lu, %6.0f, %6.0f, %5.0f, %5.0f, %5d, %lu,%lu",
+		sprintf(s2, "%4.3f, %d,%d,%6.0f, %6.0f, %lu, %6.0f, %6.0f, %5.0f, %5.0f, %5d, %lu,%lu",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
+            tmp->rtpQueue->bytesInQueue(),
+            tmp->rtpQueue->sizeOfQueue(),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
             tmp->packetsRtp,
 			tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
