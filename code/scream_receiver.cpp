@@ -135,20 +135,29 @@ int main(int argc, char* argv[])
 	}
 
 	int ix = 1;
-	if (strstr(argv[ix], "-ackdiff")) {
+
+	if (argc > (ix + 1) && strstr(argv[ix], "-ackdiff")) {
 		ackDiff = atoi(argv[ix + 1]);
 		ix += 2;
 	}
-	if (strstr(argv[ix], "-nreported")) {
+
+	if (argc > (ix + 1) && strstr(argv[ix], "-nreported")) {
 		nReportedRtpPackets = atoi(argv[ix + 1]);
 		ix += 2;
 	}
-	if (strstr(argv[ix], "-if")) {
+
+	if (argc > (ix + 1) && strstr(argv[ix], "-if")) {
 		ifname = argv[ix + 1];
 		ix += 2;
 	}
-	SENDER_IP = argv[ix];
-	INCOMING_RTP_PORT = atoi(argv[ix + 1]);
+
+  if (argc > (ix + 1)) {
+	  SENDER_IP = argv[ix];
+	  INCOMING_RTP_PORT = atoi(argv[ix + 1]);
+  } else {
+    cerr << "Insufficient parameters." << endl;
+    exit(-1);
+  }
 
 
 	struct timeval tp;
