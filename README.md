@@ -55,7 +55,7 @@ The two videos below show a simple test with a simple 3Mbps bottleneck (CoDel AQ
 
 [With ECN](https://www.youtube.com/watch?v=qIe0ubw9jPw "With ECN") 
 
-The green areas that uccur due to packet loss is an artifact in the conversion of the RTP dump.
+The green areas that occur due to packet loss is an artifact in the conversion of the RTP dump.
 ## Real life test
 A real life test of SCReAM is performed with the following setup in a car:
 
@@ -154,4 +154,4 @@ cmake .
 make
 ```
 
-You need git, cmake, make and g++ installed  
+You need git, cmake, make and g++ installed

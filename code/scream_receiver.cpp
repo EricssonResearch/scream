@@ -29,12 +29,12 @@ ScreamRx *screamRx = 0;
 
 //int fd_local_rtp;
 
-char* SENDER_IP = "192.168.0.20";
+string SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
 struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr, sender_rtcp_addr;
 struct sockaddr_in local_rtp_addr;
 
-char* LOCAL_IP = "127.0.0.1";
+string LOCAL_IP = "127.0.0.1";
 int LOCAL_PORT = 30124;
 
 int ackDiff = -1;
@@ -162,12 +162,12 @@ int main(int argc, char* argv[])
 	incoming_rtp_addr.sin_port = htons(INCOMING_RTP_PORT);
 
 	outgoing_rtcp_addr.sin_family = AF_INET;
-	inet_aton(SENDER_IP, (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
+	inet_aton(SENDER_IP.c_str(), (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
 	outgoing_rtcp_addr.sin_port = htons(INCOMING_RTP_PORT);
 
 
 	local_rtp_addr.sin_family = AF_INET;
-	inet_aton(LOCAL_IP, (in_addr*)&local_rtp_addr.sin_addr.s_addr);
+	inet_aton(LOCAL_IP.c_str(), (in_addr*)&local_rtp_addr.sin_addr.s_addr);
 	local_rtp_addr.sin_port = htons(LOCAL_PORT);
 
 	if ((fd_incoming_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
