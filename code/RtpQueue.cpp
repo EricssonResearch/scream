@@ -102,16 +102,16 @@ float RtpQueue::getDelay(float currTs) {
         return currTs-items[tail]->ts;
     }
 }
-/*
+
 bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
     if (sizeOfQueue() > 0) {
         bool isMark;
-        pop(rtpPacket, size, seqNr, isMark);
+        pop(&rtpPacket, size, seqNr, isMark);
         return true;
     }
     return false;
 }
-*/
+
 extern void packet_free(void *buf);
 int RtpQueue::clear() {
     uint16_t seqNr;
