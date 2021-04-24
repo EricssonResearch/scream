@@ -12,7 +12,8 @@ SET(HEADERS
 SET(SRCS
 ../RtpQueue.cpp
 ../ScreamTx.cpp
-scream_sender_plugin_wrapper.cpp
+screamtxbw_plugin_wrapper.cpp
+screamtx_plugin_wrapper.cpp
 )
 
 set(CMAKE_BUILD_TYPE Debug)
