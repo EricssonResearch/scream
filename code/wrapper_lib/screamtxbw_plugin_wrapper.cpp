@@ -225,7 +225,11 @@ int txbw_plugin_main(int argc, char* argv[])
   }
   int ix = 1;
   /* First find options */
-  while ((ix < argc) && strstr(argv[ix],"-")) {
+  while (ix < argc) {
+           if (!strstr(argv[ix],"-")) {
+               cerr << "wrong arg " << argv[ix] << " index " <<  ix  << endl;
+               exit(0);
+           }
     		if (strstr(argv[ix], "-time")) {
 			runTime = atof(argv[ix + 1]);
 			ix += 2;
@@ -290,8 +294,8 @@ int txbw_plugin_main(int argc, char* argv[])
 			ix += 2;
 			continue;
 		}
-    cerr << "unexpected arg " << argv[ix] << endl;
-    exit(0);
+        cerr << "unexpected arg " << argv[ix] << endl;
+        exit(0);
   }
 
   {

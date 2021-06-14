@@ -255,7 +255,11 @@ int tx_plugin_main(int argc, char* argv[])
   int verbose = 0;
   char *logFile = 0;
   /* First find options */
-  while ((ix < argc) && strstr(argv[ix],"-")) {
+  while (ix < argc) {
+      if (!strstr(argv[ix],"-")) {
+          cerr << "wrong arg " << argv[ix] << " index " <<  ix  << endl;
+        exit(0);
+      }
     if (strstr(argv[ix],"-ect")) {
       ect = atoi(argv[ix+1]);
       ix+=2;
