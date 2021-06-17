@@ -130,6 +130,7 @@ extern "C" {
 		*  where 1.0 denotes the highest priority.
 		* It is recommended that at least one stream has prioritity 1.0.
 		* Bitrates are specified in bps
+		* isAdaptiveTargetRateScale compensates for deviations from target bitrates
 		* See constant definitions above for an explanation of other default parameters
 		*/
 		void registerNewStream(RtpQueueIface *rtpQueue,
@@ -145,7 +146,7 @@ extern "C" {
 			float queueDelayGuard = kQueueDelayGuard,
 			float lossEventRateScale = kLossEventRateScale,
 			float ecnCeEventRateScale = kEcnCeEventRateScale,
-			bool isAdaptiveTargetRateScale = false);
+			bool isAdaptiveTargetRateScale = true);
 
 		/*
 		 * Updates the min and max bitrates for an existing stream
