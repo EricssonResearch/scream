@@ -598,6 +598,9 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 	return paceInterval;
 }
 
+extern uint32_t getTimeInNtp();
+static uint32_t    unused;
+static uint32_t time_ntp_prev = 0;
 void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	unsigned char* buf,
 	int size) {
@@ -671,9 +674,13 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			*/
 			return;
 		}
-
+        uint32_t size_before = stream->rtpQueue->sizeOfQueue();
 		uint16_t N = end_seq - begin_seq;
 
+        uint16_t nRx = 0;
+        uint16_t first = 0;
+        uint16_t last = 0;
+        unused = 0;
 		for (int n = 0; n <= N; n++) {
 			uint16_t sn = begin_seq + n;
 			uint16_t tmp_s;
@@ -682,6 +689,11 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			ptr += 2;
 			bool isRx = ((tmp_s & 0x8000) == 0x8000);
 			if (isRx) {
+                if (first == 0) {
+                    first = n;
+                }
+                last = n;
+                nRx++;
 				/*
 				* packet indicated as being received
 				*/
@@ -691,6 +703,18 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 				incomingStandardizedFeedback(time_ntp, streamId, rxTime, sn, ceBits, n == N);
 			}
 		}
+        if (isUseExtraDetailedLog) {
+            time_ntp = getTimeInNtp();
+            float rtpQueueDelay = stream->rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
+            int Last = stream->rtpQueue->seqNrOfLastRtp();
+            int pak_diff = (Last == -1) ? -1 : ((Last >=  stream->hiSeqTx ) ? (Last -  stream->hiSeqTx ) : Last + 0xffff -  stream->hiSeqTx);
+            printf("%s diff %d %6u %u beg_seq %u num_reps %u end_seq %u nRx %u unused %u sQ %d first %u last %u NrNext %d Last %d hiSeqTx %u hiSeqAck %u packetsRtp %lu rtpQueueDelay %f sRtt %f\n",
+                   log_tag, pak_diff,
+                   time_ntp - time_ntp_prev, time_ntp, begin_seq, num_reports, end_seq, nRx, unused, size_before,
+                   first, last, stream->rtpQueue->seqNrOfNextRtp(), Last,
+                   stream->hiSeqTx, stream->hiSeqAck, stream->packetsRtp, rtpQueueDelay, sRtt);
+            time_ntp_prev = time_ntp;
+        }
 		/*
 		* Skip zeropadded two octets if odd number of octets reported for this SSRC
 		*/
@@ -897,7 +921,9 @@ bool ScreamTx::markAcked(uint32_t time_ntp,
 			}
 			stream->timeTxAck_ntp = tmp->timeTx_ntp;
 		}
-	}
+	} else {
+        unused++;
+    }
 	return isCe;
 }
 
@@ -1972,8 +1998,14 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			* Function is however disabled initially as there is no reliable estimate of the
 			* throughput in the initial phase.
 			*/
-			int cur_cleared = rtpQueue->clear();
-			cerr << log_tag << " too large 1 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  << " packetes discarded for SSRC " << ssrc << endl;
+            int seqNrOfNextRtp = rtpQueue->seqNrOfNextRtp();
+            int seqNrOfLastRtp =  rtpQueue->seqNrOfLastRtp();
+            int pak_diff = (seqNrOfLastRtp == -1) ? -1 : ((seqNrOfLastRtp >= hiSeqTx ) ? (seqNrOfLastRtp - hiSeqTx ) : seqNrOfLastRtp + 0xffff - hiSeqTx);
+
+            int cur_cleared = rtpQueue->clear();
+            cerr << log_tag << " rtpQueueDelay " << rtpQueueDelay << " too large 1 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  <<
+                " packetes discarded for SSRC " << ssrc << " hiSeqTx " << hiSeqTx << " hiSeqAckendl " << hiSeqAck <<
+                " seqNrOfNextRtp " << seqNrOfNextRtp <<  " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << endl;
             cleared += cur_cleared;
 			rtpQueueDiscard = true;
 			lossEpoch = true;
@@ -2040,8 +2072,14 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			* Function is however disabled initially as there is no reliable estimate of the
 			* throughput in the initial phase.
 			*/
-			int cur_cleared = rtpQueue->clear();
-            cerr << log_tag << " too large 2 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  << " packetes discarded for SSRC " << ssrc << endl;
+            int seqNrOfNextRtp = rtpQueue->seqNrOfNextRtp();
+            int seqNrOfLastRtp =  rtpQueue->seqNrOfLastRtp();
+            int pak_diff = (seqNrOfLastRtp == -1) ? -1 : ((seqNrOfLastRtp >= hiSeqTx ) ? (seqNrOfLastRtp - hiSeqTx ) : seqNrOfLastRtp + 0xffff - hiSeqTx);
+
+            int cur_cleared = rtpQueue->clear();
+            cerr << log_tag << " rtpQueueDelay " << rtpQueueDelay << " too large 2 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  <<
+                " packetes discarded for SSRC " << ssrc << " hiSeqTx " << hiSeqTx << " hiSeqAckendl " << hiSeqAck <<
+                " seqNrOfNextRtp " << seqNrOfNextRtp <<  " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << endl;
             cleared += cur_cleared;
 			rtpQueueDiscard = true;
 			lossEpoch = true;

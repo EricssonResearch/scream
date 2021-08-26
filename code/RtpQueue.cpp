@@ -87,6 +87,14 @@ int RtpQueue::seqNrOfNextRtp() {
     }
 }
 
+int RtpQueue::seqNrOfLastRtp() {
+    if (!items[head]->used) {
+        return -1;
+    } else {
+        return items[head]->seqNr;
+    }
+}
+
 int RtpQueue::bytesInQueue() {
     return bytesInQueue_;
 }
@@ -121,8 +129,10 @@ int RtpQueue::clear() {
     while (sizeOfQueue() > 0) {
         bool isMark;
         pop(&buf, size, seqNr, isMark);
+        if (buf != NULL) {
+            freed++;
+        }
         packet_free(buf);
-        freed++;
     }
     return (freed);
 }
