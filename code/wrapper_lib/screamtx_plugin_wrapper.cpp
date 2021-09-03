@@ -61,6 +61,7 @@ float maxRtpQueueDelayArg = 0.2f;
 bool forceidr = false;
 bool printSummary = true;
 
+static uint32_t first_ntp = 0;
 ScreamTx *screamTx = 0;
 RtpQueue *rtpQueue = 0;
 
@@ -113,6 +114,7 @@ void *transmitRtpThread(void *arg) {
   int sizeOfQueue;
   struct timeval start, end;
   useconds_t diff = 0;
+  static bool first = false;
   for (;;) {
     if (stopThread) {
       return NULL;
@@ -134,8 +136,16 @@ void *transmitRtpThread(void *arg) {
          time_ntp = getTimeInNtp();
 
          retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
-         if (disablePacing && sizeOfQueue > 0 && retVal > 0.0f)
+
+         /*
+          * The pacing can cause packets to be discarded initially.
+          * Disabling  packet pacing for the first few seconds
+          */
+
+         if ((disablePacing || (time_ntp - first_ntp < 5 * 65536)) // 5 s in Q16))
+             && sizeOfQueue > 0 && retVal > 0.0f) {
             retVal = 0.0f;
+         }
          if (retVal > 0.0f)
             accumulatedPaceTime += retVal;
          if (retVal != -1.0) {
@@ -159,8 +169,8 @@ void *transmitRtpThread(void *arg) {
            retVal != -1.0f &&
            sizeOfQueue > 0);
       if (accumulatedPaceTime > 0) {
-	sleepTime_us = std::min((int)(accumulatedPaceTime*1e6f), minPaceIntervalUs);
-	accumulatedPaceTime = 0.0f;
+          sleepTime_us = std::min((int)(accumulatedPaceTime*1e6f), minPaceIntervalUs);
+          accumulatedPaceTime = 0.0f;
       }
     }
     usleep(sleepTime_us);
@@ -168,7 +178,6 @@ void *transmitRtpThread(void *arg) {
   }
   return NULL;
 }
-
 int setup() {
   /*
   * Set ECN capability for outgoing socket using IP_TOS
@@ -343,6 +352,7 @@ int tx_plugin_main(int argc, char* argv[])
       ix+=2;
 			continue;
     }
+
     if (strstr(argv[ix],"-nosummary")) {
       printSummary = false;
       ix++;
@@ -426,7 +436,7 @@ int tx_plugin_main(int argc, char* argv[])
      cerr << "Scream sender started! "<<endl;
 
      /* Transmit RTP thread */
-     pthread_create(&transmit_rtp_thread,NULL,transmitRtpThread,(void*)"Transmit RTP thread...");
+     // pthread_create(&transmit_rtp_thread,NULL,transmitRtpThread,(void*)"Transmit RTP thread...");
 
      while(!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
        uint32_t time_ntp = getTimeInNtp();
@@ -548,7 +558,14 @@ void ScreamSenderPush (uint8_t *buf_rtp, uint32_t recvlen, uint16_t seq,
                        uint8_t payload_type, uint32_t timestamp, uint32_t ssrc, uint8_t marker)
 {
     bool rc;
+    static bool first = false;
     uint32_t ntp = getTimeInNtp();
+    if (!first) {
+        pthread_create(&transmit_rtp_thread,NULL,transmitRtpThread,(void*)"Transmit RTP thread...");
+        first = true;
+        first_ntp = ntp;
+        printf("%s %u time %u  first %u\n", __FUNCTION__, __LINE__, ntp, seq);
+    }
     pthread_mutex_lock(&lock_rtp_queue);
     rc = rtpQueue->push(buf_rtp, recvlen, seq, (marker != 0), (ntp)/65536.0f);
     pthread_mutex_unlock(&lock_rtp_queue);
