@@ -8,30 +8,30 @@
 
 ```bash
 cd scripts
-build.sh
+./build.sh
 ```
 
 # Environment Variables
 ```bash
 export SENDER_STATS_TIMER=500               # default 1000 ms
-export SENDER_STATS_FILE_NAME='xxx.csv"     # default sender_scream_stats.csv
+export SENDER_STATS_FILE_NAME="xxx.csv"     # default sender_scream_stats.csv
 ```
 
 # Running SCReAM BW test applications
 ```bash
 cd scripts
 # first window
-receiver_bw.sh
+./receiver_bw.sh
 # second window
-sender_bw.sh
+./sender_bw.sh
 ```
 
 # Running remote rendering test applications
 ```bash
 cd scripts
 # first window
-receiver.sh
+./receiver.sh
 # second window
-sender.sh
+./sender.sh
 ```
 
