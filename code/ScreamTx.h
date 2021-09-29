@@ -424,12 +424,13 @@ extern "C" {
 			int bytesTransmitted;   // Number of bytes transmitted
 			int bytesAcked;         // Number of ACKed bytes
 			int bytesLost;          // Number of lost bytes
-			uint64_t  packetLost;   // Number of lost packets
-			int bytesCe;          // Number of lost bytes
+			uint64_t packetLost;    // Number of lost packets
+            uint64_t packetsCe;     // Number of Ce marked packets
+			int bytesCe;            // Number of Ce marked bytes
 			float rateTransmitted;  // Transmitted rate
 			float rateAcked;        // ACKed rate
 			float rateLost;         // Lost packets (bit)rate
-			float rateCe;         // Lost packets (bit)rate
+			float rateCe;           // Ce marked packets (bit)rate
 			uint16_t hiSeqAck;      // Highest sequence number ACKed
 			uint16_t hiSeqTx;       // Highest sequence number transmitted
 			float minBitrate;       // Min bitrate
