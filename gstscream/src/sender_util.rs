@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
+use std::convert::TryInto;
 use crate::gstv::prelude::ClockExt;
 use crate::gstv::prelude::GstBinExt;
 use glib::ObjectExt;
@@ -94,12 +94,17 @@ pub fn run_time_bitrate_set(
     bin: &gst::Pipeline,
     screamtx_name_opt: &Option<String>,
     encoder_name_opt: &Option<String>,
+    ratemultiply_opt: Option<i32>,
 ) {
     if encoder_name_opt.is_none() {
         println!("no encoder_name_opt");
         return;
     }
-    println!("{:?} {:?}", encoder_name_opt, screamtx_name_opt);
+    let ratemultiply:u32 = ratemultiply_opt.unwrap_or(1).try_into().unwrap();
+    println!(
+        "{:?} {:?} {:?}",
+        encoder_name_opt, screamtx_name_opt, ratemultiply_opt
+    );
     let encoder_name = encoder_name_opt.as_ref().unwrap();
     println!("{:?}", encoder_name);
     let video = bin.by_name(encoder_name).expect("Failed to by_name video");
@@ -113,6 +118,7 @@ pub fn run_time_bitrate_set(
                     scream.connect("notify::current-max-bitrate", false,  move |_values| {
                         let rate = scream_cloned.property("current-max-bitrate")
                             .expect("Failed to get bitrate").get::<u32>().expect("bitrate");
+                        let rate = rate * ratemultiply;
                         video_cloned
                             .set_property("bitrate", &rate)
                             .expect("Failed to set bitrate");
@@ -126,7 +132,7 @@ pub fn run_time_bitrate_set(
                         let diff = n.as_secs() - st_prev.as_secs();
                         if diff >= 1 {
                             if rate != rate_prev {
-                                    println!("notif: {}.{:06} rate {:05} rate_prev {:05} time_prev {}.{:06} diff {} count {}",
+                                    println!("notif: {}.{:06} rate {:08} rate_prev {:08} time_prev {}.{:06} diff {} count {}",
                                              n.as_secs(), n.subsec_micros(), rate, rate_prev, st_prev.as_secs(),
                                              st_prev.subsec_micros(), diff, rate_info_prev.count);
                                     rate_info_prev.rate = rate;

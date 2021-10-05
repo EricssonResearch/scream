@@ -527,7 +527,7 @@ impl ObjectImpl for Screamtx {
                 glib::ParamSpec::new_uint(
                     "current-max-bitrate",
                     "Current-max-bitrate",
-                    "Current max bitrate set by scream or by application",
+                    "Current max bitrate in kbit/sec, set by scream or by application",
                     0,
                     u32::MAX,
                     DEFAULT_CURRENT_MAX_BITRATE,

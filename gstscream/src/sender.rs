@@ -1,6 +1,7 @@
 use failure::Error;
 use std::env;
 
+extern crate argparse;
 extern crate failure;
 extern crate gstreamer_video as gstv;
 #[macro_use]
@@ -11,13 +12,13 @@ use crate::gst::glib::Cast;
 use crate::gstv::prelude::ElementExt;
 use crate::gstv::prelude::GstObjectExt;
 
+use argparse::{ArgumentParser, StoreOption};
+
 extern crate gstreamer as gst;
 
 mod sender_util;
 
 fn main() {
-    println!("Hello, world!");
-
     gst::init().expect("Failed to initialize gst_init");
 
     let main_loop = glib::MainLoop::new(None, false);
@@ -25,6 +26,20 @@ fn main() {
 }
 
 pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
+    let mut ratemultiply_opt: Option<i32> = None;
+    {
+        // this block limits scope of borrows by ap.refer() method
+        let mut ap = ArgumentParser::new();
+        ap.set_description("Sender");
+        ap.refer(&mut ratemultiply_opt).add_option(
+            &["-r", "---ratemultiply"],
+            StoreOption,
+            "Set ratemultiply",
+        );
+
+        ap.parse_args_or_exit();
+    }
+
     let pls = env::var("SENDPIPELINE").unwrap();
     println!("Pipeline: {}", pls);
     let pipeline = gst::parse_launch(&pls).unwrap();
@@ -45,6 +60,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
         &pipeline_clone,
         &Some("screamtx".to_string()),
         &Some("video".to_string()),
+        ratemultiply_opt,
     );
     let main_loop_cloned = main_loop.clone();
     let bus = pipeline_clone.bus().unwrap();
