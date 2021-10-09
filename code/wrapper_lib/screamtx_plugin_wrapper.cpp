@@ -451,7 +451,7 @@ int tx_plugin_main(int argc, char* argv[])
            if (sierraLog)
              cout << s << endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << endl << endl;
            else
-               cout << s << " encoder_rate " << encoder_rate << endl;
+               cout << s << " encoder_rate " << encoder_rate << "bps" << endl;
          }
          lastLogT_ntp = time_ntp;
        }

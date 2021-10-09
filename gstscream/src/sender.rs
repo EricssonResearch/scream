@@ -32,7 +32,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
         let mut ap = ArgumentParser::new();
         ap.set_description("Sender");
         ap.refer(&mut ratemultiply_opt).add_option(
-            &["-r", "---ratemultiply"],
+            &["-r", "--ratemultiply"],
             StoreOption,
             "Set ratemultiply",
         );
