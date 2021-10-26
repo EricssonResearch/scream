@@ -598,7 +598,7 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 	return paceInterval;
 }
 
-extern uint32_t getTimeInNtp();
+//extern uint32_t getTimeInNtp();
 static uint32_t    unused;
 static uint32_t time_ntp_prev = 0;
 void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
@@ -704,7 +704,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			}
 		}
         if (isUseExtraDetailedLog) {
-            time_ntp = getTimeInNtp();
+            time_ntp = time_ntp;
             float rtpQueueDelay = stream->rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
             int Last = stream->rtpQueue->seqNrOfLastRtp();
             int pak_diff = (Last == -1) ? -1 : ((Last >=  stream->hiSeqTx ) ? (Last -  stream->hiSeqTx ) : Last + 0xffff -  stream->hiSeqTx);
