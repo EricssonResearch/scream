@@ -1860,7 +1860,7 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 			* consistently lower or higher than the target bitare. This additonal scaling compensates
 			* for this anomaly.
 			*/
-			const float diff = (targetBitrate*targetRateScale) / rateRtp;
+			const float diff = targetBitrate / rateRtp;
 			float alpha = 0.02f;
 			targetRateScale *= (1.0f - alpha);
 			targetRateScale += alpha * diff;
@@ -1984,8 +1984,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				/*
 				 * scale backoff factor with RTT
 				 */
-				float rttScale = 2.0*std::min(1.0f, std::max(0.2f, parent->sRtt / 0.1f));
-				float backOff = std::min(0.25f, rttScale * parent->l4sAlpha / 2.0f);
+				float backOff = parent->l4sAlpha / 2.0f;
 				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - backOff));
 			}
 			else {
