@@ -43,7 +43,9 @@ bool RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr,  bool isMar
     items[head]->used = true;
     bytesInQueue_ += size;
     sizeOfQueue_ += 1;
+#ifndef IGNORE_PACKET
     items[head]->packet = rtpPacket;
+#endif
     computeSizeOfNextRtp();
     return (true);
 }
@@ -55,8 +57,11 @@ bool RtpQueue::pop(void **rtpPacket, int& size, unsigned short& seqNr, bool &isM
         sizeOfNextRtp_ = -1;
     } else {
         size = items[tail]->size;
-        *rtpPacket = items[tail]->packet;
-        seqNr = items[tail]->seqNr;
+
+#ifndef IGNORE_PACKET
+		*rtpPacket = items[tail]->packet;
+#endif
+		seqNr = items[tail]->seqNr;
         isMark = items[tail]->isMark;
         items[tail]->used = false;
         tail++; if (tail == kRtpQueueSize) tail = 0;
@@ -110,8 +115,8 @@ float RtpQueue::getDelay(float currTs) {
         return currTs-items[tail]->ts;
     }
 }
-/*
-bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
+
+bool RtpQueue::sendPacket(void **rtpPacket, int& size, unsigned short& seqNr) {
     if (sizeOfQueue() > 0) {
         bool isMark;
         pop(rtpPacket, size, seqNr, isMark);
@@ -119,8 +124,10 @@ bool RtpQueue::sendPacket(void *rtpPacket, int& size, unsigned short& seqNr) {
     }
     return false;
 }
-*/
+
+#ifndef IGNORE_PACKET
 extern void packet_free(void *buf);
+#endif
 int RtpQueue::clear() {
     uint16_t seqNr;
     int freed = 0;
@@ -132,7 +139,9 @@ int RtpQueue::clear() {
         if (buf != NULL) {
             freed++;
         }
-        packet_free(buf);
-    }
+#ifndef IGNORE_PACKET
+		packet_free(buf);
+#endif
+	}
     return (freed);
 }

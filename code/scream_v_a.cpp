@@ -13,8 +13,8 @@ using namespace std;
 const float Tmax = 100;
 const bool isChRate = true;
 const bool printLog = true;
-const bool ecnCapable = true;
-const bool isL4s = true;
+const bool ecnCapable = false;
+const bool isL4s = false;
 const float FR = 50.0f;
 int swprio = -1;
 #define TRACEFILE "../traces/trace_key.txt"
@@ -153,6 +153,7 @@ int main(int argc, char* argv[])
             /*
             * RTP packet can be transmitted
             */
+			void **rtpPacket = 0;
             switch (ssrc) {
             case 10:
                 rtpQueue[0]->sendPacket(rtpPacket, size, seqNr);

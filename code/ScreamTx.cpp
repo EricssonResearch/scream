@@ -598,7 +598,7 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 	return paceInterval;
 }
 
-extern uint32_t getTimeInNtp();
+//extern uint32_t getTimeInNtp();
 static uint32_t    unused;
 static uint32_t time_ntp_prev = 0;
 void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
@@ -704,7 +704,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			}
 		}
         if (isUseExtraDetailedLog) {
-            time_ntp = getTimeInNtp();
+            time_ntp = time_ntp;
             float rtpQueueDelay = stream->rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
             int Last = stream->rtpQueue->seqNrOfLastRtp();
             int pak_diff = (Last == -1) ? -1 : ((Last >=  stream->hiSeqTx ) ? (Last -  stream->hiSeqTx ) : Last + 0xffff -  stream->hiSeqTx);
@@ -1860,7 +1860,7 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 			* consistently lower or higher than the target bitare. This additonal scaling compensates
 			* for this anomaly.
 			*/
-			const float diff = (targetBitrate*targetRateScale) / rateRtp;
+			const float diff = targetBitrate / rateRtp;
 			float alpha = 0.02f;
 			targetRateScale *= (1.0f - alpha);
 			targetRateScale += alpha * diff;
@@ -1984,8 +1984,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				/*
 				 * scale backoff factor with RTT
 				 */
-				float rttScale = 2.0*std::min(1.0f, std::max(0.2f, parent->sRtt / 0.1f));
-				float backOff = std::min(0.25f, rttScale * parent->l4sAlpha / 2.0f);
+				float backOff = parent->l4sAlpha / 2.0f;
 				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - backOff));
 			}
 			else {

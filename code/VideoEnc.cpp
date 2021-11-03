@@ -49,7 +49,7 @@ int VideoEnc::encode(float time) {
         bytes -= rtpSize;
         rtpSize += kRtpOverHead;
         rtpBytes += rtpSize;
-        rtpQueue->push(rtpPacket, rtpSize, seqNr, time);
+        rtpQueue->push(rtpPacket, rtpSize, seqNr, false, time);
         seqNr++;
     }
     rtpQueue->setSizeOfLastFrame(rtpBytes);
