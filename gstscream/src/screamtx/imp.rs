@@ -626,6 +626,7 @@ impl ObjectImpl for Screamtx {
 }
 
 // Implementation of gst::Element virtual methods
+impl GstObjectImpl for Screamtx {}
 impl ElementImpl for Screamtx {
     // Set the element specific metadata. This information is what
     // is visible from gst-inspect-1.0 and can also be programatically
