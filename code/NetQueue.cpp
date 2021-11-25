@@ -36,7 +36,7 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_, bool isL4s_) {
     lastRateUpdateT = 0;
     pDrop = 0.0f;
     prevRateFrac = 0.0f;
-    l4sTh = std::max(0.005, 5.0 * 1200 * 8 / rate);
+	l4sTh = 0.002;//std::max(0.005, 5.0 * 1200 * 8 / rate);
 	tQueueAvg = 0.0;
 }
 
@@ -46,6 +46,7 @@ void NetQueue::insert(float time,
 					  int size, 
 					  unsigned short seqNr,
                       bool isCe) {
+	int prevHead = head;
 	head++; if (head == NetQueueSize) head = 0;
 	items[head]->used = true;
 	items[head]->packet = rtpPacket;
@@ -56,9 +57,14 @@ void NetQueue::insert(float time,
     items[head]->tQueue = time;
     items[head]->isCe = isCe;
     if (rate > 0) {
-        float delay = sizeOfQueue()*8.0f / rate;
-        items[head]->tRelease += delay;
-    }
+		float delay = size*8.0f / rate;		
+		if (prevHead != -1 && items[prevHead]->used) {
+			items[head]->tRelease = items[prevHead]->tRelease + delay;
+		}
+		else {
+			items[head]->tRelease = time + delay;
+		}
+	}
 	items[head]->tRelease = std::max(items[head]->tRelease, nextTx);
 	nextTx = items[head]->tRelease;
 }

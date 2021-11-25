@@ -89,7 +89,7 @@ extern "C" {
 	static const int kQueueDelayFractionHistSize = 20;
 	static const int kBytesInFlightHistSizeMax = 60;
 	static const int kRateUpDateSize = 8;
-	static const int kTargetBitrateHistSize = 3;
+	static const int kTargetBitrateHistSize = 1;
 	static const int kLossRateHistSize = 10;
 
 	class RtpQueueIface;
@@ -327,9 +327,18 @@ extern "C" {
 		}
 
 		/*
-		  * Return true if loss event has occured for the given ssrc
-		  */
+		 * Return true if loss event has occured for the given ssrc
+		 */
 		bool isLossEpoch(uint32_t ssrc);
+
+		/*
+		 * Set the post congestion delay i.e how fast SCReAM should attempt 
+		 *  to rampup again after congestion, this complements the rampup speed 
+		 *  and does something simlar
+		 */
+		void setPostCongestionDelay(float a) {
+			postCongestionDelay = a;
+		}
 
 	private:
 		/*
@@ -665,6 +674,9 @@ extern "C" {
 		int bytesDeliveredThisRtt;
 		uint32_t lastL4sAlphaUpdateT_ntp;
 		float maxTotalBitrate;
+		float postCongestionScale;
+		float postCongestionDelay;
+		float bytesInFlightRatio;
 
 		/*
 		* Loss event
@@ -678,6 +690,7 @@ extern "C" {
 		*/
 		bool ecnCeEvent;
 		bool isCeThisFeedback;
+
 
 		/*
 		* Fast start
