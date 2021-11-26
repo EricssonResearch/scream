@@ -11,23 +11,23 @@
 
 using namespace std;
 
-const float Tmax = 30;
-const bool isChRate = true;
+const float Tmax = 100;
+const bool isChRate = false;
 const bool printLog = true;
-const bool ecnCapable = true;
-const bool isL4s = true;
+const bool ecnCapable = false;
+const bool isL4s = false;
 const float FR = 50.0f;
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-#define TRACEFILE "../traces/trace_no_key.txt"
+//#define TRACEFILE "../traces/trace_no_key.txt"
 //#define TRACEFILE "../traces/trace_no_key_smooth.txt"
-//#define TRACEFILE "../traces/trace_flat.txt"
+#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 1 = audio, 2 = video, 3 = 1+2, 4 = 
 */
 const int mode = 0x01;
-const double timeBase = 100000.0;
+const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
 {
@@ -43,16 +43,12 @@ int main(int argc, char* argv[])
     NetQueue *netQueueDelay = new NetQueue(0.02f, 0.0f, 0.0f);
     NetQueue *netQueueRate = new NetQueue(0.0f, 20e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
-	//videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
     if (mode & 0x01)
-		screamTx->registerNewStream(rtpQueue[0], 10, 0.7f, 1e6f, 1e6f, 20e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, true);//, 0.7f, 0.8f, false);
-        //screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 20e3f, 200e3f, 200e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 20e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, true);//, 0.7f, 0.8f, false);
     if (mode & 0x02)
-		//screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 2056e3f, 10024e3f, 80192e3f, 10e6f, 0.5f, 0.2f, 0.1f, 0.1f);
-		screamTx->registerNewStream(rtpQueue[1], 11, 0.6f, 1e6f, 1e6f, 15e6f, 10e6f, 0.5f, 0.2f, 0.2f, 0.1f);
-	    //screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
+		screamTx->registerNewStream(rtpQueue[1], 11, 0.9f, 1e6f, 1e6f, 20e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, true);
     if (mode & 0x04)
         screamTx->registerNewStream(rtpQueue[2], 12, 0.2f, 256e3f, 1024e3f, 8192e3f, 1e6f, 0.5f, 0.2f, 0.1f, 0.1f);
 

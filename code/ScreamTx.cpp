@@ -1664,16 +1664,18 @@ void ScreamTx::subtractCredit(uint32_t time_ntp, Stream* servedStream, int trans
 
 /*
 * Adjust (enforce) proper prioritization between active streams
-* at regular intervals. This is a necessary addon to mitigate
-* issues that VBR media brings
+*  at regular intervals. This is a necessary addon to mitigate
+*  issues that VBR media brings
 * The function consists of equal measures or rational thinking and
-* black magic, which means that there is no 100% guarantee that
-* will always work.
+*  black magic, which means that there is no 100% guarantee that
+*  will always work. 
+* Furthermure the function will not ensure perfect 
+*  fairness.
 */
 void ScreamTx::adjustPriorities(uint32_t time_ntp) {
 	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536) { 
 		/*
-		* Skip if only one stream or if adjustment done less than 5s ago
+		* Skip if only one stream or if adjustment done recently
 		*/
 		return;
 	}
@@ -1689,7 +1691,7 @@ void ScreamTx::adjustPriorities(uint32_t time_ntp) {
 			if (streams[n]->isActive) {
 				float fairRate = rateTransmitted * streams[n]->targetPriority / totalPriority;
 				if (streams[n]->rateRtp > fairRate*1.2f) {
-					float scale = 1.0f - 0.1f*queueDelayTrend;
+					float scale = std::max(0.8,1.0f - 0.1f*queueDelayTrend - l4sAlpha * (1.0 - postCongestionScale));
 					streams[n]->targetBitrate = std::max(streams[n]->minBitrate, streams[n]->targetBitrate*scale);
 				}
 			}
@@ -1835,6 +1837,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	initTime_ntp = 0;
 	rtpQueueDiscard = false;
 	lastRtpQueueDiscardT_ntp = 0;
+	lastFullWindowT_ntp = 0;
 	bytesLost = 0;
 	bytesCe = 0;
 	wasRepairLoss = false;
@@ -2042,6 +2045,17 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	else {
 		if (time_ntp - lastBitrateAdjustT_ntp < kRateAdjustInterval_ntp)
 			return;
+		if (parent->bytesInFlightRatio > 0.9 && time_ntp - lastFullWindowT_ntp > 6554) {
+			/*
+			 * Window is still full after a congestion event, this is an indication that
+			 *  the media bitrate is too high with the risk that the RTP queue begins to grow
+			 * Nudge the target bitrate down slightly and allow for some grace time until next reduction
+			 *  as media coders can sometimes be a bit slow in the reaction
+			 */
+			targetBitrate *= 0.95;
+			lastFullWindowT_ntp = time_ntp;
+		}
+
 		/*
 		* A scale factor that is dependent on the inflection point
 		* i.e the last known highest video bitrate

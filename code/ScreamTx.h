@@ -479,6 +479,7 @@ extern "C" {
 			uint32_t lastRtpQueueDiscardT_ntp;
 			bool wasRepairLoss;
 			bool repairLoss;
+			uint32_t lastFullWindowT_ntp;
 
 			Transmitted txPackets[kMaxTxPackets];
 			int txPacketsPtr;
