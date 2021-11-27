@@ -1,6 +1,6 @@
 use glib::prelude::*;
-// use glib::subclass;
 use glib::subclass::prelude::*;
+
 use gst::prelude::*;
 use gst::subclass::prelude::*;
 
@@ -342,7 +342,7 @@ extern "C" {
         marker: u8,
     );
     fn ScreamSenderRtcpPush(s: *const u8, size: u32) -> u8;
-    fn ScreamSenderStats(s: *mut u8, length: *mut u32);
+    fn ScreamSenderStats(s: *mut u8, length: *mut u32, clear: u8);
     fn ScreamSenderStatsHeader(s: *mut u8, length: *mut u32);
     #[allow(improper_ctypes)]
     fn ScreamSenderPluginInit(
@@ -360,13 +360,7 @@ extern "C" {
 impl ObjectSubclass for Screamtx {
     const NAME: &'static str = "RsScreamtx";
     type Type = super::Screamtx;
-    //    type Interfaces = ();
     type ParentType = gst::Element;
-    // type Instance = gst::subclass::ElementInstanceStruct<Self>;
-    //    type Class = subclass::simple::ClassStruct<Self>;
-
-    // This macro provides some boilerplate.
-    // glib::object_subclass!();
 
     // Called when a new instance is to be created. We need to return an instance
     // of our struct here and also get the class struct passed in case it's needed
@@ -518,6 +512,13 @@ impl ObjectImpl for Screamtx {
                     glib::ParamFlags::READWRITE,
                 ),
                 glib::ParamSpec::new_string(
+                    "stats-clear",
+                    "StatsClear",
+                    "screamtx get_property lib stats in csv format and clear counters",
+                    None,
+                    glib::ParamFlags::READWRITE,
+                ),
+                glib::ParamSpec::new_string(
                     "stats-header",
                     "StatsHeader",
                     "screamtx get_property lib stats-header in csv format",
@@ -596,7 +597,20 @@ impl ObjectImpl for Screamtx {
                     let mut dstlen: u32 = 0;
                     let pdst = dst.as_mut_ptr();
 
-                    ScreamSenderStats(pdst, &mut dstlen);
+                    ScreamSenderStats(pdst, &mut dstlen, 0);
+                    dst.set_len(dstlen.try_into().unwrap());
+                    dst
+                };
+                let str1 = String::from_utf8(res).unwrap();
+                str1.to_value()
+            }
+            "stats-clear" => {
+                let res = unsafe {
+                    let mut dst = Vec::with_capacity(500);
+                    let mut dstlen: u32 = 0;
+                    let pdst = dst.as_mut_ptr();
+
+                    ScreamSenderStats(pdst, &mut dstlen, 1);
                     dst.set_len(dstlen.try_into().unwrap());
                     dst
                 };

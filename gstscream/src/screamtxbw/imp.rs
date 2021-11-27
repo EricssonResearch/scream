@@ -1,5 +1,4 @@
 use glib::prelude::*;
-// use glib::subclass;
 use glib::subclass::prelude::*;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
@@ -222,13 +221,7 @@ extern "C" {
 impl ObjectSubclass for Screamtxbw {
     const NAME: &'static str = "RsScreamtxbw";
     type Type = super::Screamtxbw;
-    // type Interfaces = ();
     type ParentType = gst::Element;
-    // type Instance = gst::subclass::ElementInstanceStruct<Self>;
-    // type Class = subclass::simple::ClassStruct<Self>;
-
-    // This macro provides some boilerplate.
-    // glib::object_subclass!();
 
     // Called when a new instance is to be created. We need to return an instance
     // of our struct here and also get the class struct passed in case it's needed

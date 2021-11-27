@@ -465,7 +465,7 @@ int tx_plugin_main(int argc, char* argv[])
            } else {
                screamTx->getLogHeader(s1);
                cout << s1 << endl;
-               screamTx->getLog(time_s, s1);
+               screamTx->getLog(time_s, s1, false);
                sprintf(s,"%8.3f, %s %12u,", time_s, s1, encoder_rate);
                cout << s << endl;
                screamTx->getShortLog(time_s, s1);
@@ -657,15 +657,18 @@ void ScreamSenderGetTargetRate (uint32_t *rate_p, uint32_t *force_idr_p) {
 }
 
 void ScreamSenderStats(char     *s,
-                       uint32_t *len)
+                       uint32_t *len, uint8_t clear)
 {
     char buffer[50];
     uint32_t time_ntp = getTimeInNtp();
     float time_s = time_ntp/65536.0f;
-    screamTx->getLog(time_s, s);
+    screamTx->getLog(time_s, s, clear != 0);
     snprintf(buffer, 50, ",%lu", rtpqueue_full);
     strcat(s, buffer);
     *len = strlen(s);
+    if (clear) {
+        rtpqueue_full = 0;
+    }
 }
 void ScreamSenderStatsHeader(char     *s,
                              uint32_t *len)

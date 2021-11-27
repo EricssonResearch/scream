@@ -1034,7 +1034,7 @@ void ScreamTx::getLogHeader(char *s) {
             "LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe, packetsCe,hiSeqAck,packetetsRtpCleared,packetsLost");
 }
 
-void ScreamTx::getLog(float time, char *s) {
+void ScreamTx::getLog(float time, char *s, bool clear) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
         log_tag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
@@ -1056,7 +1056,14 @@ void ScreamTx::getLog(float time, char *s) {
             tmp->hiSeqAck,
             tmp->cleared, tmp->packetLost);
 		strcat(s, s2);
+        if (clear) {
+            tmp->packetsRtp = 0;
+            tmp->packetsCe = 0;
+            tmp->cleared = 0;
+            tmp->packetLost = 0;
+        }
 	}
+
 }
 
 void ScreamTx::getShortLog(float time, char *s) {

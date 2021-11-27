@@ -250,7 +250,7 @@ extern "C" {
 		/*
 		* Get verbose log information
 		*/
-		void getLog(float time, char *s);
+		void getLog(float time, char *s, bool clear);
 
         /*
 		* Get verbose log header
