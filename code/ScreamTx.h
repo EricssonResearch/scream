@@ -666,6 +666,7 @@ extern "C" {
 		int nAccBytesInFlightMax;
 		float rateTransmitted;
 		float rateAcked;
+		float rateRtp;
 		float queueDelayTrendMem;
 		float maxRate;
 		uint32_t lastCwndUpdateT_ntp;

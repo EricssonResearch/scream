@@ -155,6 +155,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	nAccBytesInFlightMax(0),
 	rateTransmitted(0.0f),
 	rateAcked(0.0f),
+	rateRtp(0.0f),
 	queueDelayTrendMem(0.0f),
 	lastCwndUpdateT_ntp(0),
 	bytesInFlight(0),
@@ -397,7 +398,7 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 	if (time_ntp - lastRateUpdateT_ntp > tmp) {
 		rateTransmitted = 0.0f;
 		rateAcked = 0.0f;
-		float rateRtp = 0.0f;
+		rateRtp = 0.0f;
 		for (int n = 0; n < nStreams; n++) {
 			streams[n]->updateRate(time_ntp);
 			rateTransmitted += streams[n]->rateTransmitted;
@@ -1224,7 +1225,8 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 				*/
 				headRoom = std::max(headRoom,1.5f);
 			}
-			float pacingBitrate = std::max(1.0e5f, headRoom*getTotalTargetBitrate());
+			float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtp);
+			pacingBitrate = std::max(1.0e5f, headRoom*pacingBitrate);
 			if (maxTotalBitrate > 0) {
 				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
 			}
@@ -1892,11 +1894,11 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 			* consistently lower or higher than the target bitare. This additonal scaling compensates
 			* for this anomaly.
 			*/
-			const float diff = targetBitrate / rateRtp;
+			const float diff = targetBitrate * targetRateScale / rateRtp;
 			float alpha = 0.02f;
 			targetRateScale *= (1.0f - alpha);
 			targetRateScale += alpha * diff;
-			targetRateScale = std::min(1.2f, std::max(0.5f, targetRateScale));
+			targetRateScale = std::min(1.1f, std::max(0.8f, targetRateScale));
 		}
 		if (rateLost > 0) {
 			lossEpoch = true;
