@@ -207,6 +207,13 @@ int main(int argc, char* argv[])
 		cerr << "socket set to recvtos" << endl;
 	}
 
+	uint64_t recv_buf_size = 1024*1024*20; //20MByte
+	if (setsockopt(fd_incoming_rtp, SOL_SOCKET, SO_RCVBUF, &recv_buf_size,sizeof(recv_buf_size)) < 0) {
+		cerr << "cannot set SO_RCVBUF on incoming socket" << endl;
+	} else {
+		cerr << "socket SO_RCVBUF set to " << recv_buf_size << endl;
+	}  
+
 	if (bind(fd_incoming_rtp, (struct sockaddr *)&incoming_rtp_addr, sizeof(incoming_rtp_addr)) < 0) {
 		perror("bind incoming_rtp_addr failed");
 		return 0;
