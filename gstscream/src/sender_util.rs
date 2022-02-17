@@ -1,12 +1,12 @@
+use crate::gstv::prelude::ClockExt;
+use crate::gstv::prelude::GstBinExt;
+use glib::ObjectExt;
+use std::convert::TryInto;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::convert::TryInto;
-use crate::gstv::prelude::ClockExt;
-use crate::gstv::prelude::GstBinExt;
-use glib::ObjectExt;
 
 use crate::gstv::prelude::PipelineExt;
 
@@ -92,6 +92,7 @@ lazy_static! {
 
 pub fn run_time_bitrate_set(
     bin: &gst::Pipeline,
+    verbose: bool,
     screamtx_name_opt: &Option<String>,
     encoder_name_opt: &Option<String>,
     ratemultiply_opt: Option<i32>,
@@ -100,7 +101,7 @@ pub fn run_time_bitrate_set(
         println!("no encoder_name_opt");
         return;
     }
-    let ratemultiply:u32 = ratemultiply_opt.unwrap_or(1).try_into().unwrap();
+    let ratemultiply: u32 = ratemultiply_opt.unwrap_or(1).try_into().unwrap();
     println!(
         "{:?} {:?} {:?}",
         encoder_name_opt, screamtx_name_opt, ratemultiply_opt
@@ -132,12 +133,14 @@ pub fn run_time_bitrate_set(
                         let diff = n.as_secs() - st_prev.as_secs();
                         if diff >= 1 {
                             if rate != rate_prev {
+                                if verbose {
                                     println!("notif: {}.{:06} rate {:08} rate_prev {:08} time_prev {}.{:06} diff {} count {}",
                                              n.as_secs(), n.subsec_micros(), rate, rate_prev, st_prev.as_secs(),
                                              st_prev.subsec_micros(), diff, rate_info_prev.count);
-                                    rate_info_prev.rate = rate;
-                                    rate_info_prev.st = n;
-                                    rate_info_prev.count = 0;
+                                }
+                                rate_info_prev.rate = rate;
+                                rate_info_prev.st = n;
+                                rate_info_prev.count = 0;
                             }
                         } else {
                                 rate_info_prev.count += 1;

@@ -352,7 +352,7 @@ impl Stream {
 
         let diff: i32 = seqNr as i32 - self.lastSn as i32;
         if diff != 1 {
-            println!(
+            gst_debug!(CAT,
                 "Packet(s) lost or reordered time_ntp {} : {} was received, previous rcvd is {}, nRecvRtpPackets {}",
                 time_ntp - self. first_recv_ntp, seqNr, self.lastSn, self.nRecvRtpPackets
             );

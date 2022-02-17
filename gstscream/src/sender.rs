@@ -12,7 +12,7 @@ use crate::gst::glib::Cast;
 use crate::gstv::prelude::ElementExt;
 use crate::gstv::prelude::GstObjectExt;
 
-use argparse::{ArgumentParser, StoreOption};
+use argparse::{ArgumentParser, StoreOption, StoreTrue};
 
 extern crate gstreamer as gst;
 
@@ -27,10 +27,13 @@ fn main() {
 
 pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
     let mut ratemultiply_opt: Option<i32> = None;
+    let mut verbose = false;
     {
         // this block limits scope of borrows by ap.refer() method
         let mut ap = ArgumentParser::new();
         ap.set_description("Sender");
+        ap.refer(&mut verbose)
+            .add_option(&["-v", "--verbose"], StoreTrue, "Be verbose");
         ap.refer(&mut ratemultiply_opt).add_option(
             &["-r", "--ratemultiply"],
             StoreOption,
@@ -58,6 +61,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
     sender_util::stats(&pipeline_clone, &Some("screamtx".to_string()));
     sender_util::run_time_bitrate_set(
         &pipeline_clone,
+        verbose,
         &Some("screamtx".to_string()),
         &Some("video".to_string()),
         ratemultiply_opt,
