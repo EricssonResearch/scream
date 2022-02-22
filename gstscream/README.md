@@ -16,6 +16,11 @@ cd scripts
 export SENDER_STATS_TIMER=500               # default 1000 ms
 export SENDER_STATS_FILE_NAME="xxx.csv"     # default sender_scream_stats.csv
 ```
+# Tuning  Linux system 
+```bash
+cd scripts
+sudo ./sysctl.sh 
+```
 
 # Running SCReAM BW test applications
 ```bash
