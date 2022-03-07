@@ -5,7 +5,7 @@
 #  and transits RTCP feedback over the same port
 # The received RTP media is demultiplexed and forwarded on local 
 #  ports 30112, 30114, 31016 and 30118
-# The video decoding assumes Intel HW support, change to applicable 
+# The video decoding assumes an NVIDIA Jetson Nano or Xavier NX platform, change to applicable 
 #  HW decoding, depending on platform
 #
 #                     +----------------------+               +--------------------+
@@ -22,7 +22,7 @@
 
 
 # Start SCReAM receiver side
-./screamRx/bin/scream_receiver $1 $2 $3 | tee ./Data/scream_$4.txt &
+./scream/bin/scream_receiver $1 $2 $3 | tee ./Data/scream_$4.txt &
 
 
 ## /dev/video0
