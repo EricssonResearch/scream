@@ -25,14 +25,14 @@
 export GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0/
 
 # Settings for video encoding and streaming
-RECEIVER_IP=130.240.234.39
+RECEIVER_IP=10.0.0.1 #Change to applicable receiver address
 UDP_PORT_VIDEO=51000 
 NETWORK_QUEUE_DELAY_TARGET=0.06
 MAX_TOTAL_RATE=60000
 
 # Select type of camera here
-CAMERA="e-CAM50_CUNX"
-#CAMERA="Raspberry-Pi-HQ_Camera_12MP"
+#CAMERA="e-CAM50_CUNX"
+CAMERA="Raspberry-Pi-HQ_Camera_12MP"
 
 if [ "$CAMERA" == "e-CAM50_CUNX" ]; then
   echo "Starting e-CAM50_CUNX camera(s)"
@@ -75,7 +75,8 @@ sleep 1
 #  ./screamTx/bin/scream_sender -ect 1
 
 echo "Video streaming started"
-./screamTx/bin/scream_sender -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 25000:25000 -ratemin 1500:1500 -rateinit 1500:1500 -ratescale 0.7:0.7 -cwvmem 60 -maxtotalrate $MAX_TOTAL_RATE 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+./scream/bin/scream_sender -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 25000:25000 -ratemin 1500:1500 -rateinit 1500:1500 -ratescale 0.7:0.7 -cwvmem 60 -maxtotalrate $MAX_TOTAL_RATE 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+
 
 
 

@@ -22,6 +22,12 @@ struct sigaction sa;
 using namespace std;
 
 /*
+ * Stub function 
+ */
+void packet_free(void* a) {//
+}
+
+/*
 * This define is commented if diagnostics is
 * run with a fake video coder
 */
@@ -546,7 +552,8 @@ void *txRtpThread(void *arg) {
                         * Get RTP packet from the selected RTP queue
                         */
                         pthread_mutex_lock(&lock_rtp_queue);
-                        rtpQueue->pop(&buf, size, seqNr);
+                        bool isMark;
+                        rtpQueue->pop(&buf, size, seqNr, isMark);
                         pthread_mutex_unlock(&lock_rtp_queue);
 
                         /*
@@ -633,7 +640,7 @@ void processRtp(unsigned char *buf_rtp, int recvlen, int ix) {
         */
         memcpy(&buf_rtp[8], &in_ssrc_network[ix], 4);
         pthread_mutex_lock(&lock_rtp_queue);
-        rtpQueue[ix]->push(buf_rtp, recvlen, seqNr, (getTimeInNtp())/65536.0f);
+        rtpQueue[ix]->push(buf_rtp, recvlen, seqNr, false, (getTimeInNtp())/65536.0f);
         pthread_mutex_unlock(&lock_rtp_queue);
 
         pthread_mutex_lock(&lock_scream);

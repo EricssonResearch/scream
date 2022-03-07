@@ -1,12 +1,12 @@
 # source files
 SET(SRCS
-RtpQueue.cpp
+../../../../code/RtpQueue.cpp
 ../../../../code/ScreamTx.cpp
 scream_sender.cpp
 )
 
 SET(HEADERS
-RtpQueue.h
+../../../../code/RtpQueue.h
 ../../../../code/ScreamTx.h
 )
 
