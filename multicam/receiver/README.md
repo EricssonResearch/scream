@@ -1,21 +1,9 @@
-This document lists the bill of materials and 
-explains the SCReAM receiver side.
-
-# Bill of materials
-The SCReAM receiver can be build on almost anu Linux platform. Here we limit our selves to the NVIDIA Jetson platforms. If other platforms are desired, then the major impact is on how the gstreamer pipelines are configured<<br>
- 1. NVIDIA Jetson Xavier NX developer kit, this is recommended over the somewhat cheaper Nano as it appears like the video rendering is more stable with the NX
-
-Thats it!, the Xavier NX is installed with the latest available Jetpack version 
-
-
 # Receiver side build instructions
 
 On the receiver side it is assumed that gstreamer is already installed.
 
-============ SCReAM receiver side ===============
-
 The SCReAM receiver side is built with the instructions<br>
-`$cd ./screamRx`<br>
+`$cd ./scream`<br>
 `$cmake .`<br>
 `$make`
 
@@ -23,12 +11,12 @@ The SCReAM receiver side is built with the instructions<br>
 #Startup
 
 In the terminal:<br>
-`$ ./startvideo.sh`<br> 
+`$ ./startvideo.sh`<br>
 
 To ensure proper function it is recommended to start the sender side first, then the receiver side. Or more correctly, the remote end that is connected to a cellular modem should be started first. This can avoid issues with remapped ports.
 
 To stop the programs, in the terminal:<br>
-`$ ./killitall.sh`<br> 
+`$ ./killitall.sh`<br>
 
 #Streaming status
 Streaming status is printed on stdout and also transmitted on UDP port 30200, this can be used for instance to visualize bitrate, RTT, packet loss etc in a graphical user interface
@@ -57,5 +45,3 @@ Where the columns are (listed left to right)<br>
 18. Camera 2 Transmitted bitrate [kbps]<br>
 19. Camera 2 Loss bitrate [kbps]<br>
 20. Camera 2 Congestion marked bitrate (ECN, L4S) bitrate [kbps]<br>
-
-
