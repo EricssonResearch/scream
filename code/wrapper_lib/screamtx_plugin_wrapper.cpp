@@ -532,8 +532,8 @@ ScreamSenderPluginInitThread(void *arg)
 {
     char *s = (char *)arg;
     int n_argc;
-    char *n_argv[21];
-    parseCommandLine(s, &n_argc, n_argv, 20);
+    char *n_argv[25];
+    parseCommandLine(s, &n_argc, n_argv, 24);
     tx_plugin_main(n_argc, n_argv);
     return (NULL);
 }
