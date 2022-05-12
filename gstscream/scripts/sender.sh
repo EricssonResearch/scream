@@ -1,8 +1,13 @@
-export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:../target/debug/
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../../code/wrapper_lib
+SCRIPT_PATH=$(realpath  $0)
+SCRIPT_DIR=$(dirname  $SCRIPT_PATH)
+SCREAMLIB_DIR=$SCRIPT_DIR/../../code/wrapper_lib
+SCREAM_TARGET_DIR=$SCRIPT_DIR/../target/debug/
+export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:$SCREAM_TARGET_DIR
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$SCREAMLIB_DIR
 
 DST_IP=127.0.0.1
 LOCAL_IP=127.0.0.2
+
 PORT=30112
 
 QUEUE="queue max-size-buffers=2 max-size-bytes=0 max-size-time=0"
@@ -20,9 +25,11 @@ fi
 
 SENDPIPELINE1=" videotestsrc is-live=true pattern=snow ! x264enc name=video threads=4 speed-preset=ultrafast tune=fastdecode+zerolatency bitrate=$INIT_ENC_BITRATE ! $QUEUE ! rtph264pay ssrc=1 config-interval=-1 ! $SCREAMTX   udpsink host=$DST_IP port=$PORT sync=false $SCREAMTX_RTCP"
 
-SENDPIPELINE2=" videotestsrc is-live=true ! video/x-raw,format=I420,width=1280,height=720,framerate=25/1 ! x264enc name=video threads=4 speed-preset=ultrafast tune=fastdecode+zerolatency bitrate=$INIT_ENC_BITRATE ! $QUEUE ! rtph264pay ssrc=1 config-interval=-1 ! $SCREAMTX   udpsink host=$DST_IP port=$PORT sync=false $SCREAMTX_RTCP"
+SENDPIPELINE2=" videotestsrc is-live=true pattern=snow ! video/x-raw,format=I420,width=1280,height=720,framerate=50/1 ! x264enc name=video threads=4 speed-preset=ultrafast tune=fastdecode+zerolatency bitrate=$INIT_ENC_BITRATE ! $QUEUE ! rtph264pay ssrc=1 config-interval=-1 ! $SCREAMTX   udpsink host=$DST_IP port=$PORT sync=false $SCREAMTX_RTCP"
 
-export SENDPIPELINE=$SENDPIPELINE1
+export SENDPIPELINE=$SENDPIPELINE2
+
 killall -9 scream_sender
-#../target/debug/scream_sender --verbose
-../target/debug/scream_sender
+$SCREAM_TARGET_DIR/scream_sender --verbose
+#$SCREAM_TARGET_DIR/scream_sender
+

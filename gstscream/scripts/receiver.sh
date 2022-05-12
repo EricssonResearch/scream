@@ -1,5 +1,9 @@
-export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:../target/debug/
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../../code/wrapper_lib
+SCRIPT_PATH=$(realpath  $0)
+SCRIPT_DIR=$(dirname  $SCRIPT_PATH)
+SCREAMLIB_DIR=$SCRIPT_DIR/../../code/wrapper_lib
+SCREAM_TARGET_DIR=$SCRIPT_DIR/../target/debug/
+export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:$SCREAM_TARGET_DIR
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$SCREAMLIB_DIR
 
 DST_IP=127.0.0.2
 LOCAL_IP=127.0.0.1
@@ -20,4 +24,4 @@ export RECVPIPELINE="rtpbin latency=10 name=rtpbin udpsrc port=$PORT address=$LO
 
 #export GST_DEBUG="screamrx:5"
 killall -9 scream_receiver
-../target/debug/scream_receiver
+$SCREAM_TARGET_DIR/scream_receiver
