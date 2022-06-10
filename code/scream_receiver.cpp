@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
 	unsigned char buf[BUFSIZE];
 	unsigned char buf_rtcp[BUFSIZE];
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2021-11-25" << endl;
+		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2022-06-10" << endl;
 		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
 		cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
 		cerr << "     -nreported          set the number of reported RTP packets per ACK " << endl;
@@ -212,7 +212,7 @@ int main(int argc, char* argv[])
 		cerr << "cannot set SO_RCVBUF on incoming socket" << endl;
 	} else {
 		cerr << "socket SO_RCVBUF set to " << recv_buf_size << endl;
-	}  
+	}
 
 	if (bind(fd_incoming_rtp, (struct sockaddr *)&incoming_rtp_addr, sizeof(incoming_rtp_addr)) < 0) {
 		perror("bind incoming_rtp_addr failed");

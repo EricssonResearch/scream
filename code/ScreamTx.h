@@ -146,7 +146,8 @@ extern "C" {
 			float queueDelayGuard = kQueueDelayGuard,
 			float lossEventRateScale = kLossEventRateScale,
 			float ecnCeEventRateScale = kEcnCeEventRateScale,
-			bool isAdaptiveTargetRateScale = true);
+			bool isAdaptiveTargetRateScale = true,
+		  float hysteresis = 0.0);
 
 		/*
 		 * Updates the min and max bitrates for an existing stream
@@ -332,8 +333,8 @@ extern "C" {
 		bool isLossEpoch(uint32_t ssrc);
 
 		/*
-		 * Set the post congestion delay i.e how fast SCReAM should attempt 
-		 *  to rampup again after congestion, this complements the rampup speed 
+		 * Set the post congestion delay i.e how fast SCReAM should attempt
+		 *  to rampup again after congestion, this complements the rampup speed
 		 *  and does something simlar
 		 */
 		void setPostCongestionDelay(float a) {
@@ -376,9 +377,16 @@ extern "C" {
 		};
 
 		/*
-		* One instance is created for each {SSRC,PT} tuple
-		*/
-		class Stream {
+		 * One instance is created for each {SSRC,PT} tuple
+
+		 * Video encoders can become confused by frequent but still small changes in
+		 *  target bitrate. A hysteresis reduces the frequency of small rate changes.
+		 * A hysteresis value = 0.1 inhibits upowards rate changes when they are less
+		 *  than 10% over and 2.5% under the last update value.
+		 * Note, a large hysteresis can cause a deadlock in the rate uopdate,
+		 *  hysteresis = 0.1 or less appears to work however
+		 */
+    class Stream {
 		public:
 			Stream(ScreamTx *parent,
 				RtpQueueIface *rtpQueue,
@@ -394,7 +402,8 @@ extern "C" {
 				float queueDelayGuard,
 				float lossEventRateScale,
 				float ecnCeEventRateScale,
-				bool isAdaptiveTargetRateScale);
+				bool isAdaptiveTargetRateScale,
+			  float hysteresis);
 
 			float getMaxRate();
 
@@ -412,6 +421,11 @@ extern "C" {
 
 			bool isLossEpoch();
 
+			void setRateHysteresis(float aValue) {
+				hysteresis = aValue;
+			}
+
+
 			ScreamTx *parent;
 			RtpQueueIface *rtpQueue;      // RTP Packet queue
 			uint32_t ssrc;            // SSRC of stream
@@ -423,6 +437,7 @@ extern "C" {
 			float lossEventRateScale;
 			float ecnCeEventRateScale;
 			bool isAdaptiveTargetRateScale;
+			float hysteresis;
 
 			int credit;             // Credit that is received if another stream gets
 			//  priority to transmit
@@ -446,6 +461,7 @@ extern "C" {
 			float maxBitrate;       // Max bitrate
 			float targetBitrate;    // Target bitrate
 			float targetBitrateI;   // Target bitrate inflection point
+			float targetBitrateH;   // Target bitrate (with hysteresis)
 			bool wasFastStart;      // Was fast start
 			bool lossEventFlag;     // Was loss event
 			bool ecnCeEventFlag;    // Was ECN mark event

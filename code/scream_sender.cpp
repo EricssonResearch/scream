@@ -66,6 +66,7 @@ bool pushTraffic = false;
 float packetPacingHeadroom = 1.25f;
 float txQueueSizeFactor = 0.1f;
 float queueDelayGuard = 0.05f;
+float hysteresis = 0.0;
 
 int periodicRateDropInterval = 600; // seconds*10
 
@@ -618,8 +619,15 @@ int setup() {
 			fixedRate*1000.0f,
 			fixedRate*1000.0f,
 			fixedRate*1000.0f,
-			1.0e6f, 0.5f,
-			10.0f, 0.0f, 0.0f, scaleFactor, scaleFactor);
+			1.0e6f,
+			0.5f,
+			10.0f,
+			0.0f,
+			0.0f,
+			scaleFactor,
+			scaleFactor,
+			false,
+			hysteresis);
 	}
 	else {
 		screamTx->registerNewStream(rtpQueue,
@@ -628,8 +636,15 @@ int setup() {
 			minRate * 1000,
 			initRate * 1000,
 			maxRate * 1000,
-			rateIncrease * 1000, rateScale,
-			0.2f, txQueueSizeFactor, queueDelayGuard, scaleFactor, scaleFactor);
+			rateIncrease * 1000,
+			rateScale,
+			0.2f,
+			txQueueSizeFactor,
+			queueDelayGuard,
+			scaleFactor,
+			scaleFactor,
+			false,
+			hysteresis);
 	}
 	return 1;
 }
@@ -654,7 +669,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2021-11-25" << endl;
+		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2022-06-10" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;
@@ -701,7 +716,8 @@ int main(int argc, char* argv[]) {
 		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
 		cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
 		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
-		//cerr << "     -sierralog          get logs from python script that logs a sierra modem" << endl;
+		cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
+		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
 		exit(-1);
 	}
 	int ix = 1;
@@ -889,6 +905,15 @@ int main(int argc, char* argv[]) {
 			}
 			continue;
 		}
+		if (strstr(argv[ix], "-hysteresis")) {
+			hysteresis = atof(argv[ix + 1]);
+			ix += 2;
+			if (hysteresis < 0.0f || hysteresis > 0.2f) {
+				cerr << "hysteresis must be in range 0.0...0.2" << endl;
+				exit(0);
+			}
+			continue;
+		}
 		cerr << "unexpected arg " << argv[ix] << endl;
 		exit(0);
 	}
@@ -973,7 +998,7 @@ int main(int argc, char* argv[]) {
 			if (verbose && time_ntp - lastLogTv_ntp > 13107) { // 0.2s in Q16
 				if (isFeedback) {
 					float time_s = time_ntp / 65536.0f;
-					char s[500];
+					char s[3000];
 					char s1[500];
 					screamTx->getVeryShortLog(time_s, s1);
 					if (sierraLog)

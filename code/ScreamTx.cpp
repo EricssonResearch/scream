@@ -292,7 +292,8 @@ void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
 	float queueDelayGuard,
 	float lossEventRateScale,
 	float ecnCeEventRateScale,
-	bool isAdaptiveTargetRateScale) {
+	bool isAdaptiveTargetRateScale,
+  float hysteresis) {
 	Stream *stream = new Stream(this,
 		rtpQueue,
 		ssrc,
@@ -307,7 +308,8 @@ void ScreamTx::registerNewStream(RtpQueueIface *rtpQueue,
 		queueDelayGuard,
 		lossEventRateScale,
 		ecnCeEventRateScale,
-		isAdaptiveTargetRateScale);
+		isAdaptiveTargetRateScale,
+	  hysteresis);
 	streams[nStreams++] = stream;
 }
 
@@ -1359,7 +1361,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 				* feedback may be sparse due to limited RTCP report interval
 				* In addition we put a limit for the cases where feedback becomes
 				* piled up (sometimes happens with e.g LTE)
-				* Congestion window increase is limited for the 1st few seconds after congestion 
+				* Congestion window increase is limited for the 1st few seconds after congestion
 				*/
 				float bytesInFlightMargin = 1.5f;
 				if (bytesInFlight*bytesInFlightMargin + bytesNewlyAcked > cwnd) {
@@ -1432,7 +1434,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	if (queueDelayTrend > 0.2) {
 		lastCongestionDetectedT_ntp = time_ntp;
 	}
-	else if (time_ntp - lastCongestionDetectedT_ntp > 16384 && 
+	else if (time_ntp - lastCongestionDetectedT_ntp > 16384 &&
 		!inFastStart && kEnableConsecutiveFastStart) {
 		/*
 		* The queue delay trend has been low for more than 1.0s, resume fast start
@@ -1603,7 +1605,7 @@ void ScreamTx::determineActiveStreams(uint32_t time_ntp) {
 	float sumPrio = 0.0;
 	bool streamSetInactive = false;
 	for (int n = 0; n < nStreams; n++) {
-		if (time_ntp - streams[n]->lastFrameT_ntp > 65536 && streams[n]->isActive) { 
+		if (time_ntp - streams[n]->lastFrameT_ntp > 65536 && streams[n]->isActive) {
 			streams[n]->isActive = false;
 			surplusBitrate += streams[n]->targetBitrate;
 			streams[n]->targetBitrate = streams[n]->minBitrate;
@@ -1677,12 +1679,12 @@ void ScreamTx::subtractCredit(uint32_t time_ntp, Stream* servedStream, int trans
 *  issues that VBR media brings
 * The function consists of equal measures or rational thinking and
 *  black magic, which means that there is no 100% guarantee that
-*  will always work. 
-* Furthermure the function will not ensure perfect 
+*  will always work.
+* Furthermure the function will not ensure perfect
 *  fairness.
 */
 void ScreamTx::adjustPriorities(uint32_t time_ntp) {
-	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536) { 
+	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536) {
 		/*
 		* Skip if only one stream or if adjustment done recently
 		*/
@@ -1784,7 +1786,8 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	float queueDelayGuard_,
 	float lossEventRateScale_,
 	float ecnCeEventRateScale_,
-	bool isAdaptiveTargetRateScale_) {
+	bool isAdaptiveTargetRateScale_,
+  float hysteresis_) {
 	parent = parent_;
 	rtpQueue = rtpQueue_;
 	ssrc = ssrc_;
@@ -1793,6 +1796,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	minBitrate = minBitrate_;
 	maxBitrate = maxBitrate_;
 	targetBitrate = std::min(maxBitrate, std::max(minBitrate, startBitrate_));
+	targetBitrateH = targetBitrate;
 	rampUpSpeed = rampUpSpeed_;
 	rampUpScale = rampUpScale_;
 	maxRtpQueueDelay = maxRtpQueueDelay_;
@@ -1801,6 +1805,7 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	lossEventRateScale = lossEventRateScale_;
 	ecnCeEventRateScale = ecnCeEventRateScale_;
 	isAdaptiveTargetRateScale = isAdaptiveTargetRateScale_;
+	hysteresis = hysteresis_;
 	targetBitrateHistUpdateT_ntp = 0;
 	targetBitrateI = 1.0f;
 	credit = 0;
@@ -1947,7 +1952,7 @@ float ScreamTx::Stream::getTargetBitrate() {
 		wasRepairLoss = true;
 		return -1.0;
 	}
-	float rate = targetRateScale * targetBitrate;
+	float rate = targetRateScale * targetBitrateH;
 	wasRepairLoss = false;
 	return rate;
 }
@@ -2007,9 +2012,9 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		else if (ecnCeEventFlag) {
 			if (parent->isL4s) {
 				/*
-				 * Compensate for that the cwnd is always a little higher than 'averagely' necessary because of the 
-				 *  kMaxBytesInFlightHeadRoom and that frames are pushed out a bit faster than the target bitrate because of 
-			     *  
+				 * Compensate for that the cwnd is always a little higher than 'averagely' necessary because of the
+				 *  kMaxBytesInFlightHeadRoom and that frames are pushed out a bit faster than the target bitrate because of
+			     *
 				 * In addition scale the bitrate down less if the window is sparsely used, should be quite
 				 *  rare but there is for instance a possibility that the L4S marking lags behind and
 				 *  implements some filtering
@@ -2183,7 +2188,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			*/
 			float increment = br;
 			/*
-  			 * Apply the extra precaution with respect to queue delay 
+  			 * Apply the extra precaution with respect to queue delay
 			 */
 			float scl = queueDelayGuard * parent->getQueueDelayTrend();
 			if (parent->isCompetingFlows())
@@ -2256,6 +2261,13 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	}
 
 	targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate));
+	float diff = (targetBitrate-targetBitrateH)/targetBitrateH;
+	if (diff > hysteresis || diff < -hysteresis/4) {
+		/*
+		* Update bitrate communicated to media encoder if the change is large enough
+		*/
+		targetBitrateH = targetBitrate;
+	}
 }
 
 bool ScreamTx::Stream::isRtpQueueDiscard() {
