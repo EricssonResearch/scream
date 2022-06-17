@@ -47,6 +47,9 @@ bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 float packetPacingHeadroom=1.25f;
+float txQueueSizeFactor = 0.1f;
+float queueDelayGuard = 0.05f;
+float hysteresis = 0.0;
 
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
@@ -198,14 +201,18 @@ int setup() {
   screamTx->registerNewStream(rtpQueue,
                               SSRC,
                               1.0f,
-                              minRate*1000,
-                              initRate*1000,
-                              maxRate*1000,
-                              rateIncrease*1000,
+                              minRate * 1000,
+                              initRate * 1000,
+                              maxRate * 1000,
+                              rateIncrease * 1000,
                               rateScale,
                               maxRtpQueueDelayArg,
-                              0.1f,
-                              0.05f, scaleFactor, scaleFactor);
+                              txQueueSizeFactor,
+                              queueDelayGuard,
+                              scaleFactor,
+                              scaleFactor,
+                              false,
+                              hysteresis);
   return 1;
 }
 
@@ -226,7 +233,7 @@ int tx_plugin_main(int argc, char* argv[])
   */
   if (argc <= 1) {
     cerr << "SCReAM sender. Ericsson AB. Version 2020-12-17" << endl;
-    cerr << "Usage : " << endl << " > scream_bw_test_tx <options>  " << endl;
+    cerr << "Usage : " << endl << " > scream_tx <options>  " << endl;
     cerr << "     -initrate value       set a start bitrate [kbps]" << endl;
     cerr << "                            example -initrate 2000 " << endl;
     cerr << "     -minrate  value       set a min bitrate [kbps], default 1000kbps" << endl;
@@ -245,6 +252,8 @@ int tx_plugin_main(int argc, char* argv[])
     cerr << "     -dscale value         scale factor in case of increased delay (default 10.0) " << endl;
     cerr << "     -delaytarget value    set a queue delay target (default = 0.06s) " << endl;
     cerr << "     -paceheadroom value   set a packet pacing headroom (default = 1.25s) " << endl;
+    cerr << "     -txqueuesizefactor value reaction to increased RTP queue delay (default 0.1) " << endl;
+    cerr << "     -queuedelayguard value   reaction to increased network queue delay (default 0.05)" << endl;
     cerr << "     -forceidr             enable Force-IDR in case of loss"  << endl;
     cerr << "     -clockdrift           enable clock drift compensation for the case that the"  << endl;
     cerr << "                            receiver end clock is faster" << endl;
@@ -255,8 +264,11 @@ int tx_plugin_main(int argc, char* argv[])
     cerr << "     -append               append logfile" << endl;
     cerr << "     -itemlist             add item list in beginning of log file" << endl;
     cerr << "     -detailed             detailed log, per ACKed RTP" << endl;
-		cerr << "     -periodicdropinterval interval [s] between periodic drops in rate (default 60s)" << endl;
-		cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << endl;
+    cerr << "     -periodicdropinterval interval [s] between periodic drops in rate (default 60s)" << endl;
+    cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << endl;
+    cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
+    cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+
     //cerr << "     -sierralog          get logs from python script that logs a sierra modem" << endl;
     exit(-1);
   }
@@ -310,6 +322,16 @@ int tx_plugin_main(int argc, char* argv[])
       packetPacingHeadroom = atof(argv[ix+1]);
       ix+=2;
 			continue;
+    }
+    if (strstr(argv[ix], "-txqueuesizefactor")) {
+        txQueueSizeFactor = atoi(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+    if (strstr(argv[ix], "-queuedelayguard")) {
+        queueDelayGuard = atoi(argv[ix + 1]);
+        ix += 2;
+        continue;
     }
 
     if (strstr(argv[ix],"-nopace")) {
@@ -408,6 +430,16 @@ int tx_plugin_main(int argc, char* argv[])
         }
         continue;
     }
+    if (strstr(argv[ix], "-hysteresis")) {
+        hysteresis = atof(argv[ix + 1]);
+        ix += 2;
+        if (hysteresis < 0.0f || hysteresis > 0.2f) {
+            cerr << "hysteresis must be in range 0.0...0.2" << endl;
+            exit(0);
+        }
+        continue;
+    }
+
     cerr << "unexpected arg " << argv[ix] << endl;
     exit(0);
   }

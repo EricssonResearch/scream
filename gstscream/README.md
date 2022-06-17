@@ -40,3 +40,8 @@ cd scripts
 ./sender.sh
 ```
 
+# Issues
+[Issues with nvenc bitrate changes run time](with https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189 )
+
+[Issues with using tc](https://github.com/EricssonResearch/scream/issues/44#issuecomment-1112448356 )
+
