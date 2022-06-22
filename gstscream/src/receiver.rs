@@ -37,7 +37,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
     let pipeline_clone = pipeline.clone();
     let bin = pipeline.upcast::<gst::Bin>();
     let rtpbin = bin.by_name("rtpbin").unwrap();
-    rtpbin.connect("new-jitterbuffer", false, move |_values| None)?;
+    rtpbin.connect("new-jitterbuffer", false, move |_values| None);
 
     let pipeline = bin.upcast::<gst::Element>();
     pipeline

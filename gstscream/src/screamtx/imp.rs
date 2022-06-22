@@ -1,3 +1,4 @@
+use crate::glib::translate::IntoGlibPtr;
 use glib::prelude::*;
 use glib::subclass::prelude::*;
 
@@ -68,7 +69,7 @@ impl Screamtx {
         element: &super::Screamtx,
         buffer: gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
-        // gst_trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
+        // trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
         let rtp_buffer = RTPBuffer::from_buffer_readable(&buffer).unwrap();
         let seq = rtp_buffer.seq();
         let payload_type = rtp_buffer.payload_type();
@@ -76,7 +77,7 @@ impl Screamtx {
         let ssrc = rtp_buffer.ssrc();
         let marker = rtp_buffer.is_marker() as u8;
 
-        gst_trace!(
+        trace!(
             CAT,
             obj: pad,
             "gstscream Handling rtp buffer seq {} payload_type {} timestamp {} ",
@@ -90,7 +91,7 @@ impl Screamtx {
         unsafe {
             let size = buffer.size().try_into().unwrap();
             ScreamSenderPush(
-                buffer.into_ptr(),
+                buffer.into_glib_ptr(),
                 size,
                 seq,
                 payload_type,
@@ -130,7 +131,7 @@ impl Screamtx {
     // See the documentation of gst::Event and gst::EventRef to see what can be done with
     // events, and especially the gst::EventView type for inspecting events.
     fn sink_event(&self, pad: &gst::Pad, _element: &super::Screamtx, event: gst::Event) -> bool {
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream Handling event {:?} {:?}",
@@ -156,7 +157,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst_log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
+        log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
         self.srcpad.peer_query(query)
     }
 
@@ -166,12 +167,12 @@ impl Screamtx {
         _element: &super::Screamtx,
         buffer: gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
-        // gst_trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
+        // trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
         let bmr = buffer.map_readable().unwrap();
         let bmrsl = bmr.as_slice();
         let bmrslprt = bmrsl.as_ptr();
         let buffer_size: u32 = buffer.size().try_into().unwrap();
-        gst_trace!(
+        trace!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp buffer size {} ",
@@ -198,7 +199,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         event: gst::Event,
     ) -> bool {
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp_sink event {:?} {:?}",
@@ -223,7 +224,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp_sink query {:?}",
@@ -241,7 +242,7 @@ impl Screamtx {
     // See the documentation of gst::Event and gst::EventRef to see what can be done with
     // events, and especially the gst::EventView type for inspecting events.
     fn src_event(&self, pad: &gst::Pad, _element: &super::Screamtx, event: gst::Event) -> bool {
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream src Handling event {:?} {:?}",
@@ -257,7 +258,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         event: gst::Event,
     ) -> bool {
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream rtcp src Handling event {:?} {:?}",
@@ -283,7 +284,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst_log!(CAT, obj: pad, "gstscream Handling src query {:?}", query);
+        log!(CAT, obj: pad, "gstscream Handling src query {:?}", query);
         self.sinkpad.peer_query(query)
     }
     fn rtcp_src_query(
@@ -292,7 +293,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp src query {:?}",
@@ -303,7 +304,7 @@ impl Screamtx {
 }
 #[allow(improper_ctypes_definitions)]
 extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
-    gst_trace!(
+    trace!(
         CAT,
         "gstscream Handling buffer from scream {:?} is_push  {}",
         buf,
@@ -497,35 +498,35 @@ impl ObjectImpl for Screamtx {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
             vec![
-                glib::ParamSpec::new_string(
+                glib::ParamSpecString::new(
                     "params",
                     "Params",
                     "scream lib command line args",
                     None,
                     glib::ParamFlags::READWRITE,
                 ),
-                glib::ParamSpec::new_string(
+                glib::ParamSpecString::new(
                     "stats",
                     "Stats",
                     "screamtx get_property lib stats in csv format",
                     None,
                     glib::ParamFlags::READWRITE,
                 ),
-                glib::ParamSpec::new_string(
+                glib::ParamSpecString::new(
                     "stats-clear",
                     "StatsClear",
                     "screamtx get_property lib stats in csv format and clear counters",
                     None,
                     glib::ParamFlags::READWRITE,
                 ),
-                glib::ParamSpec::new_string(
+                glib::ParamSpecString::new(
                     "stats-header",
                     "StatsHeader",
                     "screamtx get_property lib stats-header in csv format",
                     None,
                     glib::ParamFlags::READWRITE,
                 ),
-                glib::ParamSpec::new_uint(
+                glib::ParamSpecUInt::new(
                     "current-max-bitrate",
                     "Current-max-bitrate",
                     "Current max bitrate in kbit/sec, set by scream or by application",
@@ -553,7 +554,7 @@ impl ObjectImpl for Screamtx {
                     Ok(params) => Some(params),
                     _ => unreachable!("type checked upstream"),
                 };
-                gst_info!(
+                info!(
                     CAT,
                     obj: obj,
                     "Changing params  to {}",
@@ -570,7 +571,7 @@ impl ObjectImpl for Screamtx {
             "current-max-bitrate" => {
                 let mut settings = self.settings.lock().unwrap();
                 let rate = value.get().expect("type checked upstream");
-                gst_info!(
+                info!(
                     CAT,
                     obj: obj,
                     "Changing current-max-bitrate from {} to {}",
@@ -721,7 +722,7 @@ impl ElementImpl for Screamtx {
         element: &Self::Type,
         transition: gst::StateChange,
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
-        gst_info!(CAT, obj: element, "Changing state {:?}", transition);
+        info!(CAT, obj: element, "Changing state {:?}", transition);
 
         // Call the parent class' implementation of ::change_state()
         self.parent_change_state(element, transition)

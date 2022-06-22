@@ -54,11 +54,7 @@ pub fn stats(bin: &gst::Pipeline, screamtx_name_opt: &Option<String>) {
     };
 
     let screamtx_e_clone = screamtx_e.clone();
-    let stats_str_header = screamtx_e
-        .property("stats-header")
-        .expect("Failed to get stats-header")
-        .get::<String>()
-        .expect("stats");
+    let stats_str_header = screamtx_e.property::<String>("stats-header");
 
     writeln!(out, "time-ns, {}", stats_str_header).unwrap();
 
@@ -67,11 +63,7 @@ pub fn stats(bin: &gst::Pipeline, screamtx_name_opt: &Option<String>) {
     timeout_add(
         Duration::from_millis(sender_stats_timer as u64),
         move || {
-            let stats_str = screamtx_e_clone
-                .property("stats")
-                .expect("Failed to get stats")
-                .get::<String>()
-                .expect("stats");
+            let stats_str = screamtx_e_clone.property::<String>("stats");
 
             let tm = pipeline_clock.time();
             let ns = tm.unwrap().nseconds();
@@ -117,12 +109,10 @@ pub fn run_time_bitrate_set(
                 Some(scream) => {
                     let scream_cloned = scream.clone();
                     scream.connect("notify::current-max-bitrate", false,  move |_values| {
-                        let rate = scream_cloned.property("current-max-bitrate")
-                            .expect("Failed to get bitrate").get::<u32>().expect("bitrate");
+                        let rate = scream_cloned.property::<u32>("current-max-bitrate");
                         let rate = rate * ratemultiply;
                         video_cloned
-                            .set_property("bitrate", &rate)
-                            .expect("Failed to set bitrate");
+                            .set_property("bitrate", &rate);
                         let n = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
                         let rate_prev;
@@ -147,7 +137,7 @@ pub fn run_time_bitrate_set(
                                 // println!("count {}", rate_info_prev.count);
                         }
                         None
-                    }).unwrap();
+                    });
                 }
                 None => println!("no scream signal"),
             }

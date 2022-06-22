@@ -75,7 +75,7 @@ impl Screamtxbw {
     // See the documentation of gst::Event and gst::EventRef to see what can be done with
     // events, and especially the gst::EventView type for inspecting events.
     fn sink_event(&self, pad: &gst::Pad, _element: &super::Screamtxbw, event: gst::Event) -> bool {
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream Handling event {:?} {:?}",
@@ -101,7 +101,7 @@ impl Screamtxbw {
         _element: &super::Screamtxbw,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst_log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
+        log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
         self.srcpad.peer_query(query)
     }
 
@@ -119,7 +119,7 @@ impl Screamtxbw {
                 ScreamTxBwPluginSetForceKeyUnit();
             }
 
-            gst_info!(
+            info!(
                 CAT,
                 obj: pad,
                 "gstscreamtxbw src Handling event {:?} {:?}",
@@ -127,7 +127,7 @@ impl Screamtxbw {
                 event.type_()
             );
         }
-        gst_log!(
+        log!(
             CAT,
             obj: pad,
             "gstscream src Handling event {:?} {:?}",
@@ -152,7 +152,7 @@ impl Screamtxbw {
         _element: &super::Screamtxbw,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst_log!(CAT, obj: pad, "gstscream Handling src query {:?}", query);
+        log!(CAT, obj: pad, "gstscream Handling src query {:?}", query);
         self.sinkpad.peer_query(query)
     }
 }
@@ -168,7 +168,7 @@ extern "C" fn callback(
 ) {
     unsafe {
         let fls = (*stx).srcpad.pad_flags();
-        gst_trace!(CAT, "creamtxbw Handling buffer from scream len={}, seq_nr {}, ts {}, pt {}, is_mark {}, ssrc {} {:?}",
+        trace!(CAT, "creamtxbw Handling buffer from scream len={}, seq_nr {}, ts {}, pt {}, is_mark {}, ssrc {} {:?}",
                    len, seq_nr, ts, pt, is_mark, ssrc, fls);
         if fls.contains(gst::PadFlags::EOS) {
             println!("screamtxbw EOS {:?}", fls);
@@ -311,14 +311,14 @@ impl ObjectImpl for Screamtxbw {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
             vec![
-                glib::ParamSpec::new_string(
+                glib::ParamSpecString::new(
                     "params",
                     "Params",
                     "scream lib command line args",
                     None,
                     glib::ParamFlags::READWRITE,
                 ),
-                glib::ParamSpec::new_uint(
+                glib::ParamSpecUInt::new(
                     "bitrate",
                     "bitrate",
                     "Bitrate in kbit/sec (0 = from NVENC preset)",
@@ -346,7 +346,7 @@ impl ObjectImpl for Screamtxbw {
                     Ok(params) => Some(params),
                     _ => unreachable!("type checked upstream"),
                 };
-                gst_info!(
+                info!(
                     CAT,
                     obj: obj,
                     "Changing params  to {}",
@@ -363,7 +363,7 @@ impl ObjectImpl for Screamtxbw {
             "bitrate" => {
                 let mut settings = self.settings.lock().unwrap();
                 let rate = value.get().expect("type checked upstream");
-                gst_info!(
+                info!(
                     CAT,
                     obj: obj,
                     "Changing bitrate from {} to {}",
@@ -456,7 +456,7 @@ impl ElementImpl for Screamtxbw {
         element: &Self::Type,
         transition: gst::StateChange,
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
-        gst_info!(CAT, obj: element, "Changing state {:?}", transition);
+        info!(CAT, obj: element, "Changing state {:?}", transition);
 
         // Call the parent class' implementation of ::change_state()
         self.parent_change_state(element, transition)
