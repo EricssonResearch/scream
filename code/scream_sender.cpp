@@ -95,13 +95,11 @@ RtpQueue *rtpQueue = 0;
 
 const char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
-const char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
 
 int SIERRA_PYTHON_PORT = 35000;
 
 struct sockaddr_in outgoing_rtp_addr;
 struct sockaddr_in incoming_rtcp_addr;
-struct sockaddr_in dummy_rtcp_addr;
 struct sockaddr_in sierra_python_addr;
 
 unsigned char buf_rtcp[BUFSIZE];     /* receive buffer RTCP packets*/
@@ -109,7 +107,6 @@ unsigned char buf_rtcp[BUFSIZE];     /* receive buffer RTCP packets*/
 unsigned char buf_sierra[BUFSIZE];     /* receive buffer RTCP packets*/
 
 socklen_t addrlen_outgoing_rtp;
-socklen_t addrlen_dummy_rtcp;
 uint32_t lastLogT_ntp = 0;
 uint32_t lastLogTv_ntp = 0;
 uint32_t tD_ntp = 0;//(INT64_C(1) << 32)*1000 - 5000000;
@@ -526,10 +523,6 @@ int setup() {
 	incoming_rtcp_addr.sin_family = AF_INET;
 	incoming_rtcp_addr.sin_port = htons(DECODER_PORT);
 	incoming_rtcp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	dummy_rtcp_addr.sin_family = AF_INET;
-	inet_aton(DUMMY_IP, (in_addr*)&dummy_rtcp_addr.sin_addr.s_addr);
-	dummy_rtcp_addr.sin_port = htons(DECODER_PORT);
 
 	if ((fd_outgoing_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("cannot create socket");
