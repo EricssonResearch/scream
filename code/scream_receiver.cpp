@@ -29,7 +29,7 @@ ScreamRx *screamRx = 0;
 
 string SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
-struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr, sender_rtcp_addr;
+struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr;
 
 int ackDiff = -1;
 int nReportedRtpPackets = 64;
