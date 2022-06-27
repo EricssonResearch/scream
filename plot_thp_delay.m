@@ -1,11 +1,11 @@
 function plot_thp_delay(a,Tlim,maxThp,maxDelay)
-% This function plots the thorughput 
+% This function plots the thorughput
 % RTT and estimated queue delay
 % Parameters:
 %  a        : log file from SCReAM BW test tool
 %             imported with the command
 %             a = load(<logfile>);
-%             where <logfile> is the name of the log file      
+%             where <logfile> is the name of the log file
 %  Tlim     : xmin and xmax limits [s], e.g. [0 100]
 %  maxThp   : Max thorughput [Mbps]
 %  maxDelay : Max delay [s]
@@ -17,7 +17,7 @@ function plot_thp_delay(a,Tlim,maxThp,maxDelay)
 % >a = a(1:50:end,:); % subsample the log file
 % >figure(1);
 % >plot_cdf(....
-% 
+%
 T = a(:,1);
 subplot(211);%subplot(9,1,1:5);
 K = 5;
@@ -43,4 +43,3 @@ xlim(Tlim);
 xlabel('T [s]');
 xlim(Tlim);
 end
-

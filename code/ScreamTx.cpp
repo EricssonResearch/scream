@@ -752,14 +752,14 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	completeLogItem = false;
 	int prevBytesInFlight = bytesInFlight;
 	/*
-	* Mark received packets, given by the ACK vector
-	*/
+	 * Mark received packets, given by the ACK vector
+	 */
 	bool isMark = false;
 	isCeThisFeedback |= markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
 
 	/*
-	* Detect lost packets
-	*/
+	 * Detect lost packets
+	 */
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		detectLoss(time_ntp, txPackets, seqNr, stream);
 	}
