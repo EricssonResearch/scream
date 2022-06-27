@@ -12,6 +12,9 @@ The gstreamer codec control is a plugin that serves as an interface between the 
 stream congestion control and the gstreamer video encoding entities
 
 **1. Install applicable gstreamer thingys**
+
+(Note: These are the same as the **gscream** section in [the top-level `README`](./../../README).)
+
 You need these
 https://developer.ridgerun.com/wiki/index.php?title=Setting_a_GStreamer_Alternative_Environment
 `sudo apt-get install pkg-config bison flex git libglib2.0-dev liborc-0.4-dev libtool autopoint autoconf gettext yasm`
@@ -29,31 +32,29 @@ In addition you need
 
 **3. Make codecctrl plugin**
 
-`cd ./gst-codec-ctrl/gst-plugin`
+    cd gst-codec-ctrl/gst-plugin
+    ./autogen.sh && make
 
-`chmod +x autogen.sh`
+Run `sudo make install` once done. Finally, go back to this directory:
 
-`chmod +x config.status`
-
-`./autogen.sh`
-
-`sudo make install`
+    cd ../..
 
 **Issue.** File glibconfig.h is missing when gscream plugin is built.
 
-**Solution** copy file glibconfig.h from
+**Workaround:** (should _not_ be necessary!) copy file glibconfig.h from
 /usr/lib/aarch64-linux-gnu/glib-2.0/include/ (or where it may be)
 to
-/usr/include/glib-2.0
+/usr/include/glib-2.0 (and don’t forget to remove it afterwards)
 
 **4. Install v4l2-ctl
 `sudo apt-get install -y v4l-utils`
 
 **5. Build SCReAM sender side
-The SCReAM sender side is built with the instructions
-`$ cd ./scream`
-`$ cmake .`
-`$ make`
+The SCReAM sender side is built with the instructions:
+
+    cd scream
+    cmake . && make
+    cd ..
 
 **5. Start streaming
 `$ ./startsender.sh`

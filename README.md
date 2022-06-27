@@ -189,3 +189,14 @@ creates `code/gscream/gscream_app_rpi_tx`,
 
 See [`code/gscream/readme.txt`](./code/gscream/readme.txt) for
 what to do with these files.
+
+## gstscream (Rust)
+
+See [`gstscream/README.md`](./gstscream/README.md) about this.
+
+## multicam
+
+See [`multicam/sender/README.md`](./multicam/sender/README.md) and
+[`multicam/receiver/README.md`](./multicam/receiver/README.md) for
+building instructions,
+then read [`multicam/README.md`](./multicam/README.md) for info.

@@ -2,11 +2,11 @@
 
 On the receiver side it is assumed that gstreamer is already installed.
 
-The SCReAM receiver side is built with the instructions<br>
-`$cd ./scream`<br>
-`$cmake .`<br>
-`$make`
+The SCReAM receiver side is built with the instructions:
 
+    cd scream
+    cmake . && make
+    cd ..
 
 #Startup
 
