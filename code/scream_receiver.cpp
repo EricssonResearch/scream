@@ -214,9 +214,6 @@ int main(int argc, char* argv[])
 		cerr << "Listen on port " << INCOMING_RTP_PORT << " to receive RTP from sender " << endl;
 	}
 
-	struct sockaddr_in sender_rtp_addr;
-	socklen_t addrlen_sender_rtp_addr = sizeof(sender_rtp_addr);
-
 	int recvlen;
 
 	uint32_t last_received_time_ntp = 0;
@@ -290,6 +287,8 @@ int main(int argc, char* argv[])
 			memcpy(buf, rcv_msg.msg_iov[0].iov_base, recvlen);
 		}
 #else
+		struct sockaddr_in sender_rtp_addr;
+		socklen_t addrlen_sender_rtp_addr = sizeof(sender_rtp_addr);
 		recvlen = recvfrom(fd_incoming_rtp, buf, BUFSIZE, 0, (struct sockaddr *)&sender_rtp_addr, &addrlen_sender_rtp_addr);
 #endif
 		uint32_t time_ntp = getTimeInNtp();
