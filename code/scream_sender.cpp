@@ -538,7 +538,7 @@ int setup() {
 	}
 
 	if (bind(fd_outgoing_rtp, (struct sockaddr *)&incoming_rtcp_addr, sizeof(incoming_rtcp_addr)) < 0) {
-		perror("bind outgoing_rtp_addr failed");
+		perror("bind incoming_rtcp_addr failed");
 		return 0;
 	}
 	else {
