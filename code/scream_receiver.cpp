@@ -32,7 +32,6 @@ ScreamRx *screamRx = 0;
 string SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
 struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr, sender_rtcp_addr;
-struct sockaddr_in local_rtp_addr;
 
 string LOCAL_IP = "127.0.0.1";
 int LOCAL_PORT = 30124;
@@ -173,11 +172,6 @@ int main(int argc, char* argv[])
 	outgoing_rtcp_addr.sin_family = AF_INET;
 	inet_aton(SENDER_IP.c_str(), (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
 	outgoing_rtcp_addr.sin_port = htons(INCOMING_RTP_PORT);
-
-
-	local_rtp_addr.sin_family = AF_INET;
-	inet_aton(LOCAL_IP.c_str(), (in_addr*)&local_rtp_addr.sin_addr.s_addr);
-	local_rtp_addr.sin_port = htons(LOCAL_PORT);
 
 	if ((fd_incoming_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("cannot create socket for incoming RTP packets");
