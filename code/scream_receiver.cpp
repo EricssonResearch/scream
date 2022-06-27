@@ -1,4 +1,4 @@
-// Scream sender side wrapper
+// Scream receiver side wrapper
 #include "ScreamRx.h"
 #include "sys/socket.h"
 #include "sys/types.h"
@@ -17,8 +17,6 @@ using namespace std;
 #define BUFSIZE 2048
 #define ECN_CAPABLE
 #define IS_STANDARD_FEEDBACK
-
-// Scream receiver side wrapper
 
 int fd_incoming_rtp;
 // Input UDP socket, RTP packets come here and we send RTCP packets in the
