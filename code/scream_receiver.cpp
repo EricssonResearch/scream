@@ -270,7 +270,7 @@ int main(int argc, char* argv[])
 		*/
 		unsigned char received_ecn;
 #ifdef ECN_CAPABLE
-		int recvlen = recvmsg(fd_incoming_rtp, &rcv_msg, 0);
+		recvlen = recvmsg(fd_incoming_rtp, &rcv_msg, 0);
 		if (recvlen == -1) {
 			perror("recvmsg()");
 			close(fd_incoming_rtp);
