@@ -223,7 +223,7 @@ int main(int argc, char* argv[])
 	uint32_t receivedRtp = 0;
 
 	/*
-	* Send a small packet just to punmax distance in received RTPs to send an ACKch open a hole in the NAT,
+	* Send a small packet just to punch open a hole in the NAT,
 	*  just one single byte will do.
 	* This makes in possible to receive packets on the same port
 	*/
