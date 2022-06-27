@@ -79,7 +79,6 @@ void parseRtp(unsigned char* buf, uint16_t* seqNr, uint32_t* timeStamp) {
 }
 
 uint16_t lastFbSn = 0;
-uint64_t lastPunchNatT_ntp = 0;
 uint32_t SSRC = 100; // We don't bother with SSRC yet, this is for experiments only so far.
 #define KEEP_ALIVE_PKT_SIZE 1
 
@@ -88,16 +87,6 @@ void *rtcpPeriodicThread(void *arg) {
 	int rtcpSize;
 	uint32_t rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
 	for (;;) {
-		if (getTimeInNtp() - lastPunchNatT_ntp > 32768) { // 500ms in Q16
-		  /*
-		  * Send a small packet just to punch open a hole in the NAT,
-		  *  just one single byte will do.
-		  * This makes in possible to receive packets on the same port
-		  */
-			int ret = sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-			lastPunchNatT_ntp = getTimeInNtp();
-			cerr << "." << endl;
-		}
 		uint32_t time_ntp = getTimeInNtp();
 		rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
 		if (screamRx->isFeedback(time_ntp) &&
@@ -108,7 +97,6 @@ void *rtcpPeriodicThread(void *arg) {
 			pthread_mutex_unlock(&lock_scream);
 			if (isFeedback) {
 				sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-				lastPunchNatT_ntp = getTimeInNtp();
 			}
 		}
 		usleep(500);
@@ -218,14 +206,6 @@ int main(int argc, char* argv[])
 
 	uint32_t last_received_time_ntp = 0;
 	uint32_t receivedRtp = 0;
-
-	/*
-	* Send a small packet just to punch open a hole in the NAT,
-	*  just one single byte will do.
-	* This makes in possible to receive packets on the same port
-	*/
-	sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-	lastPunchNatT_ntp = getTimeInNtp();
 
 	pthread_t rtcp_thread;
 	pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...");
@@ -337,7 +317,6 @@ int main(int argc, char* argv[])
 					pthread_mutex_unlock(&lock_scream);
 					if (isFeedback) {
 						sendto(fd_incoming_rtp, buf_rtcp, rtcpSize, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-						lastPunchNatT_ntp = getTimeInNtp();
 					}
 				}
 			}
