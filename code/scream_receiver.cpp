@@ -135,29 +135,32 @@ int main(int argc, char* argv[])
 
 	int ix = 1;
 
+ redo_options:
 	if (argc > (ix + 1) && strstr(argv[ix], "-ackdiff")) {
 		ackDiff = atoi(argv[ix + 1]);
 		ix += 2;
+		goto redo_options;
 	}
 
 	if (argc > (ix + 1) && strstr(argv[ix], "-nreported")) {
 		nReportedRtpPackets = atoi(argv[ix + 1]);
 		ix += 2;
+		goto redo_options;
 	}
 
 	if (argc > (ix + 1) && strstr(argv[ix], "-if")) {
 		ifname = argv[ix + 1];
 		ix += 2;
+		goto redo_options;
 	}
 
-  if (argc > (ix + 1)) {
-	  SENDER_IP = argv[ix];
-	  INCOMING_RTP_PORT = atoi(argv[ix + 1]);
-  } else {
-    cerr << "Insufficient parameters." << endl;
-    exit(-1);
-  }
-
+	if (argc > (ix + 1)) {
+		SENDER_IP = argv[ix];
+		INCOMING_RTP_PORT = atoi(argv[ix + 1]);
+	} else {
+		cerr << "Insufficient parameters." << endl;
+		exit(-1);
+	}
 
 	struct timeval tp;
 	gettimeofday(&tp, NULL);
