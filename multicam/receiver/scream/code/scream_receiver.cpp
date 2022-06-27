@@ -421,7 +421,7 @@ int main(int argc, char* argv[])
           */
 
           sendto(fd_local_rtp[ix], bufRtp, recvlen, 0, (struct sockaddr *)&local_rtp_addr[ix], sizeof(local_rtp_addr[ix]));
-       	}
+        }
 
         /*
         * Register received RTP packet with ScreamRx

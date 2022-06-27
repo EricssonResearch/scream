@@ -158,10 +158,10 @@ void readList(char *buf, float *list) {
    char *s = strtok(s1,":");
    int n=0;
    while (s != NULL && n < MAX_SOURCES) {
-	   	cerr << s << endl;
-	   	list[n] = atof(s);
-	   	n++;
-	   	s = strtok(NULL,":");
+	cerr << s << endl;
+	list[n] = atof(s);
+	n++;
+	s = strtok(NULL,":");
    }
 }
 
