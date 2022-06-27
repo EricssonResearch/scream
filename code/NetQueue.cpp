@@ -58,7 +58,7 @@ void NetQueue::insert(float time,
     items[head]->tQueue = time;
     items[head]->isCe = isCe;
     if (rate > 0) {
-		float delay = size*8.0f / rate;		
+		float delay = size*8.0f / rate;
 		if (prevHead != -1 && items[prevHead]->used) {
 			items[head]->tRelease = items[prevHead]->tRelease + delay;
 		}

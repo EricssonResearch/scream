@@ -32,4 +32,3 @@ export SENDPIPELINE=$SENDPIPELINE2
 killall -9 scream_sender
 $SCREAM_TARGET_DIR/scream_sender --verbose
 #$SCREAM_TARGET_DIR/scream_sender
-
