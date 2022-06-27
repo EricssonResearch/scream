@@ -31,9 +31,6 @@ string SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
 struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr, sender_rtcp_addr;
 
-string LOCAL_IP = "127.0.0.1";
-int LOCAL_PORT = 30124;
-
 int ackDiff = -1;
 int nReportedRtpPackets = 64;
 
