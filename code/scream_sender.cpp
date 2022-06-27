@@ -721,7 +721,7 @@ int main(int argc, char* argv[]) {
 		if (strstr(argv[ix], "-ect")) {
 			ect = atoi(argv[ix + 1]);
 			ix += 2;
-			if (!(ect == 1 || ect == 0 || ect == 1 || ect == 3)) {
+			if (!(ect == -1 || ect == 0 || ect == 1 || ect == 3)) {
 				cerr << "ect must be -1, 0, 1 or 3 " << endl;
 				exit(0);
 
