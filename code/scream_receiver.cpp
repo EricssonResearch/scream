@@ -27,9 +27,6 @@ ScreamRx *screamRx = 0;
 
 //int fd_local_rtp;
 
-string SENDER_IP = "192.168.0.20";
-int INCOMING_RTP_PORT = 30122;
-int LOCAL_PORT;
 struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr;
 
 int ackDiff = -1;
@@ -110,7 +107,7 @@ int main(int argc, char* argv[])
 	unsigned char buf_rtcp[BUFSIZE];
 	if (argc <= 1) {
 		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2022-06-10" << endl;
-		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port local_port" << endl;
+		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> local_port" << endl;
 		cerr << "     -ackdiff value      set the max distance in received RTPs to send an ACK " << endl;
 		cerr << "     -nreported value    set the number of reported RTP packets per ACK " << endl;
 		cerr << "     -if name            bind to specific interface" << endl;
@@ -138,14 +135,11 @@ int main(int argc, char* argv[])
 		goto redo_options;
 	}
 
-	if (argc > (ix + 2)) {
-		SENDER_IP = argv[ix];
-		INCOMING_RTP_PORT = atoi(argv[ix + 1]);
-		LOCAL_PORT = atoi(argv[ix + 2]);
-	} else {
+	if (argc != (ix + 1)) {
 		cerr << "Insufficient parameters." << endl;
 		exit(-1);
 	}
+	int LOCAL_PORT = atoi(argv[ix]);
 
 	struct timeval tp;
 	gettimeofday(&tp, NULL);
@@ -157,9 +151,7 @@ int main(int argc, char* argv[])
 	incoming_rtp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	incoming_rtp_addr.sin_port = htons(LOCAL_PORT);
 
-	outgoing_rtcp_addr.sin_family = AF_INET;
-	inet_aton(SENDER_IP.c_str(), (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
-	outgoing_rtcp_addr.sin_port = htons(INCOMING_RTP_PORT);
+	outgoing_rtcp_addr.sin_family = 0; // initialise later
 
 	if ((fd_incoming_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("cannot create socket for incoming RTP packets");
@@ -207,12 +199,8 @@ int main(int argc, char* argv[])
 	uint32_t last_received_time_ntp = 0;
 	uint32_t receivedRtp = 0;
 
-	pthread_t rtcp_thread;
-	pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...");
-
 	uint16_t lastSn = 0;
 	pthread_mutex_init(&lock_scream, NULL);
-
 
 #define MAX_CTRL_SIZE 8192
 #define MAX_BUF_SIZE 65536
@@ -226,8 +214,6 @@ int main(int argc, char* argv[])
 	rcv_iov[0].iov_base = rcv_buf;
 	rcv_iov[0].iov_len = MAX_BUF_SIZE;
 
-	rcv_msg.msg_name = NULL;	// Socket is connected
-	rcv_msg.msg_namelen = 0;
 	rcv_msg.msg_iov = rcv_iov;
 	rcv_msg.msg_iovlen = 1;
 	rcv_msg.msg_control = rcv_ctrl_data;
@@ -238,37 +224,58 @@ int main(int argc, char* argv[])
 		/*
 		* Wait for incoing RTP packet, this call can be blocking
 		*/
+		struct sockaddr_in sender_rtp_addr;
+		socklen_t addrlen_sender_rtp_addr = sizeof(sender_rtp_addr);
+		uint32_t time_ntp;
 
 		/*
 		* Extract ECN bits
 		*/
 		unsigned char received_ecn;
 #ifdef ECN_CAPABLE
+		rcv_msg.msg_name = (struct sockaddr *)&sender_rtp_addr;
+		rcv_msg.msg_namelen = addrlen_sender_rtp_addr;
 		recvlen = recvmsg(fd_incoming_rtp, &rcv_msg, 0);
 		if (recvlen == -1) {
 			perror("recvmsg()");
 			close(fd_incoming_rtp);
 			return EXIT_FAILURE;
 		}
-		else {
-			struct cmsghdr *cmptr;
-			int *ecnptr;
-			for (cmptr = CMSG_FIRSTHDR(&rcv_msg);
-				cmptr != NULL;
-				cmptr = CMSG_NXTHDR(&rcv_msg, cmptr)) {
-				if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS) {
-					ecnptr = (int*)CMSG_DATA(cmptr);
-					received_ecn = *ecnptr;
-				}
+		time_ntp = getTimeInNtp();
+		addrlen_sender_rtp_addr = rcv_msg.msg_namelen;
+
+		struct cmsghdr *cmptr;
+		int *ecnptr;
+		for (cmptr = CMSG_FIRSTHDR(&rcv_msg); cmptr != NULL; cmptr = CMSG_NXTHDR(&rcv_msg, cmptr)) {
+			if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS) {
+				ecnptr = (int*)CMSG_DATA(cmptr);
+				received_ecn = *ecnptr;
 			}
-			memcpy(buf, rcv_msg.msg_iov[0].iov_base, recvlen);
 		}
+		memcpy(buf, rcv_msg.msg_iov[0].iov_base, recvlen);
 #else
-		struct sockaddr_in sender_rtp_addr;
-		socklen_t addrlen_sender_rtp_addr = sizeof(sender_rtp_addr);
 		recvlen = recvfrom(fd_incoming_rtp, buf, BUFSIZE, 0, (struct sockaddr *)&sender_rtp_addr, &addrlen_sender_rtp_addr);
+		time_ntp = getTimeInNtp();
 #endif
-		uint32_t time_ntp = getTimeInNtp();
+		if (addrlen_sender_rtp_addr != sizeof(sender_rtp_addr) ||
+		    sender_rtp_addr.sin_family != AF_INET) {
+			cerr << "could not get packet sender address" << endl;
+			close(fd_incoming_rtp);
+			return EXIT_FAILURE;
+		}
+		if (outgoing_rtcp_addr.sin_family == 0) {
+			/* first packet received */
+			memcpy(&outgoing_rtcp_addr, &sender_rtp_addr, sizeof(sender_rtp_addr));
+			cerr << "Connection from " << inet_ntoa(outgoing_rtcp_addr.sin_addr) << ":" << ntohs(outgoing_rtcp_addr.sin_port) << endl;
+
+			/* this needs outgoing_rtcp_addr and thus may only be started now */
+			pthread_t rtcp_thread;
+			pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...");
+		} else if (sender_rtp_addr.sin_addr.s_addr != outgoing_rtcp_addr.sin_addr.s_addr ||
+		    sender_rtp_addr.sin_port != outgoing_rtcp_addr.sin_port) {
+			cerr << "skipped packet from " << inet_ntoa(sender_rtp_addr.sin_addr) << ":" << ntohs(sender_rtp_addr.sin_port) << endl;
+			continue;
+		}
 		if (recvlen > 1) {
 			if (buf[1] == 0x7F) {
 				// Packet contains statistics
