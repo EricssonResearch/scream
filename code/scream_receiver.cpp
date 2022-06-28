@@ -122,8 +122,8 @@ int main(int argc, char* argv[])
 	if (argc <= 1) {
 		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2022-06-10" << endl;
 		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
-		cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
-		cerr << "     -nreported          set the number of reported RTP packets per ACK " << endl;
+		cerr << "     -ackdiff value      set the max distance in received RTPs to send an ACK " << endl;
+		cerr << "     -nreported value    set the number of reported RTP packets per ACK " << endl;
 		cerr << "     -if name            bind to specific interface" << endl;
 		exit(-1);
 	}
