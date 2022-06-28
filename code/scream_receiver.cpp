@@ -29,6 +29,7 @@ ScreamRx *screamRx = 0;
 
 string SENDER_IP = "192.168.0.20";
 int INCOMING_RTP_PORT = 30122;
+int LOCAL_PORT;
 struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr;
 
 int ackDiff = -1;
@@ -109,7 +110,7 @@ int main(int argc, char* argv[])
 	unsigned char buf_rtcp[BUFSIZE];
 	if (argc <= 1) {
 		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2022-06-10" << endl;
-		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
+		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port local_port" << endl;
 		cerr << "     -ackdiff value      set the max distance in received RTPs to send an ACK " << endl;
 		cerr << "     -nreported value    set the number of reported RTP packets per ACK " << endl;
 		cerr << "     -if name            bind to specific interface" << endl;
@@ -137,9 +138,10 @@ int main(int argc, char* argv[])
 		goto redo_options;
 	}
 
-	if (argc > (ix + 1)) {
+	if (argc > (ix + 2)) {
 		SENDER_IP = argv[ix];
 		INCOMING_RTP_PORT = atoi(argv[ix + 1]);
+		LOCAL_PORT = atoi(argv[ix + 2]);
 	} else {
 		cerr << "Insufficient parameters." << endl;
 		exit(-1);
@@ -153,7 +155,7 @@ int main(int argc, char* argv[])
 
 	incoming_rtp_addr.sin_family = AF_INET;
 	incoming_rtp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	incoming_rtp_addr.sin_port = htons(INCOMING_RTP_PORT);
+	incoming_rtp_addr.sin_port = htons(LOCAL_PORT);
 
 	outgoing_rtcp_addr.sin_family = AF_INET;
 	inet_aton(SENDER_IP.c_str(), (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
@@ -198,9 +200,7 @@ int main(int argc, char* argv[])
 		perror("bind incoming_rtp_addr failed");
 		return 0;
 	}
-	else {
-		cerr << "Listen on port " << INCOMING_RTP_PORT << " to receive RTP from sender " << endl;
-	}
+	cerr << "Listen on port " << LOCAL_PORT << " to receive RTP from sender" << endl;
 
 	int recvlen;
 
