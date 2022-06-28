@@ -110,7 +110,6 @@ socklen_t addrlen_outgoing_rtp;
 uint32_t lastLogT_ntp = 0;
 uint32_t lastLogTv_ntp = 0;
 uint32_t tD_ntp = 0;//(INT64_C(1) << 32)*1000 - 5000000;
-socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
 socklen_t addrlen_sierra_python_addr = sizeof(sierra_python_addr);
 pthread_mutex_t lock_scream;
 pthread_mutex_t lock_rtp_queue;
@@ -441,6 +440,7 @@ void *readRtcpThread(void *arg) {
 	* Wait for RTCP packets from receiver
 	*/
 	for (;;) {
+		socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
 		int recvlen = recvfrom(fd_outgoing_rtp, buf_rtcp, BUFSIZE, 0, (struct sockaddr *)&incoming_rtcp_addr, &addrlen_incoming_rtcp);
 		if (stopThread)
 			return NULL;
