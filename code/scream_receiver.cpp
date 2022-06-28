@@ -237,9 +237,6 @@ int main(int argc, char* argv[])
 #define MAX_CTRL_SIZE 8192
 #define MAX_BUF_SIZE 65536
 
-	int *ecnptr;
-	unsigned char received_ecn;
-
 	struct msghdr rcv_msg;
 	struct iovec rcv_iov[1];
 	char rcv_ctrl_data[MAX_CTRL_SIZE];
