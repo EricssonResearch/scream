@@ -521,7 +521,7 @@ int setup() {
 	addrlen_outgoing_rtp = sizeof(outgoing_rtp_addr);
 
 	incoming_rtcp_addr.sin_family = AF_INET;
-	incoming_rtcp_addr.sin_port = htons(DECODER_PORT);
+	incoming_rtcp_addr.sin_port = htons(0);
 	incoming_rtcp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	if ((fd_outgoing_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -541,10 +541,17 @@ int setup() {
 		perror("bind incoming_rtcp_addr failed");
 		return 0;
 	}
-	else {
-		if (!pushTraffic)
-			cerr << "Listen on port " << DECODER_PORT << " to receive RTCP from decoder " << endl;
+
+	socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
+	if (getsockname(fd_outgoing_rtp, (struct sockaddr *)&incoming_rtcp_addr, &addrlen_incoming_rtcp) ||
+	  addrlen_incoming_rtcp > sizeof(incoming_rtcp_addr) ||
+	  incoming_rtcp_addr.sin_family != AF_INET) {
+		perror("cannot get local ephemeral port");
+		return 0;
 	}
+
+	if (!pushTraffic)
+		cerr << "Listen on port " << ntohs(incoming_rtcp_addr.sin_port) << " to receive RTCP from decoder" << endl;
 
 	if (sierraLog) {
 		sierra_python_addr.sin_family = AF_INET;
