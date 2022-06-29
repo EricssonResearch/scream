@@ -16,10 +16,10 @@ cd scripts
 export SENDER_STATS_TIMER=500               # default 1000 ms
 export SENDER_STATS_FILE_NAME="xxx.csv"     # default sender_scream_stats.csv
 ```
-# Tuning  Linux system 
+# Tuning  Linux system
 ```bash
 cd scripts
-sudo ./sysctl.sh 
+sudo ./sysctl.sh
 ```
 
 # Running SCReAM BW test applications
@@ -44,4 +44,3 @@ cd scripts
 [Issues with nvenc bitrate changes run time](with https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189 )
 
 [Issues with using tc](https://github.com/EricssonResearch/scream/issues/44#issuecomment-1112448356 )
-

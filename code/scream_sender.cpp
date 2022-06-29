@@ -95,13 +95,11 @@ RtpQueue *rtpQueue = 0;
 
 const char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
-const char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
 
 int SIERRA_PYTHON_PORT = 35000;
 
 struct sockaddr_in outgoing_rtp_addr;
 struct sockaddr_in incoming_rtcp_addr;
-struct sockaddr_in dummy_rtcp_addr;
 struct sockaddr_in sierra_python_addr;
 
 unsigned char buf_rtcp[BUFSIZE];     /* receive buffer RTCP packets*/
@@ -109,7 +107,6 @@ unsigned char buf_rtcp[BUFSIZE];     /* receive buffer RTCP packets*/
 unsigned char buf_sierra[BUFSIZE];     /* receive buffer RTCP packets*/
 
 socklen_t addrlen_outgoing_rtp;
-socklen_t addrlen_dummy_rtcp;
 uint32_t lastLogT_ntp = 0;
 uint32_t lastLogTv_ntp = 0;
 uint32_t tD_ntp = 0;//(INT64_C(1) << 32)*1000 - 5000000;
@@ -527,10 +524,6 @@ int setup() {
 	incoming_rtcp_addr.sin_port = htons(DECODER_PORT);
 	incoming_rtcp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	dummy_rtcp_addr.sin_family = AF_INET;
-	inet_aton(DUMMY_IP, (in_addr*)&dummy_rtcp_addr.sin_addr.s_addr);
-	dummy_rtcp_addr.sin_port = htons(DECODER_PORT);
-
 	if ((fd_outgoing_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("cannot create socket");
 		return 0;
@@ -545,7 +538,7 @@ int setup() {
 	}
 
 	if (bind(fd_outgoing_rtp, (struct sockaddr *)&incoming_rtcp_addr, sizeof(incoming_rtcp_addr)) < 0) {
-		perror("bind outgoing_rtp_addr failed");
+		perror("bind incoming_rtcp_addr failed");
 		return 0;
 	}
 	else {
@@ -666,8 +659,8 @@ int main(int argc, char* argv[]) {
 	lastT_ntp = getTimeInNtp();
 
 	/*
-	* Parse command line
-	*/
+	 * Parse command line
+	 */
 	if (argc <= 1) {
 		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2022-06-10" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
@@ -714,10 +707,11 @@ int main(int argc, char* argv[]) {
 		cerr << "     -append                  append logfile" << endl;
 		cerr << "     -itemlist                add item list in beginning of log file" << endl;
 		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
-		cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
-		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
-		cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
+		cerr << "     -periodicdropinterval v  interval [s] between periodic drops in rate (default 60s)" << endl;
+		cerr << "     -microburstinterval v    microburst interval [ms] for packet pacing (default 2ms)" << endl;
+		cerr << "     -hysteresis value        inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+		/* note: -sierralog is undocumented */
 		exit(-1);
 	}
 	int ix = 1;
@@ -728,7 +722,7 @@ int main(int argc, char* argv[]) {
 		if (strstr(argv[ix], "-ect")) {
 			ect = atoi(argv[ix + 1]);
 			ix += 2;
-			if (!(ect == 1 || ect == 0 || ect == 1 || ect == 3)) {
+			if (!(ect == -1 || ect == 0 || ect == 1 || ect == 3)) {
 				cerr << "ect must be -1, 0, 1 or 3 " << endl;
 				exit(0);
 

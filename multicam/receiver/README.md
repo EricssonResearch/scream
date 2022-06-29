@@ -2,11 +2,11 @@
 
 On the receiver side it is assumed that gstreamer is already installed.
 
-The SCReAM receiver side is built with the instructions<br>
-`$cd ./scream`<br>
-`$cmake .`<br>
-`$make`
+The SCReAM receiver side is built with the instructions:
 
+    cd scream
+    cmake . && make
+    cd ..
 
 #Startup
 
@@ -20,7 +20,7 @@ To stop the programs, in the terminal:<br>
 
 #Streaming status
 Streaming status is printed on stdout and also transmitted on UDP port 30200, this can be used for instance to visualize bitrate, RTT, packet loss etc in a graphical user interface
-An example of streaming status is:  
+An example of streaming status is:
 *** 396.540, 97, 0.044, 0.010, 609409, 105159,  31465, 1, 0.003,  17433,  18372,  17868,     0,     0, 0.001,  12453,  13480,  13520,     0,     0,<br>
  396.791, 86, 0.042, 0.008, 609409,  92399,  31021, 1, 0.014,  17608,  16876,  17646,     0,     0, 0.000,  12487,  13176,  13298,     0,     0,<br>
  397.042, 88, 0.043, 0.010, 609409,  95279,  31992, 1, 0.012,  17828,  17346,  17979,     0,     0, 0.004,  12573,  13907,  13936,     0,     0,<br>***

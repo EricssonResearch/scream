@@ -103,15 +103,15 @@ void *readControlPortThread(void *arg) {
       return 0;
   } else{
      g_print("Listen on control port %d\n", filter->ctrl_port);
-  }   
+  }
 
   int nn=0;
   for (;;) {
 	   nn++;
-    //int recvlen = recvfrom(fd_cmd, buf, BUFSIZE, 0, (struct sockaddr *)&incoming_cmd_addr, &addrlen_incoming_cmd_addr); 
-    int recvlen = recv(fd_cmd, buf, BUFSIZE, 0); 
+    //int recvlen = recvfrom(fd_cmd, buf, BUFSIZE, 0, (struct sockaddr *)&incoming_cmd_addr, &addrlen_incoming_cmd_addr);
+    int recvlen = recv(fd_cmd, buf, BUFSIZE, 0);
     if (recvlen > 0) {
-      guint32 rate; 
+      guint32 rate;
       memcpy(&rate, buf, 4);
       rate = ntohl(rate);
       //g_print("Rate command %d %d\n", filter->media_src, rate);
@@ -121,8 +121,8 @@ void *readControlPortThread(void *arg) {
         case 5:
 		//rate *= 1000;
 		break;
-		default:	
-		rate /= 1000;	
+		default:
+		rate /= 1000;
 		break;
 	  }
       switch (filter->media_src) {
@@ -142,7 +142,7 @@ void *readControlPortThread(void *arg) {
       }
       if (true && filter->media_src == 4) {
 		  /*
-		   * Adaptive qp_min to to avoid large key frames at low bitrates 
+		   * Adaptive qp_min to to avoid large key frames at low bitrates
 		   */
 		  char s[100];
 		  int qp_minI=1;
@@ -153,24 +153,24 @@ void *readControlPortThread(void *arg) {
 			   * Increased qp_min at low rates
 			   *  reduces bitrate spikes
 			   */
-			  qp_minI=53-rateI/2; 
+			  qp_minI=53-rateI/2;
 			  //qp_minP=53-rateI;
 			  if (qp_minI > 51) qp_minI = 51;
 			  if (qp_minI < 0) qp_minI = 0;
 		  }
-		  
-		  sprintf(s,"%d,50:%d,50:-1,-1",qp_minP,qp_minI);    
+
+		  sprintf(s,"%d,50:%d,50:-1,-1",qp_minP,qp_minI);
 		  //g_print("%d %d %d \n", rate, qp_minP, qp_minI);
 		  g_object_set(G_OBJECT(filter->encoder), "qp-range", s, NULL);
-		  
-  
+
+
           if (true && buf[4] == 1 && rate > 3000000) {
 			  GstFlowReturn ret;
               g_signal_emit_by_name (G_OBJECT(filter->encoder), "force-IDR", NULL, &ret);
               //g_print("Force IDR %d\n",nn);
 		  }
 	  }
-	  
+
 
     }
 

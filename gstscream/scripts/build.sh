@@ -5,4 +5,3 @@ cd $SCREAMLIB_DIR; cmake .; make
 cd $SCRIPT_DIR
 export RUSTFLAGS="$RUSTFLAGS -L$SCREAMLIB_DIR"
 cargo build
-

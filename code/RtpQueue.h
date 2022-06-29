@@ -1,10 +1,14 @@
 #ifndef RTP_QUEUE
 #define RTP_QUEUE
 
+#ifdef GSCREAM
+#include <gst/gst.h>
+#endif
+
 /*
-* Implements a simple RTP packet queue, one RTP queue
-* per stream {SSRC,PT}
-*/
+ * Implements a simple RTP packet queue, one RTP queue
+ * per stream {SSRC,PT}
+ */
 
 class RtpQueueIface {
 public:
@@ -27,6 +31,9 @@ public:
     float ts;
     bool isMark;
     bool used;
+#ifdef GSCREAM
+    GstBuffer *buffer;
+#endif
 };
 
 const int kRtpQueueSize = 1024;
@@ -36,6 +43,10 @@ public:
 
     bool push(void *rtpPacket, int size, unsigned short seqNr, bool isMark, float ts);
     bool pop(void **rtpPacket, int &size, unsigned short &seqNr, bool &isMark);
+#ifdef GSCREAM
+    void push(GstBuffer *buf, int size, unsigned short seqNr, float ts);
+    GstBuffer* pop(unsigned short &seqNr);
+#endif
     int sizeOfNextRtp();
     int seqNrOfNextRtp();
     int seqNrOfLastRtp();
@@ -44,15 +55,15 @@ public:
     float getDelay(float currTs);
     bool sendPacket(void **rtpPacket, int &size, unsigned short &seqNr);
     int clear();
+    void setSizeOfLastFrame(int sz) { sizeOfLastFrame = sz; };
     int getSizeOfLastFrame() {return sizeOfLastFrame;};
-    void setSizeOfLastFrame(int sz) {sizeOfLastFrame=sz;};
     void computeSizeOfNextRtp();
 
     RtpQueueItem *items[kRtpQueueSize];
     int head; // Pointer to last inserted item
     int tail; // Pointer to the oldest item
     int nItems;
-    int sizeOfLastFrame;
+    int sizeOfLastFrame; // Size of last frame in bytes
 
     int bytesInQueue_;
     int sizeOfQueue_;

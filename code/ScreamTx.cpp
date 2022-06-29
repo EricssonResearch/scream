@@ -752,14 +752,14 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	completeLogItem = false;
 	int prevBytesInFlight = bytesInFlight;
 	/*
-	* Mark received packets, given by the ACK vector
-	*/
+	 * Mark received packets, given by the ACK vector
+	 */
 	bool isMark = false;
 	isCeThisFeedback |= markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
 
 	/*
-	* Detect lost packets
-	*/
+	 * Detect lost packets
+	 */
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		detectLoss(time_ntp, txPackets, seqNr, stream);
 	}
@@ -2005,7 +2005,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		* Rate is reduced slightly to avoid that more frames than necessary
 		* queue up in the sender queue
 		*/
-     	updateTargetBitrateI(br);
+	    updateTargetBitrateI(br);
 	    lastTargetBitrateIUpdateT_ntp = time_ntp;
 		if (lossEventFlag)
 			targetBitrate = std::max(minBitrate, targetBitrate*lossEventRateScale);
@@ -2188,7 +2188,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			*/
 			float increment = br;
 			/*
-  			 * Apply the extra precaution with respect to queue delay
+			 * Apply the extra precaution with respect to queue delay
 			 */
 			float scl = queueDelayGuard * parent->getQueueDelayTrend();
 			if (parent->isCompetingFlows())
@@ -2205,7 +2205,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				 */
 				increment *= parent->postCongestionScale;
 
-    			/*
+				/*
 				 * At very low bitrates it is necessary to actively try to push the
 				 *  the bitrate up some extra
 				 */

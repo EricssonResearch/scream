@@ -6,6 +6,7 @@
 #include <algorithm>
 
 using namespace std;
+
 /*
  * Implements a simple RTP packet queue
  */
@@ -40,10 +41,10 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_, bool isL4s_) {
 	tQueueAvg = 0.0;
 }
 
-void NetQueue::insert(float time, 
-	                  void *rtpPacket,  
+void NetQueue::insert(float time,
+	                  void *rtpPacket,
 					  unsigned int ssrc,
-					  int size, 
+					  int size,
 					  unsigned short seqNr,
                       bool isCe) {
 	int prevHead = head;
@@ -57,7 +58,7 @@ void NetQueue::insert(float time,
     items[head]->tQueue = time;
     items[head]->isCe = isCe;
     if (rate > 0) {
-		float delay = size*8.0f / rate;		
+		float delay = size*8.0f / rate;
 		if (prevHead != -1 && items[prevHead]->used) {
 			items[head]->tRelease = items[prevHead]->tRelease + delay;
 		}
@@ -69,10 +70,10 @@ void NetQueue::insert(float time,
 	nextTx = items[head]->tRelease;
 }
 
-bool NetQueue::extract(float time, 
-	                   void *rtpPacket,   
+bool NetQueue::extract(float time,
+	                   void *rtpPacket,
 					   unsigned int &ssrc,
-					   int& size, 
+					   int& size,
                        unsigned short& seqNr,
                        bool& isCe) {
 	if (items[tail]->used == false) {
@@ -122,7 +123,7 @@ bool NetQueue::extract(float time,
 int NetQueue::sizeOfQueue() {
 	int size = 0;
 	for (int n=0; n < NetQueueSize; n++) {
-		if (items[n]->used)  
+		if (items[n]->used)
 			size += items[n]->size;
 	}
 	return size;

@@ -38,7 +38,7 @@ The receiver side schematic is according to figure 2 below
                        |                   +----------->+  Rear  camera   |
                        |                   |            |  decode/render  |
                        +-------------------+            +-----------------+
-    Figure 2                   
+    Figure 2
 
 ## Start streaming
 The sender side is started with he script <br>
