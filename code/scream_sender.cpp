@@ -923,7 +923,7 @@ int main(int argc, char* argv[]) {
 			}
 			continue;
 		}
-		if (strstr(argv[ix], "-hysteresis")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-hysteresis")) {
 			hysteresis = atof(argv[ix + 1]);
 			ix += 2;
 			if (hysteresis < 0.0f || hysteresis > 0.2f) {
