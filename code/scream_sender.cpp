@@ -95,6 +95,8 @@ RtpQueue *rtpQueue = 0;
 
 const char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
+int LOCAL_PORT = 0;
+bool isreverse = false;
 
 int SIERRA_PYTHON_PORT = 35000;
 
@@ -515,13 +517,8 @@ void *sierraPythonThread(void *arg) {
 }
 
 int setup() {
-	outgoing_rtp_addr.sin_family = AF_INET;
-	inet_aton(DECODER_IP, (in_addr*)&outgoing_rtp_addr.sin_addr.s_addr);
-	outgoing_rtp_addr.sin_port = htons(DECODER_PORT);
-	addrlen_outgoing_rtp = sizeof(outgoing_rtp_addr);
-
 	incoming_rtcp_addr.sin_family = AF_INET;
-	incoming_rtcp_addr.sin_port = htons(0);
+	incoming_rtcp_addr.sin_port = htons(LOCAL_PORT);
 	incoming_rtcp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	if ((fd_outgoing_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -542,16 +539,35 @@ int setup() {
 		return 0;
 	}
 
-	socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
-	if (getsockname(fd_outgoing_rtp, (struct sockaddr *)&incoming_rtcp_addr, &addrlen_incoming_rtcp) ||
-	  addrlen_incoming_rtcp > sizeof(incoming_rtcp_addr) ||
-	  incoming_rtcp_addr.sin_family != AF_INET) {
-		perror("cannot get local ephemeral port");
-		return 0;
+	if (!isreverse) {
+		socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
+		if (getsockname(fd_outgoing_rtp, (struct sockaddr *)&incoming_rtcp_addr, &addrlen_incoming_rtcp) ||
+		  addrlen_incoming_rtcp > sizeof(incoming_rtcp_addr) ||
+		  incoming_rtcp_addr.sin_family != AF_INET) {
+			perror("cannot get local ephemeral port");
+			return 0;
+		}
+		LOCAL_PORT = ntohs(incoming_rtcp_addr.sin_port);
 	}
 
 	if (!pushTraffic)
-		cerr << "Listen on port " << ntohs(incoming_rtcp_addr.sin_port) << " to receive RTCP from decoder" << endl;
+		cerr << "Listen on port " << LOCAL_PORT << " to receive RTCP from decoder" << endl;
+
+	if (isreverse) {
+		addrlen_outgoing_rtp = sizeof(outgoing_rtp_addr);
+		if (recvfrom(fd_outgoing_rtp, /* dummy */ buf_rtcp, BUFSIZE, 0, (struct sockaddr *)&outgoing_rtp_addr, &addrlen_outgoing_rtp) < 0 ||
+		  addrlen_outgoing_rtp > sizeof(outgoing_rtp_addr) ||
+		  outgoing_rtp_addr.sin_family != AF_INET) {
+			perror("error while waiting for initial reverse mode packet");
+			return 0;
+		}
+		cerr << "Connection from " << inet_ntoa(outgoing_rtp_addr.sin_addr) << ":" << ntohs(outgoing_rtp_addr.sin_port) << endl;
+	} else {
+		outgoing_rtp_addr.sin_family = AF_INET;
+		inet_aton(DECODER_IP, (in_addr*)&outgoing_rtp_addr.sin_addr.s_addr);
+		outgoing_rtp_addr.sin_port = htons(DECODER_PORT);
+	}
+	addrlen_outgoing_rtp = sizeof(outgoing_rtp_addr);
 
 	if (sierraLog) {
 		sierra_python_addr.sin_family = AF_INET;
@@ -718,6 +734,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -microburstinterval v    microburst interval [ms] for packet pacing (default 2ms)" << endl;
 		cerr << "     -hysteresis value        inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+		cerr << "     -reverse                 use local port and receive a packet before sending" << endl;
 		/* note: -sierralog is undocumented */
 		exit(-1);
 	}
@@ -915,6 +932,11 @@ int main(int argc, char* argv[]) {
 			}
 			continue;
 		}
+		if (strstr(argv[ix], "-reverse")) {
+			isreverse = true;
+			ix++;
+			continue;
+		}
 		cerr << "unexpected arg " << argv[ix] << endl;
 		exit(0);
 	}
@@ -932,8 +954,13 @@ int main(int argc, char* argv[]) {
 	}
 	if (minRate > initRate)
 		initRate = minRate;
-	DECODER_IP = argv[ix];ix++;
-	DECODER_PORT = atoi(argv[ix]);ix++;
+	if (isreverse) {
+		LOCAL_PORT = atoi(argv[ix]);ix++;
+	} else {
+		DECODER_IP = argv[ix];ix++;
+		DECODER_PORT = atoi(argv[ix]);ix++;
+		LOCAL_PORT = 0;
+	}
 
 	if (setup() == 0)
 		return 0;
