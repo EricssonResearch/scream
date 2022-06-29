@@ -742,8 +742,8 @@ int main(int argc, char* argv[]) {
 	bool verbose = false;
 	char *logFile = 0;
 	/* First find options */
-	while (strstr(argv[ix], "-")) {
-		if (strstr(argv[ix], "-ect")) {
+	while (argc > ix && strstr(argv[ix], "-")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-ect")) {
 			ect = atoi(argv[ix + 1]);
 			ix += 2;
 			if (!(ect == -1 || ect == 0 || ect == 1 || ect == 3)) {
@@ -753,60 +753,60 @@ int main(int argc, char* argv[]) {
 			}
 			continue;
 		}
-		if (strstr(argv[ix], "-time")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-time")) {
 			runTime = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-scale")) {
+		if (argc> (ix + 1) && strstr(argv[ix], "-scale")) {
 			scaleFactor = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-dscale")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-dscale")) {
 			dscale = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-delaytarget")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-delaytarget")) {
 			delayTarget = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
 
-		if (strstr(argv[ix], "-paceheadroom")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-paceheadroom")) {
 			packetPacingHeadroom = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
 
-		if (strstr(argv[ix], "-txqueuesizefactor")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-txqueuesizefactor")) {
 			txQueueSizeFactor = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-queuedelayguard")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-queuedelayguard")) {
 			queueDelayGuard = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-mtu")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-mtu")) {
 			mtu = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-fixedrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-fixedrate")) {
 			fixedRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-burst")) {
+		if (argc > (ix + 2) && strstr(argv[ix], "-burst")) {
 			burstTime = atof(argv[ix + 1]);
 			burstSleep = atof(argv[ix + 2]);
 			ix += 3;
 			continue;
 		}
-		if (strstr(argv[ix], "-key")) {
+		if (argc > (ix + 2) && strstr(argv[ix], "-key")) {
 			isKeyFrame = true;
 			keyFrameInterval = atof(argv[ix + 1]);
 			keyFrameSize = atof(argv[ix + 2]);
@@ -818,37 +818,37 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
-		if (strstr(argv[ix], "-fps")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-fps")) {
 			FPS = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-rand")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-rand")) {
 			randRate = atof(argv[ix + 1]) / 100.0;
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-initrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-initrate")) {
 			initRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-minrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-minrate")) {
 			minRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-maxrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-maxrate")) {
 			maxRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-rateincrease")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-rateincrease")) {
 			rateIncrease = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-ratescale")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-ratescale")) {
 			rateScale = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
@@ -863,7 +863,7 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
-		if (strstr(argv[ix], "-log")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-log")) {
 			logFile = argv[ix + 1];
 			ix += 2;
 			continue;
@@ -903,17 +903,17 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
-		if (strstr(argv[ix], "-if")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-if")) {
 			ifname = argv[ix + 1];
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-periodicdropinterval")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-periodicdropinterval")) {
 			periodicRateDropInterval = (int)(atof(argv[ix + 1])*10.0f);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-microburstinterval")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-microburstinterval")) {
 			minPaceInterval = 0.001*(atof(argv[ix + 1]));
 			minPaceIntervalUs = (int)(minPaceInterval*1e6f);
 			ix += 2;
@@ -954,6 +954,10 @@ int main(int argc, char* argv[]) {
 	}
 	if (minRate > initRate)
 		initRate = minRate;
+	if (argc != (ix + (isreverse ? 1 : 2))) {
+		cerr << "Insufficient parameters." << endl;
+		exit(-1);
+	}
 	if (isreverse) {
 		LOCAL_PORT = atoi(argv[ix]);ix++;
 	} else {
