@@ -75,7 +75,7 @@ uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
 int mtu = 1200;
 float runTime = -1.0;
-bool stopThread = false;
+volatile sig_atomic_t stopThread = 0;
 pthread_t create_rtp_thread = 0;
 pthread_t transmit_rtp_thread = 0;
 pthread_t rtcp_thread = 0;
@@ -667,11 +667,9 @@ int setup() {
 
 uint32_t lastT_ntp;
 
-volatile sig_atomic_t done = 0;
-
 void stopAll(int signum)
 {
-	stopThread = true;
+	stopThread = 1;
 }
 
 int main(int argc, char* argv[]) {
@@ -994,7 +992,7 @@ int main(int argc, char* argv[]) {
 		while (!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
 			usleep(50000);
 		}
-		stopThread = true;
+		stopThread = 1;
 
 	}
 	else {
@@ -1052,7 +1050,7 @@ int main(int argc, char* argv[]) {
 			}
 			usleep(50000);
 		};
-		stopThread = true;
+		stopThread = 1;
 	}
 	usleep(500000);
 	close(fd_outgoing_rtp);
