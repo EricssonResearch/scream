@@ -311,7 +311,7 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsign
 		* stream in the first iteration, a bit unnecessary.
 		*/
 		Stream *stream = NULL;
-		uint64_t minT_ntp = ULONG_MAX;
+		uint64_t minT_ntp = UINT64_MAX;
 		for (auto it = streams.begin(); it != streams.end(); ++it) {
 			uint32_t diffT_ntp = time_ntp - (*it)->lastFeedbackT_ntp;
 			int nRtpSinceLastRtcp = (*it)->nRtpSinceLastRtcp;

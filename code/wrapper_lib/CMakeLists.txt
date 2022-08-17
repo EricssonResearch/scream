@@ -32,6 +32,3 @@ endif()
 INCLUDE_DIRECTORIES(
 ${screamIncludes}
 )
-
-
-

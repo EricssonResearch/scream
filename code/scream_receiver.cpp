@@ -1,4 +1,4 @@
-// Scream sender side wrapper
+// Scream receiver side wrapper
 #include "ScreamRx.h"
 #include "sys/socket.h"
 #include "sys/types.h"
@@ -18,8 +18,6 @@ using namespace std;
 #define ECN_CAPABLE
 #define IS_STANDARD_FEEDBACK
 
-// Scream receiver side wrapper
-
 int fd_incoming_rtp;
 // Input UDP socket, RTP packets come here and we send RTCP packets in the
 // reverse direction through this socket
@@ -29,13 +27,7 @@ ScreamRx *screamRx = 0;
 
 //int fd_local_rtp;
 
-string SENDER_IP = "192.168.0.20";
-int INCOMING_RTP_PORT = 30122;
-struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr, sender_rtcp_addr;
-struct sockaddr_in local_rtp_addr;
-
-string LOCAL_IP = "127.0.0.1";
-int LOCAL_PORT = 30124;
+struct sockaddr_in incoming_rtp_addr, outgoing_rtcp_addr;
 
 int ackDiff = -1;
 int nReportedRtpPackets = 64;
@@ -45,6 +37,27 @@ char *ifname = 0;
 int nPrint = 0;
 pthread_mutex_t lock_scream;
 double t0 = 0;
+
+#define threadsafe_cerr(str) write(2, (str), sizeof(str) - 1)
+
+static void preconnectThreadExits(void *arg) {
+	threadsafe_cerr("preconnectThread: exiting\n");
+}
+
+static void *preconnectThread(void *arg) {
+	int dummy;
+	char buf = 'X';
+
+	pthread_cleanup_push(preconnectThreadExits, NULL);
+	if (pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &dummy))
+		threadsafe_cerr("preconnectThread: error in pthread_setcanceltype\n");
+	for (;;) {
+		if (sendto(fd_incoming_rtp, &buf, 1, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr)) < 0)
+			threadsafe_cerr("preconnectThread: error in sendto\n");
+		usleep(100000); // 0.1 seconds
+	}
+	pthread_cleanup_pop(1);
+}
 
 /*
 * Time in 32 bit NTP format
@@ -85,25 +98,16 @@ void parseRtp(unsigned char* buf, uint16_t* seqNr, uint32_t* timeStamp) {
 }
 
 uint16_t lastFbSn = 0;
-uint64_t lastPunchNatT_ntp = 0;
 uint32_t SSRC = 100; // We don't bother with SSRC yet, this is for experiments only so far.
 #define KEEP_ALIVE_PKT_SIZE 1
 
 void *rtcpPeriodicThread(void *arg) {
+	threadsafe_cerr("rtcpPeriodicThread: starting\n");
+
 	unsigned char buf[BUFSIZE];
 	int rtcpSize;
 	uint32_t rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
 	for (;;) {
-		if (getTimeInNtp() - lastPunchNatT_ntp > 32768) { // 500ms in Q16
-		  /*
-		  * Send a small packet just to punch open a hole in the NAT,
-		  *  just one single byte will do.
-		  * This makes in possible to receive packets on the same port
-		  */
-			int ret = sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-			lastPunchNatT_ntp = getTimeInNtp();
-			cerr << "." << endl;
-		}
 		uint32_t time_ntp = getTimeInNtp();
 		rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
 		if (screamRx->isFeedback(time_ntp) &&
@@ -114,7 +118,6 @@ void *rtcpPeriodicThread(void *arg) {
 			pthread_mutex_unlock(&lock_scream);
 			if (isFeedback) {
 				sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-				lastPunchNatT_ntp = getTimeInNtp();
 			}
 		}
 		usleep(500);
@@ -127,38 +130,58 @@ int main(int argc, char* argv[])
 	unsigned char buf_rtcp[BUFSIZE];
 	if (argc <= 1) {
 		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2022-06-10" << endl;
-		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
-		cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
-		cerr << "     -nreported          set the number of reported RTP packets per ACK " << endl;
+		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> local_port" << endl;
+		cerr << "     -ackdiff value      set the max distance in received RTPs to send an ACK " << endl;
+		cerr << "     -nreported value    set the number of reported RTP packets per ACK " << endl;
 		cerr << "     -if name            bind to specific interface" << endl;
+		cerr << "     -reverse            use remote IP and port instead, send packets" << endl;
 		exit(-1);
 	}
 
 	int ix = 1;
+	bool isreverse = false;
 
+ redo_options:
 	if (argc > (ix + 1) && strstr(argv[ix], "-ackdiff")) {
 		ackDiff = atoi(argv[ix + 1]);
 		ix += 2;
+		goto redo_options;
 	}
 
 	if (argc > (ix + 1) && strstr(argv[ix], "-nreported")) {
 		nReportedRtpPackets = atoi(argv[ix + 1]);
 		ix += 2;
+		goto redo_options;
 	}
 
 	if (argc > (ix + 1) && strstr(argv[ix], "-if")) {
 		ifname = argv[ix + 1];
 		ix += 2;
+		goto redo_options;
 	}
 
-  if (argc > (ix + 1)) {
-	  SENDER_IP = argv[ix];
-	  INCOMING_RTP_PORT = atoi(argv[ix + 1]);
-  } else {
-    cerr << "Insufficient parameters." << endl;
-    exit(-1);
-  }
+	if (argc > (ix + 0) && strstr(argv[ix], "-reverse")) {
+		isreverse = true;
+		++ix;
+		goto redo_options;
+	}
 
+	if (argc != (ix + (isreverse ? 2 : 1))) {
+		cerr << "Insufficient parameters." << endl;
+		exit(-1);
+	}
+	int LOCAL_PORT;
+	if (isreverse) {
+		LOCAL_PORT = 0; // use random ephemeral port, determined later
+		outgoing_rtcp_addr.sin_family = AF_INET;
+		inet_aton(argv[ix], &outgoing_rtcp_addr.sin_addr);
+		int SENDER_PORT = atoi(argv[ix + 1]);
+		outgoing_rtcp_addr.sin_port = htons(SENDER_PORT);
+		cerr << "Reverse mode, contacting " << argv[ix] << ":" << SENDER_PORT << endl;
+	} else {
+		LOCAL_PORT = atoi(argv[ix]);
+		outgoing_rtcp_addr.sin_family = 0; // initialise later
+	}
 
 	struct timeval tp;
 	gettimeofday(&tp, NULL);
@@ -168,16 +191,7 @@ int main(int argc, char* argv[])
 
 	incoming_rtp_addr.sin_family = AF_INET;
 	incoming_rtp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	incoming_rtp_addr.sin_port = htons(INCOMING_RTP_PORT);
-
-	outgoing_rtcp_addr.sin_family = AF_INET;
-	inet_aton(SENDER_IP.c_str(), (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
-	outgoing_rtcp_addr.sin_port = htons(INCOMING_RTP_PORT);
-
-
-	local_rtp_addr.sin_family = AF_INET;
-	inet_aton(LOCAL_IP.c_str(), (in_addr*)&local_rtp_addr.sin_addr.s_addr);
-	local_rtp_addr.sin_port = htons(LOCAL_PORT);
+	incoming_rtp_addr.sin_port = htons(LOCAL_PORT);
 
 	if ((fd_incoming_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("cannot create socket for incoming RTP packets");
@@ -218,38 +232,38 @@ int main(int argc, char* argv[])
 		perror("bind incoming_rtp_addr failed");
 		return 0;
 	}
-	else {
-		cerr << "Listen on port " << INCOMING_RTP_PORT << " to receive RTP from sender " << endl;
+	if (isreverse) {
+		socklen_t addrlen_incoming_rtp = sizeof(incoming_rtp_addr);
+		if (getsockname(fd_incoming_rtp, (struct sockaddr *)&incoming_rtp_addr, &addrlen_incoming_rtp) ||
+		  addrlen_incoming_rtp > sizeof(incoming_rtp_addr) ||
+		  incoming_rtp_addr.sin_family != AF_INET) {
+			perror("cannot get local ephemeral port");
+			return 0;
+		}
+		LOCAL_PORT = ntohs(incoming_rtp_addr.sin_port);
 	}
-
-	struct sockaddr_in sender_rtp_addr;
-	socklen_t addrlen_sender_rtp_addr = sizeof(sender_rtp_addr);
+	cerr << "Listen on port " << LOCAL_PORT << " to receive RTP from sender" << endl;
 
 	int recvlen;
 
 	uint32_t last_received_time_ntp = 0;
 	uint32_t receivedRtp = 0;
 
-	/*
-	* Send a small packet just to punmax distance in received RTPs to send an ACKch open a hole in the NAT,
-	*  just one single byte will do.
-	* This makes in possible to receive packets on the same port
-	*/
-	sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-	lastPunchNatT_ntp = getTimeInNtp();
-
-	pthread_t rtcp_thread;
-	pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...");
-
 	uint16_t lastSn = 0;
 	pthread_mutex_init(&lock_scream, NULL);
 
+	bool isconnected = false;
+	pthread_t preconnect_thread;
+
+	if (isreverse) {
+		if (pthread_create(&preconnect_thread, NULL, preconnectThread, NULL)) {
+			perror("cannot start preconnect thread");
+			return 0;
+		}
+	}
 
 #define MAX_CTRL_SIZE 8192
 #define MAX_BUF_SIZE 65536
-
-	int *ecnptr;
-	unsigned char received_ecn;
 
 	struct msghdr rcv_msg;
 	struct iovec rcv_iov[1];
@@ -260,8 +274,6 @@ int main(int argc, char* argv[])
 	rcv_iov[0].iov_base = rcv_buf;
 	rcv_iov[0].iov_len = MAX_BUF_SIZE;
 
-	rcv_msg.msg_name = NULL;	// Socket is connected
-	rcv_msg.msg_namelen = 0;
 	rcv_msg.msg_iov = rcv_iov;
 	rcv_msg.msg_iovlen = 1;
 	rcv_msg.msg_control = rcv_ctrl_data;
@@ -272,35 +284,70 @@ int main(int argc, char* argv[])
 		/*
 		* Wait for incoing RTP packet, this call can be blocking
 		*/
+		struct sockaddr_in sender_rtp_addr;
+		socklen_t addrlen_sender_rtp_addr = sizeof(sender_rtp_addr);
+		uint32_t time_ntp;
 
 		/*
 		* Extract ECN bits
 		*/
 		unsigned char received_ecn;
 #ifdef ECN_CAPABLE
-		int recvlen = recvmsg(fd_incoming_rtp, &rcv_msg, 0);
+		rcv_msg.msg_name = (struct sockaddr *)&sender_rtp_addr;
+		rcv_msg.msg_namelen = addrlen_sender_rtp_addr;
+		recvlen = recvmsg(fd_incoming_rtp, &rcv_msg, 0);
 		if (recvlen == -1) {
 			perror("recvmsg()");
 			close(fd_incoming_rtp);
 			return EXIT_FAILURE;
 		}
-		else {
-			struct cmsghdr *cmptr;
-			int *ecnptr;
-			for (cmptr = CMSG_FIRSTHDR(&rcv_msg);
-				cmptr != NULL;
-				cmptr = CMSG_NXTHDR(&rcv_msg, cmptr)) {
-				if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS) {
-					ecnptr = (int*)CMSG_DATA(cmptr);
-					received_ecn = *ecnptr;
-				}
+		time_ntp = getTimeInNtp();
+		addrlen_sender_rtp_addr = rcv_msg.msg_namelen;
+
+		struct cmsghdr *cmptr;
+		int *ecnptr;
+		for (cmptr = CMSG_FIRSTHDR(&rcv_msg); cmptr != NULL; cmptr = CMSG_NXTHDR(&rcv_msg, cmptr)) {
+			if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS) {
+				ecnptr = (int*)CMSG_DATA(cmptr);
+				received_ecn = *ecnptr;
 			}
-			memcpy(buf, rcv_msg.msg_iov[0].iov_base, recvlen);
 		}
+		memcpy(buf, rcv_msg.msg_iov[0].iov_base, recvlen);
 #else
 		recvlen = recvfrom(fd_incoming_rtp, buf, BUFSIZE, 0, (struct sockaddr *)&sender_rtp_addr, &addrlen_sender_rtp_addr);
+		time_ntp = getTimeInNtp();
 #endif
-		uint32_t time_ntp = getTimeInNtp();
+		if (addrlen_sender_rtp_addr != sizeof(sender_rtp_addr) ||
+		    sender_rtp_addr.sin_family != AF_INET) {
+			cerr << "could not get packet sender address" << endl;
+			close(fd_incoming_rtp);
+			return EXIT_FAILURE;
+		}
+		if (!isconnected) {
+			/* first packet received */
+			if (isreverse) {
+				if (pthread_cancel(preconnect_thread))
+					perror("cannot stop preconnect thread");
+			} else {
+				memcpy(&outgoing_rtcp_addr, &sender_rtp_addr, sizeof(sender_rtp_addr));
+				cerr << "Connection from " << inet_ntoa(outgoing_rtcp_addr.sin_addr) << ":" << ntohs(outgoing_rtcp_addr.sin_port) << endl;
+			}
+			/* this needs outgoing_rtcp_addr and thus may only be started now */
+			pthread_t rtcp_thread;
+			if (pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...")) {
+				perror("cannot start Periodic RTCP thread...");
+				return 0;
+			}
+
+			isconnected = true;
+		}
+
+		if (outgoing_rtcp_addr.sin_family == 0) {
+		} else if (sender_rtp_addr.sin_addr.s_addr != outgoing_rtcp_addr.sin_addr.s_addr ||
+		    sender_rtp_addr.sin_port != outgoing_rtcp_addr.sin_port) {
+			cerr << "skipped packet from " << inet_ntoa(sender_rtp_addr.sin_addr) << ":" << ntohs(sender_rtp_addr.sin_port) << endl;
+			continue;
+		}
 		if (recvlen > 1) {
 			if (buf[1] == 0x7F) {
 				// Packet contains statistics
@@ -349,7 +396,6 @@ int main(int argc, char* argv[])
 					pthread_mutex_unlock(&lock_scream);
 					if (isFeedback) {
 						sendto(fd_incoming_rtp, buf_rtcp, rtcpSize, 0, (struct sockaddr *)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-						lastPunchNatT_ntp = getTimeInNtp();
 					}
 				}
 			}

@@ -3,9 +3,9 @@
 # The receiver side processing is illustrated below
 # The SCReAM receiver application receives multiplexed RTP media on port $2
 #  and transits RTCP feedback over the same port
-# The received RTP media is demultiplexed and forwarded on local 
+# The received RTP media is demultiplexed and forwarded on local
 #  ports 30112, 30114, 31016 and 30118
-# The video decoding assumes an NVIDIA Jetson Nano or Xavier NX platform, change to applicable 
+# The video decoding assumes an NVIDIA Jetson Nano or Xavier NX platform, change to applicable
 #  HW decoding, depending on platform
 #
 #                     +----------------------+               +--------------------+
@@ -26,8 +26,7 @@
 
 
 ## /dev/video0
-gst-launch-1.0 udpsrc port=30112 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! rtpjitterbuffer latency=100 ! rtph264depay ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv !  nveglglessink window-x=640 window-y=360 max-lateness=2000000 sync=true & 
+gst-launch-1.0 udpsrc port=30112 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! rtpjitterbuffer latency=100 ! rtph264depay ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv !  nveglglessink window-x=640 window-y=360 max-lateness=2000000 sync=true &
 
 ## /dev/video1
 gst-launch-1.0 udpsrc port=30114 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! rtpjitterbuffer latency=100 ! rtph264depay ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! nveglglessink window-x=960 window-y=0 sync=true &
-

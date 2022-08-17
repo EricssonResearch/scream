@@ -75,7 +75,7 @@ uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
 int mtu = 1200;
 float runTime = -1.0;
-bool stopThread = false;
+volatile sig_atomic_t stopThread = 0;
 pthread_t create_rtp_thread = 0;
 pthread_t transmit_rtp_thread = 0;
 pthread_t rtcp_thread = 0;
@@ -95,13 +95,13 @@ RtpQueue *rtpQueue = 0;
 
 const char *DECODER_IP = "192.168.0.21";
 int DECODER_PORT = 30110;
-const char *DUMMY_IP = "217.10.68.152"; // Dest address just to punch hole in NAT
+int LOCAL_PORT = 0;
+bool isreverse = false;
 
 int SIERRA_PYTHON_PORT = 35000;
 
 struct sockaddr_in outgoing_rtp_addr;
 struct sockaddr_in incoming_rtcp_addr;
-struct sockaddr_in dummy_rtcp_addr;
 struct sockaddr_in sierra_python_addr;
 
 unsigned char buf_rtcp[BUFSIZE];     /* receive buffer RTCP packets*/
@@ -109,11 +109,9 @@ unsigned char buf_rtcp[BUFSIZE];     /* receive buffer RTCP packets*/
 unsigned char buf_sierra[BUFSIZE];     /* receive buffer RTCP packets*/
 
 socklen_t addrlen_outgoing_rtp;
-socklen_t addrlen_dummy_rtcp;
 uint32_t lastLogT_ntp = 0;
 uint32_t lastLogTv_ntp = 0;
 uint32_t tD_ntp = 0;//(INT64_C(1) << 32)*1000 - 5000000;
-socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
 socklen_t addrlen_sierra_python_addr = sizeof(sierra_python_addr);
 pthread_mutex_t lock_scream;
 pthread_mutex_t lock_rtp_queue;
@@ -444,6 +442,7 @@ void *readRtcpThread(void *arg) {
 	* Wait for RTCP packets from receiver
 	*/
 	for (;;) {
+		socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
 		int recvlen = recvfrom(fd_outgoing_rtp, buf_rtcp, BUFSIZE, 0, (struct sockaddr *)&incoming_rtcp_addr, &addrlen_incoming_rtcp);
 		if (stopThread)
 			return NULL;
@@ -518,18 +517,9 @@ void *sierraPythonThread(void *arg) {
 }
 
 int setup() {
-	outgoing_rtp_addr.sin_family = AF_INET;
-	inet_aton(DECODER_IP, (in_addr*)&outgoing_rtp_addr.sin_addr.s_addr);
-	outgoing_rtp_addr.sin_port = htons(DECODER_PORT);
-	addrlen_outgoing_rtp = sizeof(outgoing_rtp_addr);
-
 	incoming_rtcp_addr.sin_family = AF_INET;
-	incoming_rtcp_addr.sin_port = htons(DECODER_PORT);
+	incoming_rtcp_addr.sin_port = htons(LOCAL_PORT);
 	incoming_rtcp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	dummy_rtcp_addr.sin_family = AF_INET;
-	inet_aton(DUMMY_IP, (in_addr*)&dummy_rtcp_addr.sin_addr.s_addr);
-	dummy_rtcp_addr.sin_port = htons(DECODER_PORT);
 
 	if ((fd_outgoing_rtp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("cannot create socket");
@@ -545,13 +535,39 @@ int setup() {
 	}
 
 	if (bind(fd_outgoing_rtp, (struct sockaddr *)&incoming_rtcp_addr, sizeof(incoming_rtcp_addr)) < 0) {
-		perror("bind outgoing_rtp_addr failed");
+		perror("bind incoming_rtcp_addr failed");
 		return 0;
 	}
-	else {
-		if (!pushTraffic)
-			cerr << "Listen on port " << DECODER_PORT << " to receive RTCP from decoder " << endl;
+
+	if (!isreverse) {
+		socklen_t addrlen_incoming_rtcp = sizeof(incoming_rtcp_addr);
+		if (getsockname(fd_outgoing_rtp, (struct sockaddr *)&incoming_rtcp_addr, &addrlen_incoming_rtcp) ||
+		  addrlen_incoming_rtcp > sizeof(incoming_rtcp_addr) ||
+		  incoming_rtcp_addr.sin_family != AF_INET) {
+			perror("cannot get local ephemeral port");
+			return 0;
+		}
+		LOCAL_PORT = ntohs(incoming_rtcp_addr.sin_port);
 	}
+
+	if (!pushTraffic)
+		cerr << "Listen on port " << LOCAL_PORT << " to receive RTCP from decoder" << endl;
+
+	if (isreverse) {
+		addrlen_outgoing_rtp = sizeof(outgoing_rtp_addr);
+		if (recvfrom(fd_outgoing_rtp, /* dummy */ buf_rtcp, BUFSIZE, 0, (struct sockaddr *)&outgoing_rtp_addr, &addrlen_outgoing_rtp) < 0 ||
+		  addrlen_outgoing_rtp > sizeof(outgoing_rtp_addr) ||
+		  outgoing_rtp_addr.sin_family != AF_INET) {
+			perror("error while waiting for initial reverse mode packet");
+			return 0;
+		}
+		cerr << "Connection from " << inet_ntoa(outgoing_rtp_addr.sin_addr) << ":" << ntohs(outgoing_rtp_addr.sin_port) << endl;
+	} else {
+		outgoing_rtp_addr.sin_family = AF_INET;
+		inet_aton(DECODER_IP, (in_addr*)&outgoing_rtp_addr.sin_addr.s_addr);
+		outgoing_rtp_addr.sin_port = htons(DECODER_PORT);
+	}
+	addrlen_outgoing_rtp = sizeof(outgoing_rtp_addr);
 
 	if (sierraLog) {
 		sierra_python_addr.sin_family = AF_INET;
@@ -651,11 +667,9 @@ int setup() {
 
 uint32_t lastT_ntp;
 
-volatile sig_atomic_t done = 0;
-
 void stopAll(int signum)
 {
-	stopThread = true;
+	stopThread = 1;
 }
 
 int main(int argc, char* argv[]) {
@@ -666,8 +680,8 @@ int main(int argc, char* argv[]) {
 	lastT_ntp = getTimeInNtp();
 
 	/*
-	* Parse command line
-	*/
+	 * Parse command line
+	 */
 	if (argc <= 1) {
 		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2022-06-10" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
@@ -714,81 +728,83 @@ int main(int argc, char* argv[]) {
 		cerr << "     -append                  append logfile" << endl;
 		cerr << "     -itemlist                add item list in beginning of log file" << endl;
 		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
-		cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
-		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
-		cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
+		cerr << "     -periodicdropinterval v  interval [s] between periodic drops in rate (default 60s)" << endl;
+		cerr << "     -microburstinterval v    microburst interval [ms] for packet pacing (default 2ms)" << endl;
+		cerr << "     -hysteresis value        inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+		cerr << "     -reverse                 use local port and receive a packet before sending" << endl;
+		/* note: -sierralog is undocumented */
 		exit(-1);
 	}
 	int ix = 1;
 	bool verbose = false;
 	char *logFile = 0;
 	/* First find options */
-	while (strstr(argv[ix], "-")) {
-		if (strstr(argv[ix], "-ect")) {
+	while (argc > ix && strstr(argv[ix], "-")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-ect")) {
 			ect = atoi(argv[ix + 1]);
 			ix += 2;
-			if (!(ect == 1 || ect == 0 || ect == 1 || ect == 3)) {
+			if (!(ect == -1 || ect == 0 || ect == 1 || ect == 3)) {
 				cerr << "ect must be -1, 0, 1 or 3 " << endl;
 				exit(0);
 
 			}
 			continue;
 		}
-		if (strstr(argv[ix], "-time")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-time")) {
 			runTime = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-scale")) {
+		if (argc> (ix + 1) && strstr(argv[ix], "-scale")) {
 			scaleFactor = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-dscale")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-dscale")) {
 			dscale = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-delaytarget")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-delaytarget")) {
 			delayTarget = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
 
-		if (strstr(argv[ix], "-paceheadroom")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-paceheadroom")) {
 			packetPacingHeadroom = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
 
-		if (strstr(argv[ix], "-txqueuesizefactor")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-txqueuesizefactor")) {
 			txQueueSizeFactor = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-queuedelayguard")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-queuedelayguard")) {
 			queueDelayGuard = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-mtu")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-mtu")) {
 			mtu = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-fixedrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-fixedrate")) {
 			fixedRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-burst")) {
+		if (argc > (ix + 2) && strstr(argv[ix], "-burst")) {
 			burstTime = atof(argv[ix + 1]);
 			burstSleep = atof(argv[ix + 2]);
 			ix += 3;
 			continue;
 		}
-		if (strstr(argv[ix], "-key")) {
+		if (argc > (ix + 2) && strstr(argv[ix], "-key")) {
 			isKeyFrame = true;
 			keyFrameInterval = atof(argv[ix + 1]);
 			keyFrameSize = atof(argv[ix + 2]);
@@ -800,37 +816,37 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
-		if (strstr(argv[ix], "-fps")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-fps")) {
 			FPS = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-rand")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-rand")) {
 			randRate = atof(argv[ix + 1]) / 100.0;
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-initrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-initrate")) {
 			initRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-minrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-minrate")) {
 			minRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-maxrate")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-maxrate")) {
 			maxRate = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-rateincrease")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-rateincrease")) {
 			rateIncrease = atoi(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-ratescale")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-ratescale")) {
 			rateScale = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
@@ -845,7 +861,7 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
-		if (strstr(argv[ix], "-log")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-log")) {
 			logFile = argv[ix + 1];
 			ix += 2;
 			continue;
@@ -885,17 +901,17 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
-		if (strstr(argv[ix], "-if")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-if")) {
 			ifname = argv[ix + 1];
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-periodicdropinterval")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-periodicdropinterval")) {
 			periodicRateDropInterval = (int)(atof(argv[ix + 1])*10.0f);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-microburstinterval")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-microburstinterval")) {
 			minPaceInterval = 0.001*(atof(argv[ix + 1]));
 			minPaceIntervalUs = (int)(minPaceInterval*1e6f);
 			ix += 2;
@@ -905,13 +921,18 @@ int main(int argc, char* argv[]) {
 			}
 			continue;
 		}
-		if (strstr(argv[ix], "-hysteresis")) {
+		if (argc > (ix + 1) && strstr(argv[ix], "-hysteresis")) {
 			hysteresis = atof(argv[ix + 1]);
 			ix += 2;
 			if (hysteresis < 0.0f || hysteresis > 0.2f) {
 				cerr << "hysteresis must be in range 0.0...0.2" << endl;
 				exit(0);
 			}
+			continue;
+		}
+		if (strstr(argv[ix], "-reverse")) {
+			isreverse = true;
+			ix++;
 			continue;
 		}
 		cerr << "unexpected arg " << argv[ix] << endl;
@@ -931,8 +952,17 @@ int main(int argc, char* argv[]) {
 	}
 	if (minRate > initRate)
 		initRate = minRate;
-	DECODER_IP = argv[ix];ix++;
-	DECODER_PORT = atoi(argv[ix]);ix++;
+	if (argc != (ix + (isreverse ? 1 : 2))) {
+		cerr << "Insufficient parameters." << endl;
+		exit(-1);
+	}
+	if (isreverse) {
+		LOCAL_PORT = atoi(argv[ix]);ix++;
+	} else {
+		DECODER_IP = argv[ix];ix++;
+		DECODER_PORT = atoi(argv[ix]);ix++;
+		LOCAL_PORT = 0;
+	}
 
 	if (setup() == 0)
 		return 0;
@@ -962,7 +992,7 @@ int main(int argc, char* argv[]) {
 		while (!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
 			usleep(50000);
 		}
-		stopThread = true;
+		stopThread = 1;
 
 	}
 	else {
@@ -1020,7 +1050,7 @@ int main(int argc, char* argv[]) {
 			}
 			usleep(50000);
 		};
-		stopThread = true;
+		stopThread = 1;
 	}
 	usleep(500000);
 	close(fd_outgoing_rtp);

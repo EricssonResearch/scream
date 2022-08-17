@@ -230,7 +230,7 @@ int txbw_plugin_main(int argc, char* argv[])
                cerr << "wrong arg " << argv[ix] << " index " <<  ix  << endl;
                exit(0);
            }
-    		if (strstr(argv[ix], "-time")) {
+		if (strstr(argv[ix], "-time")) {
 			runTime = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
@@ -241,7 +241,8 @@ int txbw_plugin_main(int argc, char* argv[])
 			ix += 2;
 			continue;
 		}
-        if (strstr(argv[ix], "-numframes")) {
+
+		if (strstr(argv[ix], "-numframes")) {
 			numframes = atoll(argv[ix + 1]);
 			ix += 2;
 			continue;

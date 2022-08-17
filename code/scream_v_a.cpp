@@ -24,7 +24,7 @@ int swprio = -1;
 #define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
-* 1 = audio, 2 = video, 3 = 1+2, 4 = 
+* 1 = audio, 2 = video, 3 = 1+2, 4 =
 */
 const int mode = 0x01;
 const double timeBase = 10000.0;
@@ -195,7 +195,7 @@ int main(int argc, char* argv[])
                 netQueueRate->rate = 20000e3;
             }
         }
-        
+
         if (time > 30 && swprio == 0) {
             swprio = 1;
             screamTx->setTargetPriority(10, 0.2);
@@ -209,7 +209,7 @@ int main(int argc, char* argv[])
 
         if (false && time > 50)
             netQueueRate->rate = 8e6;
-           
+
         /*
 
             if ((time >= 60) && (time < 80) && isChRate)
@@ -231,4 +231,3 @@ int main(int argc, char* argv[])
 
     return 0;
 }
-
