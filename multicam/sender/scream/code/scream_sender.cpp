@@ -644,7 +644,7 @@ void processRtp(unsigned char *buf_rtp, int recvlen, int ix) {
         pthread_mutex_unlock(&lock_rtp_queue);
 
         pthread_mutex_lock(&lock_scream);
-        screamTx->newMediaFrame(getTimeInNtp(), in_ssrc[ix], recvlen);
+        screamTx->newMediaFrame(getTimeInNtp(), in_ssrc[ix], recvlen, false);
         pthread_mutex_unlock(&lock_scream);
     }
 }
