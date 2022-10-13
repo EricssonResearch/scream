@@ -96,18 +96,24 @@ extern "C" {
 	class ScreamTx {
 	public:
 		/*
-		* Constructor, see constant definitions above for an explanation of parameters
+		* Constructor
+		* lossBeta sets how the congestion window should be scaled when packet loss is detected
+		*  lossBeta = 1.0 means that packet losses are ignored by the congestion control
+		* ecnCeBeta sets how the congestion window should be scaled when ECN-CE is detected
+		*  this applies only to classic ECN
+		* queueDelayTargetMin sets the queue delay targer
 		* cwnd > 0 sets a different initial congestion window, for example it can be set to
 		*  initialrate/8*rtt
-		* cautiousPacing is set in the range [0.0..1.0]. A higher values restricts the transmission rate of large key frames
-		*  which can be beneficial if it is evident that large key frames cause packet drops, for instance due to
-		*  reduced buffer size in wireless modems.
-		*  This is however at the potential cost of an overall increased transmission delay also when links are uncongested
-		*  as the RTP packets are more likely to be buffered up on the sender side when cautiousPacing is set close to 1.0.
-		* lossBeta == 1.0 means that packet losses are ignored by the congestion control
-		* bytesInFlightHistSize can be set to a larger value than 5(s) for enhanced robustness to media coders that are idle
-		*  for long periods
+		* packetPacingHeadroom sets how much faster the video frames are transmitted, relative to the target bitrate
+		* bytesInFlightHistSize can be set to a larger value than 5(s) for enhanced robustness to media coders that 
+		*  are idle for long periods
 		* isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
+		* openWindow = true removes the congestion window limitation, this feature may be useful in combination with L4S
+		* enableClockDriftCompensation = true compensates for the case where the endpoints clocks drift relative to one 
+		*  another. Note though that clock drift is not always montonous IRL
+		* maxAdaptivePacingRateScale > 1.0 enables adaptive scaling of the pacing rate to transmit large frames faster. 
+		*  This feature is mostly relevant with L4S and has the potential to reduce unecessary queue build-up in the 
+		*  RTP queue, but can also potentially increase network queue build-up 
 		*/
 		ScreamTx(float lossBeta = kLossBeta,
 			float ecnCeBeta = kEcnCeBeta,
@@ -120,7 +126,8 @@ extern "C" {
 			int bytesInFlightHistSize = 5,
 			bool isL4s = false,
 			bool openWindow = false,
-			bool enableClockDriftCompensation = false);
+			bool enableClockDriftCompensation = false,
+			float maxAdaptivePacingRateScale = 1.0); 
 
 		~ScreamTx();
 
@@ -130,8 +137,17 @@ extern "C" {
 		*  where 1.0 denotes the highest priority.
 		* It is recommended that at least one stream has prioritity 1.0.
 		* Bitrates are specified in bps
+		* rampUpSpeed sets how fast the bitrate can be increased [bps/s]
+		* rampUpScale sets how fast the bitrate can be increased relative to the current target bitrate
+		* maxRtpQueueDelay sets how long RTP packets can be held in buffer before entire buffer is cleared
+		* txQueueSizeFactor and queueDelayGuard sets the sensitivity to delay related congestion 
+		* lossEventRateScale sets how the congestion window should be scaled when packet loss is detected
+		* ecnCeEventRateScale sets how the congestion window should be scaled when ECN CE is detected
+		*  this applies only to classic ECN
 		* isAdaptiveTargetRateScale compensates for deviations from target bitrates
-		* See constant definitions above for an explanation of other default parameters
+		* hysteresis sets how much the target rate should change for the getTargetBitrate() function to 
+		*  return a changed value. hysteresis = 0.1 sets a +10%/-5% hysteresis. 
+		*  This can benefit video encoders that become confused by too frequent rate updates
 		*/
 		void registerNewStream(RtpQueueIface *rtpQueue,
 			uint32_t ssrc,
@@ -147,7 +163,7 @@ extern "C" {
 			float lossEventRateScale = kLossEventRateScale,
 			float ecnCeEventRateScale = kEcnCeEventRateScale,
 			bool isAdaptiveTargetRateScale = true,
-		  float hysteresis = 0.0);
+		    float hysteresis = 0.0);
 
 		/*
 		 * Updates the min and max bitrates for an existing stream
@@ -165,7 +181,7 @@ extern "C" {
 		* Call this function for each new video frame
 		*  Note : isOkToTransmit should be called after newMediaFrame
 		*/
-		void newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp);
+		void newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, bool isMarker);
 
 		/*
 		* Function determines if an RTP packet with SSRC can be transmitted
@@ -409,6 +425,8 @@ extern "C" {
 
 			float getTargetBitrate();
 
+			void newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMarker);
+
 			void updateRate(uint32_t time_ntp);
 
 			void updateTargetBitrateI(float br);
@@ -501,6 +519,11 @@ extern "C" {
 			int txPacketsPtr;
 			bool lossEpoch;
             uint64_t cleared;
+
+			int frameSize;
+			int frameSizeAcc;
+			float frameSizeAvg;
+			float adaptivePacingRateScale;
 		};
 
 		/*
@@ -721,6 +744,7 @@ extern "C" {
 		uint32_t paceInterval_ntp;
 		float paceInterval;
 		float rateTransmittedAvg;
+		float maxAdaptivePacingRateScale;
 
 		/*
 		* Update control variables
@@ -749,6 +773,7 @@ extern "C" {
 		*/
 		Stream *streams[kMaxStreams];
 		int nStreams;
+		bool isNewFrame; // True if new frame received
 
 		/*
 		* Statistics

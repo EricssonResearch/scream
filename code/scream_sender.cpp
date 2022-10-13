@@ -425,7 +425,7 @@ void *createRtpThread(void *arg) {
 
 				pthread_mutex_lock(&lock_scream);
 				time_ntp = getTimeInNtp();
-				screamTx->newMediaFrame(time_ntp, SSRC, recvlen);
+				screamTx->newMediaFrame(time_ntp, SSRC, recvlen, false);
 				pthread_mutex_unlock(&lock_scream);
 			}
 			seqNr++;

@@ -72,7 +72,10 @@ static const uint32_t kMaxClockdriftCompensation = 33;
 
 // Time stamp scale
 static const int kTimeStampAtoScale = 1024;
-static const float ntp2SecScaleFactor = 1.0 / 65536;
+static const float ntp2SecScaleFactor = 1.0f / 65536;
+
+// For computation of adaptivePacingRate
+static const float kFrameSizeAvgAlpha = 1.0f / 32;
 
 ScreamTx::ScreamTx(float lossBeta_,
 	float ecnCeBeta_,
@@ -85,7 +88,8 @@ ScreamTx::ScreamTx(float lossBeta_,
 	int bytesInFlightHistSize_,
 	bool isL4s_,
 	bool openWindow_,
-	bool enableClockDriftCompensation_
+	bool enableClockDriftCompensation_,
+	float maxAdaptivePacingRateScale_
 ) :
 	sRttSh_ntp(0),
 	lossBeta(lossBeta_),
@@ -99,6 +103,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	isL4s(isL4s_),
 	openWindow(openWindow_),
 	enableClockDriftCompensation(enableClockDriftCompensation_),
+	maxAdaptivePacingRateScale(maxAdaptivePacingRateScale_),
 	sRtt_ntp(0),
 	sRtt(0.0f),
 	ackedOwd(0),
@@ -200,6 +205,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	}
 	bytesInFlightHistPtr = 0;
 	nStreams = 0;
+	isNewFrame = false;
 	for (int n = 0; n < kMaxStreams; n++)
 		streams[n] = NULL;
 
@@ -335,12 +341,22 @@ RtpQueueIface * ScreamTx::getStreamQueue(uint32_t ssrc) {
 /*
 * New media frame
 */
-void ScreamTx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp) {
+void ScreamTx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, bool isMarker) {
 	if (!isInitialized) initialize(time_ntp);
+
+
+
+	if (isMarker) {
+		isNewFrame = true;
+	}
+
 
 	int id;
 	Stream *stream = getStream(ssrc, id);
+
+	stream->newMediaFrame(time_ntp, bytesRtp, isMarker);
 	stream->updateTargetBitrate(time_ntp);
+
 	if (time_ntp - lastCwndUpdateT_ntp < 32768) { // 32768 = 0.5s in NTP domain
 		/*
 		* We expect feedback at least every 500ms
@@ -359,7 +375,7 @@ void ScreamTx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp) {
 		*/
 		int cur_cleared = stream->rtpQueue->clear();
         if (cur_cleared) {
-            cerr << log_tag << " refresh " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  << " packetes discarded for SSRC " << ssrc << endl;
+            cerr << log_tag << " refresh " << time_ntp / 65536.0f << " RTP queue " << cur_cleared  << " packets discarded for SSRC " << ssrc << endl;
             stream->cleared += cur_cleared;
         }
 	}
@@ -807,14 +823,17 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 		if (lastCwndUpdateT_ntp == 0)
 			lastCwndUpdateT_ntp = time_ntp;
 
-		if (time_ntp - lastCwndUpdateT_ntp > 655) {
+		if (time_ntp - lastCwndUpdateT_ntp > 655 || lossEvent || ecnCeEvent || isNewFrame) {
 			/*
 			* There is no gain with a too frequent CWND update
 			* An update every 10ms is fast enough even at very high high bitrates
+			* Expections are loss or CE events 
+			*  or when a new frame arrives, in which case the packet pacing rate needs an update
 			*/
 			bytesInFlightRatio = std::min(1.0f,float(prevBytesInFlight) / cwnd);
 			updateCwnd(time_ntp);
 			lastCwndUpdateT_ntp = time_ntp;
+			isNewFrame = false;
 		}
 
 	}
@@ -1203,39 +1222,61 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	queueDelayFractionAvg = 0.9f*queueDelayFractionAvg + 0.1f*getQueueDelayFraction();
 
 	/*
+    * Compute paceInterval
+    */
+	paceInterval = kMinPaceInterval;
+	if ((queueDelayFractionAvg > 0.02f || isL4s || maxTotalBitrate > 0) && kEnablePacketPacing) {
+		float headroom = packetPacingHeadroom;
+		if (lastCongestionDetectedT_ntp == 0) {
+			/*
+			* Increase packet pacing headroom until 1st congestion event, reduces problem
+			*  with initial queueing in the RTP queue
+			*/
+			headroom = std::max(headroom, 1.5f);
+		}
+
+		/*
+		* Compute adaptivePacingRateScale across all streams, the goal is to compute
+		*  a best guess of the appropriate adaptivePacingRateScale given the individual streams
+		*  adaptivePacingRateScale and their respective rates.
+		* The scaling with the individual rates for the streams is based on the rationale that
+		*  a low bitrate stream does not contribute much to the total packet pacing rate.
+		*/
+		float tmp1 = 0.0f;
+		float tmp2 = 0.0f;
+		for (int n = 0; n < nStreams; n++) {
+			if (streams[n]->adaptivePacingRateScale > 1.0) {
+				tmp1 += streams[n]->adaptivePacingRateScale * streams[n]->targetBitrate;
+				tmp2 += streams[n]->targetBitrate;
+			}
+		}
+		if (tmp2 > 0) {
+			/*
+			* Scale up the packet pacing headroom 
+			*/
+			headroom *= tmp1 / tmp2;
+		}
+
+
+		float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtp);
+		pacingBitrate = std::max(1.0e5f, headroom * pacingBitrate);
+		if (maxTotalBitrate > 0) {
+			pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
+		}
+		float tp = (mss * 8.0f) / pacingBitrate;
+		paceInterval = std::max(kMinPaceInterval, tp);
+	}
+	paceInterval_ntp = (uint32_t)(paceInterval * 65536); // paceinterval converted to NTP domain (Q16)
+
+
+	/*
 	* Less frequent updates here
-	* + Compute pacing interval
 	* + Save to queue delay fraction history
 	*   used in computeQueueDelayTrend()
 	* + Update queueDelayTarget
 	*/
 	if ((time_ntp - lastAddToQueueDelayFractionHistT_ntp) >
 		kQueueDelayFractionHistInterval_us) {
-
-		/*
-		* compute paceInterval, we assume a min bw of 50kbps and a min tp of 1ms
-		* for stable operation
-		* this function implements the packet pacing
-		*/
-		paceInterval = kMinPaceInterval;
-		if ((queueDelayFractionAvg > 0.02f || isL4s || maxTotalBitrate > 0) && kEnablePacketPacing) {
-			float headRoom = packetPacingHeadroom;
-			if (lastCongestionDetectedT_ntp == 0) {
-				/*
-				* Increase packet pacing headroom until 1st congestion event, reduces problem
-				*  with initial queueing in the RTP queue
-				*/
-				headRoom = std::max(headRoom,1.5f);
-			}
-			float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtp);
-			pacingBitrate = std::max(1.0e5f, headRoom*pacingBitrate);
-			if (maxTotalBitrate > 0) {
-				pacingBitrate = std::min(pacingBitrate, maxTotalBitrate);
-			}
-			float tp = (mss * 8.0f) / pacingBitrate;
-			paceInterval = std::max(kMinPaceInterval, tp);
-		}
-		paceInterval_ntp = (uint32_t)(paceInterval * 65536); // paceinterval converted to NTP domain (Q16)
 
 		if (queueDelayMin < queueDelayMinAvg)
 			queueDelayMinAvg = queueDelayMin;
@@ -1860,6 +1901,10 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 		txPackets[n].isUsed = false;
 	txPacketsPtr = 0;
 	lossEpoch = false;
+	frameSize = 0;
+	frameSizeAcc = 0;
+	frameSizeAvg = 0.0f;
+	adaptivePacingRateScale = 1.0;
 }
 
 /*
@@ -1926,7 +1971,7 @@ float ScreamTx::Stream::getMaxRate() {
 }
 
 /*
-* Get thestream that matches SSRC
+* Get the stream that matches SSRC
 */
 ScreamTx::Stream* ScreamTx::getStream(uint32_t ssrc, int &streamId) {
 	for (int n = 0; n < nStreams; n++) {
@@ -1935,8 +1980,30 @@ ScreamTx::Stream* ScreamTx::getStream(uint32_t ssrc, int &streamId) {
 			return streams[n];
 		}
 	}
-	streamId = -1;
+	streamId = -1; 
 	return NULL;
+}
+
+void ScreamTx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMarker) {
+	frameSizeAcc += bytesRtp;
+	/*
+	 * Compute an adaptive pacing rate scale that allows the pacing rate to follow the frame sizes
+	 *  so that packets are paced out faster when a large frame is generated by the encoder.
+	 * This reduces the RTP queue but can potentially give a larger queue or more L4S marking in the network
+	 * Pacing rate scaling is also increased if the RTP queue grows
+	 */
+	if (isMarker) {
+		frameSizeAvg = frameSizeAcc * kFrameSizeAvgAlpha + frameSizeAvg * (1.0 - kFrameSizeAvgAlpha);
+		frameSize = std::max(rtpQueue->bytesInQueue(),frameSizeAcc);
+		frameSizeAcc = 0;
+
+		if (frameSizeAvg > 1000.0f) {
+			adaptivePacingRateScale = std::min(parent->maxAdaptivePacingRateScale, std::max(1.0f, frameSize / frameSizeAvg));
+		}
+		else {
+			adaptivePacingRateScale = 1.0f;
+		}
+	}
 }
 
 /*
