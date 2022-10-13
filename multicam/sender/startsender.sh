@@ -25,16 +25,18 @@
 export GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0/
 
 # Settings for video encoding and streaming
-RECEIVER_IP=10.0.0.1 #Change to applicable receiver address
+RECEIVER_IP=192.168.1.20 #Change to applicable receiver address
 UDP_PORT_VIDEO=51000
 NETWORK_QUEUE_DELAY_TARGET=0.06
 MAX_TOTAL_RATE=60000
 
 # Select type of camera here
-#CAMERA="e-CAM50_CUNX"
-CAMERA="Raspberry-Pi-HQ_Camera_12MP"
+#SOURCE="e-CAM50_CUNX"
+#SOURCE="Raspberry-Pi-HQ_Camera_12MP"
+SOURCE="Movie" 
 
-if [ "$CAMERA" == "e-CAM50_CUNX" ]; then
+
+if [ "$SOURCE" == "e-CAM50_CUNX" ]; then
   echo "Starting e-CAM50_CUNX camera(s)"
 
   # Settings for exposure compensation and sharpness
@@ -57,13 +59,20 @@ if [ "$CAMERA" == "e-CAM50_CUNX" ]; then
   gst-launch-1.0 rtpbin name=rtpbin nvv4l2camerasrc device=/dev/video1 ! "video/x-raw(memory:NVMM), format=(string)UYVY, width=(int)1920, height=(int)1080" ! nvvidconv ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true ! queue max-size-buffers=2 !  rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
 fi
 
-if [ "$CAMERA" == "Raspberry-Pi-HQ_Camera_12MP" ]; then
+if [ "$SOURCE" == "Raspberry-Pi-HQ_Camera_12MP" ]; then
   echo "Raspberry Pi HQ Camera 12MP camera(s)"
 
-  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=0 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
+  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=0  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
 
-  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
+  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=1  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
 fi
+
+if [ "$SOURCE" == "Movie" ]; then
+  # Download the big buck bunny 1080p60fps movie
+  gst-launch-1.0 rtpbin name=rtpbin multifilesrc loop=true location=~/bbb_sunflower_1080p_60fps_normal.mp4 ! qtdemux name=demux ! queue ! h264parse ! omxh264dec ! queue ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 ! codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
+fi
+
+
 
 sleep 1
 ##Start SCReAM sender side.
@@ -75,4 +84,4 @@ sleep 1
 #  ./screamTx/bin/scream_sender -ect 1
 
 echo "Video streaming started"
-./scream/bin/scream_sender -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 25000:25000 -ratemin 1500:1500 -rateinit 1500:1500 -ratescale 0.7:0.7 -cwvmem 60 -maxtotalrate $MAX_TOTAL_RATE 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+./scream/bin/scream_sender -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 30000:30000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -cwvmem 60 -maxtotalrate $MAX_TOTAL_RATE 2 $RECEIVER_IP $UDP_PORT_VIDEO &
