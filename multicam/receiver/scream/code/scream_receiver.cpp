@@ -44,12 +44,15 @@ char* in_ip = "10.10.10.2";
 char* out_ip = NULL;
 int in_port = 30110;
 int rtcp_port = 30110;
-struct sockaddr_in in_bind_rtp_addr, in_rtp_addr, out_rtcp_addr, sender_rtcp_addr;
+struct sockaddr_in in_bind_rtp_addr, in_rtp_addr, out_rtcp_addr, sender_rtcp_addr,in_l4s_addr;
 struct sockaddr_in local_rtp_addr[MAX_SOURCES];
 //test code for python
 char* python_IP = "127.0.0.1";
 int python_port = 30200;
+int l4s_ctrl_port = 30300;
 int fd_python;
+int fd_l4s_ctrl;
+bool isL4s = true;
 struct sockaddr_in python_addr;
 
 char* local_ip[MAX_SOURCES] =
@@ -154,6 +157,31 @@ void *rtcpPeriodicThread(void *arg) {
 #define MAX_BUF_SIZE 65536
 #define ALL_CODE
 
+/*
+ * Turn off L4S : echo "0" > /dev/udp/127.0.0.1/30300
+ * Turn on  L4S : echo "1" > /dev/udp/127.0.0.1/30300
+ * This is a cheat for demo purposes only, when set to 0
+ *  the ECN bits simply are viped. It is of course against
+ *  all things good we all believe in, so now you know..
+ */
+void *rxL4sCtrlThread(void *arg) {
+    unsigned char buf[100];
+    for (;;) {
+      int recvlen = recvfrom(fd_l4s_ctrl,
+          buf,
+          100,
+          0,
+          (struct sockaddr *)&in_l4s_addr, sizeof(in_l4s_addr));
+
+      if (strstr((char*) buf,"1") != 0)
+        isL4s = true;
+      else
+        isL4s = false;
+      cerr << "  L4S CTRL rcvd " << buf << " " << isL4s << endl;
+    }
+    return NULL;
+}
+
 void usage (void)
 {
     cerr << "Usage :" << endl << " >scream_receiver incoming_ip rtp_port rtcp_port <forward_ip forward_port ...>" << endl;
@@ -242,6 +270,23 @@ int main(int argc, char* argv[])
     return 0;
   }
 
+  in_l4s_addr.sin_family = AF_INET;
+  in_l4s_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  in_l4s_addr.sin_port = htons(l4s_ctrl_port);
+  if ((fd_l4s_ctrl = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    perror("cannot create socket for L4S control");
+    return 0;
+  }
+  if (bind(fd_l4s_ctrl, (struct sockaddr *)&in_l4s_addr, sizeof(in_l4s_addr)) < 0) {
+     char s[100];
+     sprintf(s, "bind in_l4s_addr %d failed", l4s_ctrl_port);
+     perror(s);
+     return 0;
+  }
+  else {
+     cerr << "Listen on port " << l4s_ctrl_port << " to receive L4S control " << endl;
+  }
+
   out_rtcp_addr.sin_family = AF_INET;
   inet_aton((out_ip) ? out_ip: in_ip,(in_addr*) &out_rtcp_addr.sin_addr.s_addr);
   out_rtcp_addr.sin_port = htons(rtcp_port);
@@ -275,13 +320,13 @@ int main(int argc, char* argv[])
   } else {
     cerr << "socket set to recvtos" << endl;
   }
-  
+
   uint64_t recv_buf_size = 1024*1024*20; //20MByte
   if (setsockopt(fd_in_rtp, SOL_SOCKET, SO_RCVBUF, &recv_buf_size,sizeof(recv_buf_size)) < 0) {
     cerr << "cannot set SO_RCVBUF on incoming socket" << endl;
   } else {
     cerr << "socket SO_RCVBUF set to " << recv_buf_size << endl;
-  }  
+  }
 
   if (bind(fd_in_rtp, (struct sockaddr *)&in_bind_rtp_addr, sizeof(in_bind_rtp_addr)) < 0) {
     perror("bind incoming_rtp_addr failed");
@@ -309,6 +354,10 @@ int main(int argc, char* argv[])
   pthread_t rtcp_thread;
   pthread_mutex_init(&lock_scream, NULL);
   pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, "Periodic RTCP thread...");
+
+
+  pthread_t l4s_ctrl_thread;
+  pthread_create(&l4s_ctrl_thread, NULL, rxL4sCtrlThread, "L4S ctrl thread");
 
   int *ecnptr;
   unsigned char received_ecn;
@@ -364,6 +413,11 @@ int main(int argc, char* argv[])
 	    }
       memcpy(bufRtp,rcv_msg.msg_iov[0].iov_base,recvlen);
     }
+
+    if (!isL4s) {
+      received_ecn = 0;
+    }
+
     uint32_t time_ntp = getTimeInNtp();
     if (recvlen > 1) {
       if (bufRtp[1] == 0x7F) {

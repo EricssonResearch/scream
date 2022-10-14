@@ -52,19 +52,19 @@ if [ "$SOURCE" == "e-CAM50_CUNX" ]; then
 
   ## /dev/video0
   # encode at 1920*1080, run application ecam_tk1_guvcview for other alternatives
-  gst-launch-1.0 rtpbin name=rtpbin nvv4l2camerasrc device=/dev/video0 ! "video/x-raw(memory:NVMM), format=(string)UYVY, width=(int)1920, height=(int)1080" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=1000000 poc-type=2 ! queue max-size-buffers=2 !  rtph264pay mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
+  gst-launch-1.0 rtpbin name=rtpbin nvv4l2camerasrc device=/dev/video0 ! "video/x-raw(memory:NVMM), format=(string)UYVY, width=(int)1920, height=(int)1080" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 !  rtph264pay mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
 
   sleep 1
   ## /dev/video1
-  gst-launch-1.0 rtpbin name=rtpbin nvv4l2camerasrc device=/dev/video1 ! "video/x-raw(memory:NVMM), format=(string)UYVY, width=(int)1920, height=(int)1080" ! nvvidconv ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=1000000 poc-type=2 ! queue max-size-buffers=2 !  rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
+  gst-launch-1.0 rtpbin name=rtpbin nvv4l2camerasrc device=/dev/video1 ! "video/x-raw(memory:NVMM), format=(string)UYVY, width=(int)1920, height=(int)1080" ! nvvidconv ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 !  rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
 fi
 
 if [ "$SOURCE" == "Raspberry-Pi-HQ_Camera_12MP" ]; then
   echo "Raspberry Pi HQ Camera 12MP camera(s)"
 
-  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=0  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=1000000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
+  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=0  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
 
-  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=1  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=1000000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
+  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=1  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
 fi
 
 if [ "$SOURCE" == "Movie" ]; then
