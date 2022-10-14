@@ -147,14 +147,13 @@ void *readControlPortThread(void *arg) {
 		  char s[100];
 		  int qp_minI=1;
 		  int qp_minP=1;
-          int rateI = (rate+500000)/1000000;
-		  if (true || rateI <= 12) {
+          int rateI = (rate+500000)/1000000; // Integer rate in Mbps
+		  if (true) {
 			  /*
 			   * Increased qp_min at low rates
 			   *  reduces bitrate spikes
 			   */
-			  qp_minI=53-rateI/2; 
-			  //qp_minP=53-rateI;
+			  qp_minI=52-rateI/4; 
 			  if (qp_minI > 51) qp_minI = 51;
 			  if (qp_minI < 0) qp_minI = 0;
 		  }

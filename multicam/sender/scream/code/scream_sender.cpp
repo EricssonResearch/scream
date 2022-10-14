@@ -84,6 +84,7 @@ float rateMin[MAX_SOURCES]={3000,3000,1000,1000};
 float rateMax[MAX_SOURCES]={30000,30000,10000,10000};
 float rateIncrease[MAX_SOURCES]={10000,10000,10000,10000};
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
+float pacingHeadroom = 1.2;
 
 struct sockaddr_in in_rtp_addr[MAX_SOURCES];
 struct sockaddr_in out_rtcp_addr[MAX_SOURCES];
@@ -187,6 +188,7 @@ int main(int argc, char* argv[]) {
         cerr << "                      a larger memory can be beneficial in remote applications where the video input" << endl;
         cerr << "                      is static for long periods. " << endl;
         cerr << " -maxtotalrate val  : Set max total bitrate [kbps], default 100000." << endl;
+        cerr << " -pacingheadroom val: Set packet pacing headroom, default 1.2." << endl;
         cerr << " -log log_file      : Save detailed per-ACK log to file" << endl;
         cerr << " -ratemax list      : Set max rate [kbps] for streams" << endl;
         cerr << "    example -ratemax 30000:20000" << endl;
@@ -301,6 +303,13 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
+        if (strstr(argv[ix], "-pacingheadroom")) {
+            pacingHeadroom = atof(argv[ix + 1]);
+            ix += 2;
+            nExpectedArgs += 2;
+            continue;
+        }
+
         fprintf(stderr, "unexpected arg %s\n", argv[ix]);
         ix += 1;
         nExpectedArgs += 1;
@@ -633,6 +642,7 @@ void processRtp(unsigned char *buf_rtp, int recvlen, int ix) {
 
     parseRtp(buf_rtp, &seqNr, &ts, &pt);
     uint32_t pt_ = pt & 0x7F;
+    bool isMark = (pt & 0x80) != 0;
     if ((pt & 0x7F) == PT) {
         /*
         * Overwrite SSRC with new value, easier to sort out media sources
@@ -644,7 +654,7 @@ void processRtp(unsigned char *buf_rtp, int recvlen, int ix) {
         pthread_mutex_unlock(&lock_rtp_queue);
 
         pthread_mutex_lock(&lock_scream);
-        screamTx->newMediaFrame(getTimeInNtp(), in_ssrc[ix], recvlen, false);
+        screamTx->newMediaFrame(getTimeInNtp(), in_ssrc[ix], recvlen, isMark);
         pthread_mutex_unlock(&lock_scream);
     }
 }
@@ -856,11 +866,12 @@ int setup() {
         1.0f,
         10.0f,
         12500,
-        1.5f,
+        1.1f,
         bytesInFlightHistSize,
         (ect == 1),
         false,
-        false);
+        false, 
+        pacingHeadroom);
     screamTx->setCwndMinLow(10000); // ~1.5Mbps at RTT = 50ms
     screamTx->setPostCongestionDelay(1.0);
     screamTx->setMaxTotalBitrate(maxTotalRate);
