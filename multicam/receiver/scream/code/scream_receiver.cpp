@@ -160,8 +160,8 @@ void *rtcpPeriodicThread(void *arg) {
 /*
  * Turn off L4S : echo "0" > /dev/udp/127.0.0.1/30300
  * Turn on  L4S : echo "1" > /dev/udp/127.0.0.1/30300
- * This is a cheat for demo purposes only, when set to 0 
- *  the ECN bits simply are viped. It is of course against 
+ * This is a cheat for demo purposes only, when set to 0
+ *  the ECN bits simply are viped. It is of course against
  *  all things good we all believe in, so now you know..
  */
 void *rxL4sCtrlThread(void *arg) {
@@ -354,6 +354,10 @@ int main(int argc, char* argv[])
   pthread_t rtcp_thread;
   pthread_mutex_init(&lock_scream, NULL);
   pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, "Periodic RTCP thread...");
+
+
+  pthread_t l4s_ctrl_thread;
+  pthread_create(&l4s_ctrl_thread, NULL, rxL4sCtrlThread, "L4S ctrl thread");
 
   int *ecnptr;
   unsigned char received_ecn;
