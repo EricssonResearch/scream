@@ -866,12 +866,12 @@ int setup() {
         1.0f,
         10.0f,
         12500,
-        1.1f,
+        pacingHeadroom,
         bytesInFlightHistSize,
         (ect == 1),
         false,
         false, 
-        pacingHeadroom);
+        2.0f);
     screamTx->setCwndMinLow(10000); // ~1.5Mbps at RTT = 50ms
     screamTx->setPostCongestionDelay(1.0);
     screamTx->setMaxTotalBitrate(maxTotalRate);
