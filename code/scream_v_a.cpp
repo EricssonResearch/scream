@@ -18,21 +18,20 @@ const bool ecnCapable = true;
 const bool isL4s = true;
 const float FR = 50.0f;
 int swprio = -1;
-//#define TRACEFILE "../traces/trace_key.txt"
+#define TRACEFILE "../traces/trace_key.txt"
 //#define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_no_key_smooth.txt" 
 //#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = audio, 0x2 = video, 0x3 = 1+2 
 */
-const int mode = 0x03;
+const int mode = 0x01;
 const double timeBase = 10000.0;
 
 int main(int argc, char* argv[])
 {
     int tick = (int)(timeBase / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 50000, 1.1f, 20, isL4s, false, false, 2.0f);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 50000, 1.2f, 20, isL4s, false, false, 2.0f);
 
 	screamTx->setCwndMinLow(3000);
 	screamTx->setPostCongestionDelay(0.5);

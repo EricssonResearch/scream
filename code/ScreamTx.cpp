@@ -781,7 +781,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	}
 
 	if (isLast) {
-		if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > sRtt_ntp) {
+		if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) { // CE event at least every 30ms
 			ecnCeEvent = true;
 			lastLossEventT_ntp = time_ntp;
 		}
@@ -791,7 +791,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* L4S mode compute a congestion scaling factor that is dependent on the fraction
 			*  of ECN marked packets
 			*/
-			if (time_ntp - lastL4sAlphaUpdateT_ntp > sRtt_ntp) {
+			if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(655u,sRtt_ntp)) { // Update at least every 10ms
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				if (bytesDeliveredThisRtt > 0) {
 					float F = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
@@ -823,7 +823,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 		if (lastCwndUpdateT_ntp == 0)
 			lastCwndUpdateT_ntp = time_ntp;
 
-		if (time_ntp - lastCwndUpdateT_ntp > 655 || lossEvent || ecnCeEvent || isNewFrame) {
+		if (time_ntp - lastCwndUpdateT_ntp > 655u || lossEvent || ecnCeEvent || isNewFrame) {
 			/*
 			* There is no gain with a too frequent CWND update
 			* An update every 10ms is fast enough even at very high high bitrates
@@ -2124,8 +2124,6 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		lastBitrateAdjustT_ntp = time_ntp;
 	}
 	else {
-		if (time_ntp - lastBitrateAdjustT_ntp < kRateAdjustInterval_ntp)
-			return;
 		if (parent->bytesInFlightRatio > 0.9 && time_ntp - lastFullWindowT_ntp > 6554) {
 			/*
 			 * Window is still full after a congestion event, this is an indication that
@@ -2136,6 +2134,9 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			targetBitrate *= 0.95;
 			lastFullWindowT_ntp = time_ntp;
 		}
+
+		if (time_ntp - lastBitrateAdjustT_ntp < kRateAdjustInterval_ntp)
+			return;
 
 		/*
 		* A scale factor that is dependent on the inflection point
