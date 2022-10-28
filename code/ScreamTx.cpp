@@ -2146,7 +2146,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		*/
 		float sclI = (targetBitrate - targetBitrateI) / targetBitrateI;
 		if (parent->isL4s)
-			sclI *= 16;
+			sclI *= 4;
 		else
 			sclI *= 4;
 		sclI = sclI * sclI;

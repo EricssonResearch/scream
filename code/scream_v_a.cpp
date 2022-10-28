@@ -18,9 +18,9 @@ const bool ecnCapable = true;
 const bool isL4s = true;
 const float FR = 50.0f;
 int swprio = -1;
-#define TRACEFILE "../traces/trace_key.txt"
+//#define TRACEFILE "../traces/trace_key.txt"
 //#define TRACEFILE "../traces/trace_no_key.txt"
-//#define TRACEFILE "../traces/trace_flat.txt"
+#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = audio, 0x2 = video, 0x3 = 1+2 
