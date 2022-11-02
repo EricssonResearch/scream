@@ -82,4 +82,4 @@ sleep 1
 #  ./screamTx/bin/scream_sender -ect 1
 
 echo "Video streaming started"
-./scream/bin/scream_sender -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 30000:30000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -cwvmem 60 -maxtotalrate  $MAX_TOTAL_RATE -pacingheadroom 1.1 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+./scream/bin/scream_sender -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 30000:30000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -cwvmem 60 -maxtotalrate  $MAX_TOTAL_RATE -pacingheadroom 1.2 2 $RECEIVER_IP $UDP_PORT_VIDEO &
