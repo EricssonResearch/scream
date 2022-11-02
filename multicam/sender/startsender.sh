@@ -33,7 +33,7 @@ MAX_TOTAL_RATE=60000
 # Select type of camera here
 #SOURCE="e-CAM50_CUNX"
 SOURCE="Raspberry-Pi-HQ_Camera_12MP"
-#SOURCE="Movie" 
+SOURCE="Movie" 
 
 
 if [ "$SOURCE" == "e-CAM50_CUNX" ]; then
