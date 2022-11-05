@@ -1366,7 +1366,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		* loss event detected, decrease congestion window
 		*/
 		if (isL4s) {
-			cwnd = std::max(cwndMin, (int)((1.0f - l4sAlpha/(2.0*packetPacingHeadroom))*cwnd));
+			cwnd = std::max(cwndMin, (int)((1.0f - l4sAlpha/(2.0*packetPacingHeadroom))*cwnd) + mss);
 		}
 		else {
 			cwnd = std::max(cwndMin, (int)(ecnCeBeta*cwnd));
@@ -2055,6 +2055,10 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 
 	float br = getMaxRate();
 	float rateRtpLimit = std::max(rateRtp, br);
+
+	float cwndRatio = 0.0f;
+	if (parent->isL4s)
+		cwndRatio = parent->mss / float(parent->cwnd);
 	if (initTime_ntp == 0) {
 		/*
 		* Initialize if the first time
@@ -2086,9 +2090,10 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				 *  rare but there is for instance a possibility that the L4S marking lags behind and
 				 *  implements some filtering
 				 */
-				float backOff = parent->bytesInFlightRatio*parent->l4sAlpha/(2.0*kMaxBytesInFlightHeadRoom*parent->packetPacingHeadroom);
+				//float backOff = parent->bytesInFlightRatio*parent->l4sAlpha/(2.0*kMaxBytesInFlightHeadRoom*parent->packetPacingHeadroom);
+				float backOff = parent->l4sAlpha / 2.0f;				
 
-				targetBitrate = std::max(minBitrate, targetBitrate*(1.0f - backOff));
+				targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate*(1.0f - backOff)+targetBitrate*cwndRatio));
 			}
 			else {
 				targetBitrate = std::max(minBitrate, targetBitrate*ecnCeEventRateScale);
@@ -2203,7 +2208,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 			targetRateScale = 1.0;
 			txSizeBitsAvg = 0.0f;
 		}
-		else if ((parent->isL4s && parent->l4sAlpha > 0.001) || parent->inFastStart && rtpQueueDelay < 0.1f) {
+		else if (parent->inFastStart && rtpQueueDelay < 0.1f) {
 			/*
 			* Increment bitrate, limited by the rampUpSpeed
 			*/
@@ -2271,20 +2276,20 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 				/*
 				 * Take it easy with the ramp-up after congestion
 				 */
-				increment *= parent->postCongestionScale;
+				//increment *= parent->postCongestionScale;
 
     			/*
 				 * At very low bitrates it is necessary to actively try to push the
 				 *  the bitrate up some extra
 				 */
-				float incrementScale = 1.0f + 0.05f*std::min(1.0f, 50000.0f / targetBitrate);
+				float incrementScale = 1.0f + cwndRatio + 0.05f*std::min(1.0f, 50000.0f / targetBitrate);
 				increment *= incrementScale;
 				if (!parent->isCompetingFlows()) {
 					/*
 					* Limit the bitrate increase so that it does not go faster than rampUpSpeedTmp
 					* This limitation is not in effect if competing flows are detected
 					*/
-					increment *= sclI;
+					//increment *= sclI;
 					increment = std::min(increment, (float)(rampUpSpeedTmp*(kRateAdjustInterval_ntp * ntp2SecScaleFactor)));
 				}
 				/*
