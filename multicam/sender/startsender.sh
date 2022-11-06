@@ -25,15 +25,15 @@
 export GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0/
 
 # Settings for video encoding and streaming
-RECEIVER_IP=192.168.1.20 #Change to applicable receiver address
+RECEIVER_IP=10.10.10.12 #Change to applicable receiver address
 UDP_PORT_VIDEO=51000
-NETWORK_QUEUE_DELAY_TARGET=0.06
+NETWORK_QUEUE_DELAY_TARGET=0.2
 MAX_TOTAL_RATE=60000
 
 # Select type of camera here
 #SOURCE="e-CAM50_CUNX"
 SOURCE="Raspberry-Pi-HQ_Camera_12MP"
-SOURCE="Movie" 
+#SOURCE="Movie" 
 
 
 if [ "$SOURCE" == "e-CAM50_CUNX" ]; then
@@ -45,7 +45,7 @@ if [ "$SOURCE" == "e-CAM50_CUNX" ]; then
   EXPOSURE_COMPENSATION=140000 #default 140000
   SHARPNESS=16 #default 16
 
-  v4l2-ctl -d /dev/video0 --set-ctrl=low_latency_mode=1 --set-ctrl=exposure_compensation=$EXPOSURE_COMPENSATION --set-ctrl=sharpness=$SHARPNESS
+   --set-ctrl=low_latency_mode=1 --set-ctrl=exposure_compensation=$EXPOSURE_COMPENSATION --set-ctrl=sharpness=$SHARPNESS
   v4l2-ctl -d /dev/video1 --set-ctrl=low_latency_mode=1 --set-ctrl=exposure_compensation=$EXPOSURE_COMPENSATION --set-ctrl=sharpness=$SHARPNESS
 
   echo "Start gstreamer pipelines"
@@ -62,7 +62,7 @@ fi
 if [ "$SOURCE" == "Raspberry-Pi-HQ_Camera_12MP" ]; then
   echo "Raspberry Pi HQ Camera 12MP camera(s)"
 
-  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=0  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
+  gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=0  saturation=0.5 tnr_mode=2 ee-mode=0 tnr_strength=0.1 wbmode=4 exposurecompensation=0.7  ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=50/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
 
   gst-launch-1.0  rtpbin name=rtpbin nvarguscamerasrc sensor-id=1  saturation=0.6 tnr_mode=2 ee-mode=0 tnr_strength=0.1 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=60/1" ! nvvidconv ! "video/x-raw(memory:NVMM),format=(string)I420" ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 !  codecctrl media-src=4 port=30003 ! udpsink host=127.0.0.1 port=30002 &
 fi
@@ -84,4 +84,4 @@ sleep 1
 #  ./screamTx/bin/scream_sender -ect 1
 
 echo "Video streaming started"
-./scream/bin/scream_sender -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 30000:30000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -cwvmem 60 -maxtotalrate  $MAX_TOTAL_RATE -pacingheadroom 1.2 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+./scream/bin/scream_sender -ect 1 -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 30000:30000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -cwvmem 60 -maxtotalrate  $MAX_TOTAL_RATE -pacingheadroom 1.2 2 $RECEIVER_IP $UDP_PORT_VIDEO &
