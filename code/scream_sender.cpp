@@ -140,7 +140,7 @@ long getTimeInUs(){
 }
 */
 
-void packet_free(void *buf) {
+void packet_free(void *buf, uint32_t ssrc) {
     free(buf);
 }
 
@@ -244,11 +244,12 @@ void *transmitRtpThread(void *arg) {
 					accumulatedPaceTime += retVal;
 				if (retVal != -1.0) {
                     void *buf;
+                    uint32_t ssrc_unused;
 					pthread_mutex_lock(&lock_rtp_queue);
-					rtpQueue->pop(&buf, size, seqNr, isMark);
+					rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
 					sendPacket(buf, size);
 					pthread_mutex_unlock(&lock_rtp_queue);
-                    packet_free(buf);
+                    packet_free(buf, SSRC);
                     buf = NULL;
 					pthread_mutex_lock(&lock_scream);
 					time_ntp = getTimeInNtp();
@@ -415,12 +416,12 @@ void *createRtpThread(void *arg) {
 
 			if (pushTraffic) {
 				sendPacket(buf_rtp, recvlen);
-                packet_free(buf_rtp);
+                packet_free(buf_rtp, SSRC);
                 buf_rtp = NULL;
 			}
 			else {
 				pthread_mutex_lock(&lock_rtp_queue);
-				rtpQueue->push(buf_rtp, recvlen, seqNr, isMark, (time_ntp) / 65536.0f);
+				rtpQueue->push(buf_rtp, recvlen, SSRC, seqNr, isMark, (time_ntp) / 65536.0f);
 				pthread_mutex_unlock(&lock_rtp_queue);
 
 				pthread_mutex_lock(&lock_scream);

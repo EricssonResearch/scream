@@ -26,7 +26,7 @@ RtpQueue::RtpQueue() {
     sizeOfNextRtp_ = -1;
 }
 
-bool RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr,  bool isMark, float ts) {
+bool RtpQueue::push(void *rtpPacket, int size, uint32_t ssrc, unsigned short seqNr,  bool isMark, float ts) {
     int ix = head+1;
     if (ix == kRtpQueueSize) ix = 0;
     if (items[ix]->used) {
@@ -37,6 +37,7 @@ bool RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr,  bool isMar
     }
     head = ix;
     items[head]->seqNr = seqNr;
+    items[head]->ssrc = ssrc;
     items[head]->size = size;
     items[head]->ts = ts;
     items[head]->isMark = isMark;
@@ -49,7 +50,7 @@ bool RtpQueue::push(void *rtpPacket, int size, unsigned short seqNr,  bool isMar
     computeSizeOfNextRtp();
     return (true);
 }
-bool RtpQueue::pop(void **rtpPacket, int& size, unsigned short& seqNr, bool &isMark)
+bool RtpQueue::pop(void **rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr, bool &isMark)
 {
     if (items[tail]->used == false) {
         *rtpPacket = NULL;
@@ -62,6 +63,7 @@ bool RtpQueue::pop(void **rtpPacket, int& size, unsigned short& seqNr, bool &isM
 		*rtpPacket = items[tail]->packet;
 #endif
 		seqNr = items[tail]->seqNr;
+        ssrc = items[tail]->ssrc;
         isMark = items[tail]->isMark;
         items[tail]->used = false;
         tail++; if (tail == kRtpQueueSize) tail = 0;
@@ -116,31 +118,32 @@ float RtpQueue::getDelay(float currTs) {
     }
 }
 
-bool RtpQueue::sendPacket(void **rtpPacket, int& size, unsigned short& seqNr) {
+bool RtpQueue::sendPacket(void **rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr) {
     if (sizeOfQueue() > 0) {
         bool isMark;
-        pop(rtpPacket, size, seqNr, isMark);
+        pop(rtpPacket, size, ssrc, seqNr, isMark);
         return true;
     }
     return false;
 }
 
 #ifndef IGNORE_PACKET
-extern void packet_free(void *buf);
+extern void packet_free(void *buf, uint32_t ssrc);
 #endif
 int RtpQueue::clear() {
     uint16_t seqNr;
+    uint32_t ssrc;
     int freed = 0;
     int size;
     void *buf;
     while (sizeOfQueue() > 0) {
         bool isMark;
-        pop(&buf, size, seqNr, isMark);
+        pop(&buf, size, ssrc, seqNr, isMark);
         if (buf != NULL) {
             freed++;
         }
 #ifndef IGNORE_PACKET
-		packet_free(buf);
+		packet_free(buf, ssrc);
 #endif
 	}
     return (freed);

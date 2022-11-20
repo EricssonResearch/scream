@@ -27,16 +27,14 @@ fn main() {
 }
 
 pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
-    let pls: String;
-
-    pls = env::var("RECVPIPELINE").unwrap();
+    let pls: String = env::var("RECVPIPELINE").unwrap();
     println!("RECVPIPELINE={}", pls);
     let pipeline = gst::parse_launch(&pls).unwrap();
 
     let pipeline = pipeline.downcast::<gst::Pipeline>().unwrap();
     let pipeline_clone = pipeline.clone();
     let bin = pipeline.upcast::<gst::Bin>();
-    let rtpbin = bin.by_name("rtpbin").unwrap();
+    let rtpbin = bin.by_name("r").unwrap();
     rtpbin.connect("new-jitterbuffer", false, move |_values| None);
 
     let pipeline = bin.upcast::<gst::Element>();

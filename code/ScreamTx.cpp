@@ -1025,7 +1025,7 @@ void ScreamTx::detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint
 				stream->bytesLost += tmp->size;
 				stream->packetLost++;
 				tmp->isUsed = false;
-				cerr << log_tag << " LOSS detected by reorder timer SSRC=" << stream->ssrc << " SN=" << tmp->seqNr << endl;
+				// cerr << log_tag << " LOSS detected by reorder timer SSRC=" << stream->ssrc << " SN=" << tmp->seqNr << endl;
 				stream->repairLoss = true;
 			}
 			else if (tmp->isAcked) {
@@ -1053,10 +1053,10 @@ void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
 
 void ScreamTx::getLogHeader(char *s) {
 	sprintf(s,
-            "LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe, packetsCe,hiSeqAck,packetetsRtpCleared,packetsLost");
+            "LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe, packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
 }
 
-void ScreamTx::getLog(float time, char *s, bool clear) {
+void ScreamTx::getLog(float time, char *s, uint32_t ssrc, bool clear) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
         log_tag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
@@ -1065,8 +1065,11 @@ void ScreamTx::getLog(float time, char *s, bool clear) {
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
 		Stream *tmp = streams[n];
+        if (ssrc != 0 && tmp->ssrc != ssrc) {
+            continue;
+        }
 		char s2[200];
-		sprintf(s2, "%4.3f, %d,%d,%6.0f, %6.0f, %lu, %6.0f, %6.0f, %5.0f, %5.0f, %lu, %5d, %lu,%lu",
+        sprintf(s2, "%4.3f, %d,%d,%6.0f, %6.0f, %lu, %6.0f, %6.0f, %5.0f, %5.0f, %lu, %5d, %5d, %d, %lu,%lu",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
             tmp->rtpQueue->bytesInQueue(),
             tmp->rtpQueue->sizeOfQueue(),
@@ -1075,7 +1078,9 @@ void ScreamTx::getLog(float time, char *s, bool clear) {
 			tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
 			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f,
             tmp->packetsCe,
+            tmp->hiSeqTx,
             tmp->hiSeqAck,
+            tmp->hiSeqTx - tmp->hiSeqAck,
             tmp->cleared, tmp->packetLost);
 		strcat(s, s2);
         if (clear) {

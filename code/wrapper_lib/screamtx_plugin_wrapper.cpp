@@ -12,8 +12,47 @@ struct itimerval timer;
 extern const char *log_tag;
 
 typedef void (* ScreamSenderPushCallBack)(uint8_t *, uint8_t *, uint8_t);
- ScreamSenderPushCallBack cb;
-uint8_t *cb_data;
+
+typedef struct  stream_s {
+    uint32_t ssrc;
+    RtpQueue *rtpQueue;
+    pthread_mutex_t lock_rtp_queue;
+    ScreamSenderPushCallBack cb;
+    uint8_t *cb_data;
+    uint64_t rtpqueue_full;
+    uint32_t encoder_rate;
+    float lastLossEpochT;
+
+} stream_t;
+
+stream_t streams[kMaxStreams];
+
+/*
+ * Get the stream that matches ssrc
+ */
+stream_t *getStream(uint32_t ssrc) {
+ 	for (int n = 0; n < kMaxStreams; n++) {
+ 		if (streams[n].ssrc == ssrc) {
+ 			return &streams[n];
+ 		}
+ 	}
+    printf("%s %u no stream  ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
+ 	return NULL;
+}
+static uint32_t cur_n_streams = 0;
+stream_t *addStream(uint32_t ssrc) {
+ 	for (int n = 0; n < kMaxStreams; n++) {
+ 		if (streams[n].ssrc == 0) {
+            streams[n].ssrc = ssrc;
+            streams[n].lastLossEpochT = -1.0;
+            cur_n_streams++;
+            printf("%s %u added ssrc %u index %d cur_n_streams %u \n", __FUNCTION__, __LINE__, ssrc, n, cur_n_streams);
+ 			return &streams[n];
+ 		}
+ 	}
+    printf("%s %u can't add  ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
+ 	return NULL;
+}
 
 using namespace std;
 
@@ -33,7 +72,6 @@ int minPaceIntervalUs = 1900;
 int ect = -1;
 
 char sierraLogString[BUFSIZE] = " 0, 0, 0, 0";
-uint32_t SSRC=1;
 bool disablePacing = false;
 int initRate = 1000;
 int minRate = 1000;
@@ -51,12 +89,13 @@ float txQueueSizeFactor = 0.1f;
 float queueDelayGuard = 0.05f;
 float hysteresis = 0.0;
 
-uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
 float runTime = -1.0;
 bool stopThread = false;
 pthread_t transmit_rtp_thread = 0;
 bool sierraLog;
+
+pthread_t stats_print_thread = 0;
 
 float scaleFactor = 0.9f;
 float delayTarget = 0.06f;
@@ -66,16 +105,11 @@ bool printSummary = true;
 
 static uint32_t first_ntp = 0;
 ScreamTx *screamTx = 0;
-RtpQueue *rtpQueue = 0;
-
-// We don't bother about SSRC in this implementation, it is only one stream
-
 
 uint32_t lastLogT_ntp = 0;
 uint32_t lastLogTv_ntp = 0;
 uint32_t tD_ntp = 0;//(INT64_C(1) << 32)*1000 - 5000000;
 pthread_mutex_t lock_scream;
-pthread_mutex_t lock_rtp_queue;
 
 FILE *fp_log = 0;
 
@@ -83,11 +117,9 @@ bool ntp = false;
 bool append = false;
 bool itemlist = false;
 bool detailed = false;
-float randRate = 0.0f;
 
 double t0=0;
 
-uint32_t encoder_rate = 0;
 uint32_t getTimeInNtp(){
   struct timeval tp;
   gettimeofday(&tp, NULL);
@@ -115,9 +147,12 @@ void *transmitRtpThread(void *arg) {
   int sleepTime_us = 10;
   float retVal = 0.0f;
   int sizeOfQueue;
+  uint32_t ssrc = 0;
   struct timeval start, end;
   useconds_t diff = 0;
   static bool first = false;
+  stream_t *stream = NULL;
+  printf("%s %u \n", __FUNCTION__, __LINE__);
   for (;;) {
     if (stopThread) {
       return NULL;
@@ -127,19 +162,19 @@ void *transmitRtpThread(void *arg) {
     retVal = 0.0f;
     time_ntp = getTimeInNtp();
     pthread_mutex_lock(&lock_scream);
-    retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
+    retVal = screamTx->isOkToTransmit(time_ntp, ssrc);
     pthread_mutex_unlock(&lock_scream);
-
+    stream = getStream(ssrc);
     if (retVal != -1.0f) {
-      pthread_mutex_lock(&lock_rtp_queue);
-      sizeOfQueue = rtpQueue->sizeOfQueue();
-      pthread_mutex_unlock(&lock_rtp_queue);
+      pthread_mutex_lock(&stream->lock_rtp_queue);
+      sizeOfQueue = stream->rtpQueue->sizeOfQueue();
+      pthread_mutex_unlock(&stream->lock_rtp_queue);
       do {
          gettimeofday(&start, 0);
          time_ntp = getTimeInNtp();
 
-         retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
-
+         retVal = screamTx->isOkToTransmit(time_ntp, ssrc);
+         stream = getStream(ssrc);
          /*
           * The pacing can cause packets to be discarded initially.
           * Disabling  packet pacing for the first few seconds
@@ -152,19 +187,22 @@ void *transmitRtpThread(void *arg) {
          if (retVal > 0.0f)
             accumulatedPaceTime += retVal;
          if (retVal != -1.0) {
-           pthread_mutex_lock(&lock_rtp_queue);
-           rtpQueue->pop(&buf, size, seqNr, isMark);
-           pthread_mutex_unlock(&lock_rtp_queue);
-           cb(cb_data, (uint8_t *)buf, 1);
+           static int sleeps = 0;
+           pthread_mutex_lock(&stream->lock_rtp_queue);
+           stream->rtpQueue->pop(&buf, size, ssrc, seqNr, isMark);
+           pthread_mutex_unlock(&stream->lock_rtp_queue);
+           stream->cb(stream->cb_data, (uint8_t *)buf, 1);
+           if ((cur_n_streams > 1) && (sleeps++ < 120)) {
+               usleep(500);
+           }
            time_ntp = getTimeInNtp();
            pthread_mutex_lock(&lock_scream);
-           retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, isMark);
+           retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark);
            pthread_mutex_unlock(&lock_scream);
          }
-
-         pthread_mutex_lock(&lock_rtp_queue);
-         sizeOfQueue = rtpQueue->sizeOfQueue();
-         pthread_mutex_unlock(&lock_rtp_queue);
+         pthread_mutex_lock(&stream->lock_rtp_queue);
+         sizeOfQueue = stream->rtpQueue->sizeOfQueue();
+         pthread_mutex_unlock(&stream->lock_rtp_queue);
          gettimeofday(&end, 0);
          diff = end.tv_usec-start.tv_usec;
          accumulatedPaceTime = std::max(0.0f, accumulatedPaceTime-diff*1e-6f);
@@ -181,48 +219,95 @@ void *transmitRtpThread(void *arg) {
   }
   return NULL;
 }
-int setup() {
-  /*
-  * Set ECN capability for outgoing socket using IP_TOS
-  */
-  screamTx = new ScreamTx(scaleFactor, scaleFactor,
-                          delayTarget,
-                          false,
-                          1.0f,dscale,
-                          (initRate*100)/8,
-                          packetPacingHeadroom,
-                          20,
-                          ect==1,
-                          false,
-                          enableClockDriftCompensation);
-  rtpQueue = new RtpQueue();
-  screamTx->setCwndMinLow(5000);
-
-  screamTx->registerNewStream(rtpQueue,
-                              SSRC,
-                              1.0f,
-                              minRate * 1000,
-                              initRate * 1000,
-                              maxRate * 1000,
-                              rateIncrease * 1000,
-                              rateScale,
-                              maxRtpQueueDelayArg,
-                              txQueueSizeFactor,
-                              queueDelayGuard,
-                              scaleFactor,
-                              scaleFactor,
-                              false,
-                              hysteresis);
-  return 1;
-}
 
 uint32_t lastT_ntp;
 
 uint32_t rtcp_rx_time_ntp = 0;
 #define KEEP_ALIVE_PKT_SIZE 1
+int verbose = 0;
 
-int tx_plugin_main(int argc, char* argv[])
+/*
+ * Print current encoder rates
+ */
+void EncoderRates(void) {
+    cout << " encoder_rate " ;
+ 	for (int n = 0; n < kMaxStreams; n++) {
+ 		if (streams[n].ssrc != 0) {
+            cout  << " " << (streams[n].encoder_rate /1000) << " " ;
+ 		}
+ 	}
+    cout  << "kbbps ";
+}
+void *
+statsPrintThread(void *arg)
 {
+    printf("%s %u stopThread %d, runTime %f \n", __FUNCTION__, __LINE__, stopThread, runTime);
+    while(!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
+        uint32_t time_ntp = getTimeInNtp();
+        bool isFeedback = time_ntp - rtcp_rx_time_ntp < 65536; // 1s in Q16
+        if ((printSummary || !isFeedback) && time_ntp - lastLogT_ntp > 2*65536) { // 2s in Q16
+            if (!isFeedback) {
+                cerr << "No RTCP feedback received" << endl;
+            } else {
+                float time_s = time_ntp/65536.0f;
+                char s[1000];
+                screamTx->getStatistics(time_s, s);
+                if (sierraLog)
+                    cout << s << endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << endl << endl;
+                else
+                    cout << s ;
+                EncoderRates();
+                cout << endl;
+
+            }
+            lastLogT_ntp = time_ntp;
+        }
+        if ((verbose > 0) && time_ntp-lastLogTv_ntp > 13107) { // 0.2s in Q16
+            if (isFeedback) {
+                float time_s = time_ntp/65536.0f;
+                char s[1000];
+                char s1[500];
+                if (verbose == 1) {
+                    screamTx->getVeryShortLog(time_s, s1);
+                } else {
+                    screamTx->getLogHeader(s1);
+                    cout << s1 << endl;
+                    screamTx->getLog(time_s, s1, 0, false);
+                    sprintf(s,"%8.3f,%s ", time_s, s1);
+                    cout << s << " ";
+                    EncoderRates();
+                    cout << endl;
+                    screamTx->getShortLog(time_s, s1);
+                }
+                sprintf(s,"%8.3f, %s ", time_s, s1);
+                cout << s;
+                EncoderRates();
+                cout << endl;
+                /*
+                 * Send statistics to receiver this can be used to
+                 * verify reliability of remote control
+                 */
+#if 0
+                s1[0] = 0x80;
+                s1[1] = 0x7F; // Set PT = 0x7F for statistics packet
+                memcpy(&s1[2],s,strlen(s));
+                sendPacket(s1, strlen(s)+2);
+#endif
+            }
+            lastLogTv_ntp = time_ntp;
+        }
+        usleep(50000);
+    };
+    stopThread = true;
+    usleep(500000);
+    if (fp_log)
+      fclose(fp_log);
+    return (NULL);
+}
+
+int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
+{
+  stream_t *stream = getStream(ssrc);
   struct timeval tp;
   gettimeofday(&tp, NULL);
   t0 = tp.tv_sec + tp.tv_usec*1e-6 - 1e-3;
@@ -273,7 +358,6 @@ int tx_plugin_main(int argc, char* argv[])
     exit(-1);
   }
   int ix = 1;
-  int verbose = 0;
   char *logFile = 0;
   /* First find options */
   while (ix < argc) {
@@ -444,97 +528,67 @@ int tx_plugin_main(int argc, char* argv[])
     exit(0);
   }
 
-  if (logFile) {
-      if (append)
-         fp_log = fopen(logFile,"a");
-      else
-         fp_log = fopen(logFile,"w");
-  }
   if (minRate > initRate)
     initRate = minRate;
 
-  if (setup() == 0)
-    return 0;
+  if (screamTx == NULL) {
+            screamTx = new ScreamTx(scaleFactor, scaleFactor,
+                              delayTarget,
+                              false,
+                              1.0f,dscale,
+                              (initRate*100)/8,
+                              packetPacingHeadroom,
+                              20,
+                              ect==1,
+                              false,
+                              enableClockDriftCompensation);
+      screamTx->setCwndMinLow(5000);
+      if (logFile) {
+          if (append)
+              fp_log = fopen(logFile,"a");
+          else
+              fp_log = fopen(logFile,"w");
+      }
 
-  if (logFile && !append && itemlist) {
-    fprintf(fp_log,"%s\n", screamTx->getDetailedLogItemList());
+      if (logFile && !append && itemlist) {
+          fprintf(fp_log,"%s\n", screamTx->getDetailedLogItemList());
+      }
+      screamTx->setDetailedLogFp(fp_log);
+      screamTx->useExtraDetailedLog(detailed);
+
+      pthread_mutex_init(&lock_scream, NULL);
+      pthread_mutex_init(&stream->lock_rtp_queue, NULL);
   }
-  screamTx->setDetailedLogFp(fp_log);
-  screamTx->useExtraDetailedLog(detailed);
+    stream->rtpQueue = new RtpQueue();
 
-  pthread_mutex_init(&lock_scream, NULL);
-  pthread_mutex_init(&lock_rtp_queue, NULL);
-   {
-     cerr << "Scream sender started! "<<endl;
+  screamTx->registerNewStream(stream->rtpQueue,
+                              ssrc,
+                              1.0f,
+                              minRate * 1000,
+                              initRate * 1000,
+                              maxRate * 1000,
+                              rateIncrease * 1000,
+                              rateScale,
+                              maxRtpQueueDelayArg,
+                              txQueueSizeFactor,
+                              queueDelayGuard,
+                              scaleFactor,
+                              scaleFactor,
+                              false,
+                              hysteresis);
 
-     /* Transmit RTP thread */
-     // pthread_create(&transmit_rtp_thread,NULL,transmitRtpThread,(void*)"Transmit RTP thread...");
-
-     while(!stopThread && (runTime < 0 || getTimeInNtp() < runTime*65536.0f)) {
-       uint32_t time_ntp = getTimeInNtp();
-       bool isFeedback = time_ntp-rtcp_rx_time_ntp < 65536; // 1s in Q16
-       if ((printSummary || !isFeedback) && time_ntp-lastLogT_ntp > 2*65536) { // 2s in Q16
-         if (!isFeedback) {
-	        cerr << "No RTCP feedback received" << endl;
-         } else {
-	        float time_s = time_ntp/65536.0f;
-           char s[1000];
-           screamTx->getStatistics(time_s, s);
-           if (sierraLog)
-             cout << s << endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << endl << endl;
-           else
-               cout << s << " encoder_rate " << encoder_rate << "bps" << endl;
-         }
-         lastLogT_ntp = time_ntp;
-       }
-       if ((verbose > 0) && time_ntp-lastLogTv_ntp > 13107) { // 0.2s in Q16
-         if (isFeedback) {
-           float time_s = time_ntp/65536.0f;
-           char s[1000];
-           char s1[500];
-           if (verbose == 1) {
-               screamTx->getVeryShortLog(time_s, s1);
-           } else {
-               screamTx->getLogHeader(s1);
-               cout << s1 << endl;
-               screamTx->getLog(time_s, s1, false);
-               sprintf(s,"%8.3f, %s %12u,", time_s, s1, encoder_rate);
-               cout << s << endl;
-               screamTx->getShortLog(time_s, s1);
-           }
-           sprintf(s,"%8.3f, %s %12u,", time_s, s1, encoder_rate);
-           cout << s << endl;
-           /*
-            * Send statistics to receiver this can be used to
-            * verify reliability of remote control
-            */
-#if 0
-           s1[0] = 0x80;
-           s1[1] = 0x7F; // Set PT = 0x7F for statistics packet
-           memcpy(&s1[2],s,strlen(s));
-           sendPacket(s1, strlen(s)+2);
-#endif
-         }
-         lastLogTv_ntp = time_ntp;
-       }
-       usleep(50000);
-     };
-     stopThread = true;
+  cerr << "Scream sender started! ssrc "<< ssrc <<endl;
+  if (stats_print_thread == 0) {
+      pthread_create(&stats_print_thread,NULL,statsPrintThread, NULL);
   }
-  usleep(500000);
-  if (fp_log)
-    fclose(fp_log);
   return (0);
 }
 
-void packet_free(void *buf)
+void packet_free(void *buf, uint32_t ssrc)
 {
-    cb(cb_data, (uint8_t *)buf, 0);
+    stream_t *stream = getStream(ssrc);
+    stream->cb(stream->cb_data, (uint8_t *)buf, 0);
 }
-#define MAX_SOURCES 4
-int nSources = 1;
-uint32_t in_ssrc[MAX_SOURCES] = {1, 1, 1, 1};
-float lastLossEpochT = -1.0;
 int nn=0;
 
 int parseCommandLine(
@@ -559,37 +613,47 @@ int parseCommandLine(
     return i;
 }
 
-void *
-ScreamSenderPluginInitThread(void *arg)
-{
-    char *s = (char *)arg;
-    int n_argc;
-    char *n_argv[25];
-    parseCommandLine(s, &n_argc, n_argv, 24);
-    tx_plugin_main(n_argc, n_argv);
-    return (NULL);
-}
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void
-ScreamSenderPluginInit (const char *arg_string, uint8_t *cb_data_arg,  ScreamSenderPushCallBack callback)
+ScreamSenderPluginInit (uint32_t ssrc, const char *arg_string, uint8_t *cb_data_arg,
+                        ScreamSenderPushCallBack callback)
 {
-    pthread_t scream_sender_plugin_init_thread;
-    printf("%s %s\n",  __FUNCTION__, arg_string);
-    cb = callback;
-    cb_data = cb_data_arg;
+    printf("%s %d %s ssrc %u\n",  __FUNCTION__, __LINE__, arg_string, ssrc);
+    stream_t *stream = getStream(ssrc);
+    if (stream != NULL) {
+        printf("%s %u ssrc duplicate %u\n", __FUNCTION__, __LINE__, ssrc);
+        return;
+    }
+    stream = addStream(ssrc);
+    if (stream == NULL) {
+        printf("%s %u can't create ssrc %u\n", __FUNCTION__, __LINE__, ssrc);
+        exit(0);
+    }
+
+    stream->cb = callback;
+    stream->cb_data = cb_data_arg;
     char *s = strdup(arg_string);
-    pthread_create(&scream_sender_plugin_init_thread, NULL, ScreamSenderPluginInitThread, s);
+    int n_argc;
+    char *n_argv[25];
+    parseCommandLine(s, &n_argc, n_argv, 24);
+    tx_plugin_main(n_argc, n_argv, ssrc);
 }
 
-uint64_t rtpqueue_full = 0;
+void
+ScreamSenderGlobalPluginInit (uint32_t ssrc, const char *arg_string, uint8_t *cb_data_arg,  ScreamSenderPushCallBack callback)
+{
+    printf("%s %u \n", __FUNCTION__, __LINE__);
+    ScreamSenderPluginInit(ssrc, arg_string, cb_data_arg,  callback);
+}
+
 void ScreamSenderPush (uint8_t *buf_rtp, uint32_t recvlen, uint16_t seq,
                        uint8_t payload_type, uint32_t timestamp, uint32_t ssrc, uint8_t marker)
 {
     bool rc;
+    stream_t *stream = getStream(ssrc);
     static bool first = false;
     uint32_t ntp = getTimeInNtp();
     if (!first) {
@@ -598,17 +662,17 @@ void ScreamSenderPush (uint8_t *buf_rtp, uint32_t recvlen, uint16_t seq,
         first_ntp = ntp;
         printf("%s %u time %u  first %u\n", __FUNCTION__, __LINE__, ntp, seq);
     }
-    pthread_mutex_lock(&lock_rtp_queue);
-    rc = rtpQueue->push(buf_rtp, recvlen, seq, (marker != 0), (ntp)/65536.0f);
-    pthread_mutex_unlock(&lock_rtp_queue);
+    pthread_mutex_lock(&stream->lock_rtp_queue);
+    rc = stream->rtpQueue->push(buf_rtp, recvlen, ssrc, seq, (marker != 0), (ntp)/65536.0f);
+    pthread_mutex_unlock(&stream->lock_rtp_queue);
     if (!rc) {
-        rtpqueue_full++;
-        cb(cb_data, (uint8_t *)buf_rtp, 0);
+        stream->rtpqueue_full++;
+        stream->cb(stream->cb_data, (uint8_t *)buf_rtp, 0);
         cerr << log_tag << " RtpQueue is full " << endl;
     }
     if (rc) {
         pthread_mutex_lock(&lock_scream);
-        screamTx->newMediaFrame(ntp, in_ssrc[0], recvlen);
+        screamTx->newMediaFrame(ntp, ssrc, recvlen, (marker != 0));
         pthread_mutex_unlock(&lock_scream);
     }
 }
@@ -642,18 +706,20 @@ uint8_t ScreamSenderRtcpPush(uint8_t*buf_rtcp, uint32_t recvlen) {
     return (1);
 }
 
-void ScreamSenderGetTargetRate (uint32_t *rate_p, uint32_t *force_idr_p) {
+void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force_idr_p) {
     int n = 0;
     *rate_p = 0;
     *force_idr_p = 0;
+    stream_t *stream = NULL;
     /*
      * Poll rate change for all media sources
      */
-    float rate = screamTx->getTargetBitrate(in_ssrc[n]);
+    float rate = screamTx->getTargetBitrate(ssrc);
     if (rate <= 0) {
-        printf("rate 0 %s %d in_ssrc %u \n", __FUNCTION__, __LINE__, in_ssrc[n]);
+        // printf("rate 0 %s %d ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
         return;
     }
+    stream = getStream(ssrc);
     //rate = 1e6*(5+15*(nn/10 % 2));
     if (0) {
         uint32_t rate_32 = (uint32_t)(rate);
@@ -661,7 +727,8 @@ void ScreamSenderGetTargetRate (uint32_t *rate_p, uint32_t *force_idr_p) {
     }
     *rate_p = (uint32_t)(rate * rateMultiply);
     if (*rate_p)  {
-        encoder_rate = *rate_p;
+        stream_t *stream = getStream(ssrc);
+        stream->encoder_rate = *rate_p;
     }
     // cerr << " rate " << *rate_p << endl;
     if (forceidr) {
@@ -672,34 +739,34 @@ void ScreamSenderGetTargetRate (uint32_t *rate_p, uint32_t *force_idr_p) {
         gettimeofday(&tp, NULL);
         double time = tp.tv_sec + tp.tv_usec*1e-6-t0;
 
-        if (screamTx->isLossEpoch(in_ssrc[n])) {
-            lastLossEpochT = time;
-        } else {
+        if (screamTx->isLossEpoch(ssrc)) {
+            stream->lastLossEpochT = time;
         }
-        if (lastLossEpochT > 0.0 && time-lastLossEpochT > 0.1) {
+        if (stream->lastLossEpochT > 0.0 && time-stream->lastLossEpochT > 0.1) {
             /*
              * Wait till 100ms after the last loss until force
              * new IDR
              */
             *force_idr_p = 1;
-            lastLossEpochT = -1;
+            stream->lastLossEpochT = -1;
         } else {
         }
     }
 }
 
 void ScreamSenderStats(char     *s,
-                       uint32_t *len, uint8_t clear)
+                       uint32_t *len, uint32_t ssrc, uint8_t clear)
 {
     char buffer[50];
     uint32_t time_ntp = getTimeInNtp();
     float time_s = time_ntp/65536.0f;
-    screamTx->getLog(time_s, s, clear != 0);
-    snprintf(buffer, 50, ",%lu", rtpqueue_full);
+    stream_t *stream = getStream(ssrc);
+    screamTx->getLog(time_s, s, ssrc, clear != 0);
+    snprintf(buffer, 50, ",%lu", stream->rtpqueue_full);
     strcat(s, buffer);
     *len = strlen(s);
     if (clear) {
-        rtpqueue_full = 0;
+        stream->rtpqueue_full = 0;
     }
 }
 void ScreamSenderStatsHeader(char     *s,

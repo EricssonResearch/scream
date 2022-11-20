@@ -11,6 +11,7 @@ using namespace std;
 static const int kMaxRtpSize = 1200;
 static const int kRtpOverHead = 12;
 
+uint32_t SSRC = 1;
 VideoEnc::VideoEnc(RtpQueue* rtpQueue_, float frameRate_, char *fname, int ixOffset_) {
     rtpQueue = rtpQueue_;
     frameRate = frameRate_;
@@ -49,7 +50,7 @@ int VideoEnc::encode(float time) {
         bytes -= rtpSize;
         rtpSize += kRtpOverHead;
         rtpBytes += rtpSize;
-        rtpQueue->push(rtpPacket, rtpSize, seqNr, false, time);
+        rtpQueue->push(rtpPacket, rtpSize, SSRC, seqNr, false, time);
         seqNr++;
     }
     rtpQueue->setSizeOfLastFrame(rtpBytes);

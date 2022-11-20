@@ -160,7 +160,14 @@ impl ScreamRx {
         false
     }
 
-    pub fn receive(&mut self, time_ntp: u32, ssrc: u32, size: u32, seqNr: u16, ceBits: u8) {
+    pub fn receive_register(
+        &mut self,
+        time_ntp: u32,
+        ssrc: u32,
+        size: u32,
+        seqNr: u16,
+        ceBits: u8,
+    ) {
         self.bytesReceived += size;
         if self.lastRateComputeT_ntp == 0 {
             self.lastRateComputeT_ntp = time_ntp;
@@ -189,6 +196,7 @@ impl ScreamRx {
              *  we currently don't bundle feedback packets
              */
             //rate *= streams.size();
+            // rate *= 4.0;
             let ftmp: f64 = 65536.0 / rate;
             self.rtcpFbInterval_ntp = ftmp as u32;
             // Convert to NTP domain (Q16)
@@ -210,8 +218,10 @@ impl ScreamRx {
          * New {SSRC,PT}
          */
         let mut stream = Stream::new(ssrc);
+        println!("new ssrc {}", ssrc);
         stream.nReportedRtpPackets = self.nReportedRtpPackets as i32;
         stream.ix = self.ix + 1;
+        stream.ssrc = ssrc;
         stream.receive(time_ntp, seqNr, ceBits);
         log!(CAT, "receive insert  {}", ssrc);
         self.streams.insert(ssrc, stream);
@@ -231,7 +241,7 @@ impl ScreamRx {
          * Register received RTP packet with ScreamRx
          */
         let time_ntp = getTimeInNtp();
-        self.receive(time_ntp, ssrc, recvlen, seqNr, EcnCe);
+        self.receive_register(time_ntp, ssrc, recvlen, seqNr, EcnCe);
 
         if self.checkIfFlushAck() || marker {
             let mut bytes = Vec::with_capacity(300);
@@ -250,8 +260,8 @@ impl ScreamRx {
         if self.isFeedback(time_ntp)
             && (self.checkIfFlushAck() || (time_ntp - self.getLastFeedbackT() > rtcpFbInterval_ntp))
         {
-            trace!(CAT, "periodic_flush time_ntp {}, .getLastFeedbackT {},diff {} rtcpFbInterval_ntp {} averageReceivedRate {} ",
-                     time_ntp, self.getLastFeedbackT(), time_ntp - self.getLastFeedbackT(), rtcpFbInterval_ntp,  self.averageReceivedRate);
+            trace!(CAT, "periodic_flush ssrc {} time_ntp {}, .getLastFeedbackT {},diff {} rtcpFbInterval_ntp {} averageReceivedRate {} ",
+                     self.ssrc, time_ntp, self.getLastFeedbackT(), time_ntp - self.getLastFeedbackT(), rtcpFbInterval_ntp,  self.averageReceivedRate);
             let mut bytes = Vec::with_capacity(300);
             let isFeedback = self.createStandardizedFeedback(time_ntp, true, &mut bytes);
             if isFeedback {
@@ -296,14 +306,16 @@ impl Stream {
     pub fn checkIfFlushAck(&self, ackDiff: i32) -> bool {
         let diff: i32 = self.highestSeqNr as i32 - self.highestSeqNrTx as i32;
         if diff <= ackDiff {
-            trace!(
-                CAT,
-                "highestSeqNr {}, highestSeqNrTx {} ackDiff {} nRecvRtpPackets {}",
-                self.highestSeqNr as i32,
-                self.highestSeqNrTx as i32,
-                ackDiff,
-                self.nRecvRtpPackets
-            );
+            /*
+                        trace!(
+                            CAT,
+                            "highestSeqNr {}, highestSeqNrTx {} ackDiff {} nRecvRtpPackets {}",
+                            self.highestSeqNr as i32,
+                            self.highestSeqNrTx as i32,
+                            ackDiff,
+                            self.nRecvRtpPackets
+                        );
+            */
         }
 
         diff >= ackDiff
@@ -353,8 +365,8 @@ impl Stream {
         let diff: i32 = seqNr as i32 - self.lastSn as i32;
         if diff != 1 {
             debug!(CAT,
-                "Packet(s) lost or reordered time_ntp {} : {} was received, previous rcvd is {}, nRecvRtpPackets {}",
-                time_ntp - self. first_recv_ntp, seqNr, self.lastSn, self.nRecvRtpPackets
+                "Packet(s) lost or reordered time_ntp {} : {} was received, previous rcvd is {}, nRecvRtpPackets {}, ssrc {}",
+                time_ntp - self. first_recv_ntp, seqNr, self.lastSn, self.nRecvRtpPackets, self.ssrc
             );
         }
         self.lastSn = seqNr;
@@ -401,9 +413,6 @@ impl Stream {
      */
 
     pub fn getStandardizedFeedback(&mut self, time_ntp: u32, bytes: &mut Vec<u8>) {
-        if self.ssrc != 1 {
-            println!("bogus stream ssrc {}", self.ssrc);
-        }
         /*
          * Write RTP sender SSRC
          */
@@ -419,12 +428,11 @@ impl Stream {
             self.highestSeqNr,
             self.nReportedRtpPackets - 1
         );
-        let tmp_s: u16;
-        if self.highestSeqNr < ((self.nReportedRtpPackets - 1) as u16) {
-            tmp_s = (u16::MAX - ((self.nReportedRtpPackets - 1) as u16)) + 1 + self.highestSeqNr;
+        let tmp_s: u16 = if self.highestSeqNr < ((self.nReportedRtpPackets - 1) as u16) {
+            (u16::MAX - ((self.nReportedRtpPackets - 1) as u16)) + 1 + self.highestSeqNr
         } else {
-            tmp_s = self.highestSeqNr - ((self.nReportedRtpPackets - 1) as u16);
-        }
+            self.highestSeqNr - ((self.nReportedRtpPackets - 1) as u16)
+        };
         bytes.extend_from_slice(&tmp_s.to_be_bytes());
         /*
          * Write number of reports- 1
@@ -475,7 +483,7 @@ impl ScreamRx {
         &mut self,
         time_ntp: u32,
         isMark: bool,
-        mut bytes: &mut Vec<u8>,
+        bytes: &mut Vec<u8>,
     ) -> bool {
         bytes.push(0x80); // TODO FMT = CCFB in 5 LSB
         bytes.push(205);
@@ -485,11 +493,9 @@ impl ScreamRx {
         /*
          * Write RTCP sender SSRC
          */
+        trace!(CAT, "isMark {}", isMark);
         if isMark {
             trace!(CAT, "isMark {}", isMark);
-        }
-        if self.ssrc != 10 {
-            log!(CAT, "bogus ssrc {}", self.ssrc);
         }
         bytes.extend_from_slice(&self.ssrc.to_be_bytes());
         let mut isFeedback = false;
@@ -533,7 +539,7 @@ impl ScreamRx {
             }
             let stream = stream_opt.unwrap();
             isFeedback = true;
-            stream.getStandardizedFeedback(time_ntp, &mut bytes);
+            stream.getStandardizedFeedback(time_ntp, bytes);
             stream.lastFeedbackT_ntp = time_ntp;
             stream.nRtpSinceLastRtcp = 0;
             stream.highestSeqNrTx = stream.highestSeqNr;

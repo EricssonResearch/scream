@@ -267,7 +267,7 @@ extern "C" {
 		/*
 		* Get verbose log information
 		*/
-		void getLog(float time, char *s, bool clear);
+		void getLog(float time, char *s, uint32_t ssrc, bool clear);
 
         /*
 		* Get verbose log header

@@ -17,6 +17,9 @@ pub use gstreamer_rtp::rtp_buffer::RTPBufferExt;
 extern crate gstreamer_video as gstv;
 
 use once_cell::sync::Lazy;
+use std::sync::Once;
+
+static START: Once = Once::new();
 
 const DEFAULT_CURRENT_MAX_BITRATE: u32 = 0;
 
@@ -24,6 +27,7 @@ const DEFAULT_CURRENT_MAX_BITRATE: u32 = 0;
 #[derive(Debug, Clone)]
 struct Settings {
     params: Option<String>,
+    ssrc: u32,
     current_max_bitrate: u32,
 }
 
@@ -31,6 +35,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             params: None,
+            ssrc: 0,
             current_max_bitrate: DEFAULT_CURRENT_MAX_BITRATE,
         }
     }
@@ -40,6 +45,7 @@ impl Default for Settings {
 
 // Struct containing all the element data
 #[repr(C)]
+#[derive(Debug)]
 pub struct Screamtx {
     srcpad: gst::Pad,
     sinkpad: gst::Pad,
@@ -55,7 +61,6 @@ static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
         Some("Screamtx Element"),
     )
 });
-
 impl Screamtx {
     // Called whenever a new buffer is passed to our sink pad. Here buffers should be processed and
     // whenever some output buffer is available have to push it out of the source pad.
@@ -88,6 +93,23 @@ impl Screamtx {
         drop(rtp_buffer);
         let mut rate: u32 = 0;
         let mut force_idr: u32 = 0;
+        let mut settings = self.settings.lock().unwrap();
+        if settings.ssrc == 0 {
+            settings.ssrc = ssrc;
+            println!("imp.rs ssrc {}", ssrc);
+            let s0 = settings.params.as_ref().unwrap().as_str().to_owned();
+            let s = CString::new(s0).expect("CString::new failed");
+            START.call_once(|| unsafe {
+                println!("imp.rs ScreamSenderGlobalPluginInit 1 ");
+                ScreamSenderGlobalPluginInit(ssrc, s.as_ptr(), self, callback);
+                println!("imp.rs ScreamSenderGlobalPluginInit 2 ");
+            });
+
+            unsafe {
+                ScreamSenderPluginInit(ssrc, s.as_ptr(), self, callback);
+            }
+            println!("imp.rs ScreamSenderPluginInit Done ssrc {}", ssrc);
+        }
         unsafe {
             let size = buffer.size().try_into().unwrap();
             ScreamSenderPush(
@@ -99,10 +121,13 @@ impl Screamtx {
                 ssrc,
                 marker,
             );
-            ScreamSenderGetTargetRate(&mut rate, &mut force_idr);
+            // println!("imp.rs push rtp size {} ssrc {}", size, ssrc);
+            ScreamSenderGetTargetRate(ssrc, &mut rate, &mut force_idr);
+            // println!("ScreamSenderGetTargetRate ssrc {}, rate {}, force_idr {} ", ssrc, rate, force_idr);
+            // println!("imp.rs push rtp rate {} {}", rate, force_idr);
         }
+        //        rate = 100000; force_idr = 1;
         if rate != 0 {
-            let mut settings = self.settings.lock().unwrap();
             rate /= 1000;
             let are_equal = settings.current_max_bitrate == rate;
             if !are_equal {
@@ -112,6 +137,8 @@ impl Screamtx {
             if !are_equal {
                 element.notify("current-max-bitrate");
             }
+        } else {
+            // println!("imp.rs rate 0");
         }
         if force_idr != 0 {
             let event = gstv::UpstreamForceKeyUnitEvent::builder()
@@ -120,6 +147,7 @@ impl Screamtx {
             let rc = self.sinkpad.push_event(event);
             println!("imp.rs: force_idr rc {} enabled 1 ", rc);
         }
+        // println!("imp.rs push rtp cont");
         glib::bitflags::_core::result::Result::Ok(gst::FlowSuccess::Ok)
     }
 
@@ -304,14 +332,23 @@ impl Screamtx {
 }
 #[allow(improper_ctypes_definitions)]
 extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
-    trace!(
-        CAT,
-        "gstscream Handling buffer from scream {:?} is_push  {}",
-        buf,
-        is_push
-    );
+    /*
+        trace!(
+            CAT,
+            "gstscream Handling buffer from scream {:?} is_push  {}",
+            buf,
+            is_push
+        );
+    */
     if is_push == 1 {
+        // println!("imp.rs push before");
         unsafe {
+            (*stx)
+                .srcpad
+                .push(buf)
+                .expect("Screamtx callback srcpad.push failed");
+            // println!("imp.rs push after");
+            /*
             let fls = (*stx).srcpad.pad_flags();
             //            if fls.contains(gst::PadFlags::FLUSHING) || fls.contains(gst::PadFlags::EOS)
             if fls.contains(gst::PadFlags::EOS) {
@@ -321,11 +358,14 @@ extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
                 println!("screamtx FL {:?}", fls);
                 drop(buf);
             } else {
+                println!("imp.rs push before {:?}, buf {:?}", (*stx), buf);
                 (*stx)
                     .srcpad
                     .push(buf)
                     .expect("Screamtx callback srcpad.push failed");
+                println!("imp.rs push after");
             }
+            */
         }
     } else {
         drop(buf);
@@ -343,15 +383,24 @@ extern "C" {
         marker: u8,
     );
     fn ScreamSenderRtcpPush(s: *const u8, size: u32) -> u8;
-    fn ScreamSenderStats(s: *mut u8, length: *mut u32, clear: u8);
+    fn ScreamSenderStats(s: *mut u8, length: *mut u32, ssrc: u32, clear: u8);
     fn ScreamSenderStatsHeader(s: *mut u8, length: *mut u32);
     #[allow(improper_ctypes)]
     fn ScreamSenderPluginInit(
+        ssrc: u32,
         s: *const c_char,
         stx: *const Screamtx,
         cb: extern "C" fn(stx: *const Screamtx, buf: gst::Buffer, is_push: u8),
     );
-    fn ScreamSenderGetTargetRate(rate_p: *mut u32, force_idr_p: *mut u32);
+    #[allow(improper_ctypes)]
+    fn ScreamSenderGlobalPluginInit(
+        ssrc: u32,
+        s: *const c_char,
+        stx: *const Screamtx,
+        cb: extern "C" fn(stx: *const Screamtx, buf: gst::Buffer, is_push: u8),
+    );
+
+    fn ScreamSenderGetTargetRate(ssrc: u32, rate_p: *mut u32, force_idr_p: *mut u32);
 
 }
 // This trait registers our type with the GObject object system and
@@ -560,13 +609,6 @@ impl ObjectImpl for Screamtx {
                     "Changing params  to {}",
                     settings.params.as_ref().unwrap()
                 );
-                let s0 = settings.params.as_ref().unwrap().as_str();
-                let s = CString::new(s0).expect("CString::new failed");
-                //                self.srcpad.to_glib_none()
-                // STREAMTX_PTR = Some(&self);
-                unsafe {
-                    ScreamSenderPluginInit(s.as_ptr(), self, callback);
-                }
             }
             "current-max-bitrate" => {
                 let mut settings = self.settings.lock().unwrap();
@@ -597,8 +639,8 @@ impl ObjectImpl for Screamtx {
                     let mut dst = Vec::with_capacity(500);
                     let mut dstlen: u32 = 0;
                     let pdst = dst.as_mut_ptr();
-
-                    ScreamSenderStats(pdst, &mut dstlen, 0);
+                    let settings = self.settings.lock().unwrap();
+                    ScreamSenderStats(pdst, &mut dstlen, settings.ssrc, 0);
                     dst.set_len(dstlen.try_into().unwrap());
                     dst
                 };
@@ -610,8 +652,8 @@ impl ObjectImpl for Screamtx {
                     let mut dst = Vec::with_capacity(500);
                     let mut dstlen: u32 = 0;
                     let pdst = dst.as_mut_ptr();
-
-                    ScreamSenderStats(pdst, &mut dstlen, 1);
+                    let settings = self.settings.lock().unwrap();
+                    ScreamSenderStats(pdst, &mut dstlen, settings.ssrc, 1);
                     dst.set_len(dstlen.try_into().unwrap());
                     dst
                 };
