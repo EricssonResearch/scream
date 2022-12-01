@@ -1693,6 +1693,7 @@ float ScreamTx::getQueueDelayTrend() {
 * Determine active streams
 */
 void ScreamTx::determineActiveStreams(uint32_t time_ntp) {
+	return;
 	float surplusBitrate = 0.0f;
 	float sumPrio = 0.0;
 	bool streamSetInactive = false;
@@ -1700,7 +1701,7 @@ void ScreamTx::determineActiveStreams(uint32_t time_ntp) {
 		if (time_ntp - streams[n]->lastFrameT_ntp > 65536 && streams[n]->isActive) {
 			streams[n]->isActive = false;
 			surplusBitrate += streams[n]->targetBitrate;
-			streams[n]->targetBitrate = streams[n]->minBitrate;
+			//streams[n]->targetBitrate = streams[n]->minBitrate;
 			streamSetInactive = true;
 		}
 		else {
@@ -2119,6 +2120,7 @@ void ScreamTx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	}
 }
 
+//#define USE_NEW_INACTL4S
 void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	isActive = true;
 
@@ -2158,16 +2160,15 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		rtpQueueDelay = rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
 	}
 
-	/*
-	* TODO !! parent->isL4sActiv to be updated in ScreamTx
-	*/
 
 	/*
-	* framePeriod should be computed
-	*/
-
-	if (true || parent->isL4sActive) {
-		/*
+	 * TODO.. the non L4S active code appears to be too restrictive, diificult to ramp up
+	 *  so the L4S active code is used for now, it can be too jumpy though when L4S is not 
+	 *  enabled in the network
+	 */  
+#ifdef USE_NEW_INACTL4S	 
+	if (parent->isL4sActive) {
+#endif		/*
 		 * L4S capable mode and packets are indeed marked, L4S and the promise that RTT is fairly stable
 		 *  makes it possible to compute the target bitrate based on CWND and RTT
 		 */
@@ -2205,7 +2206,6 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		* All this has to be balanced to avoid that SCReAM is starved out by competing
 		*  TCP Prague flows.
 		*/
-
 		float overShootRtpQ = std::max(0.0f, std::min(1.0f, (rtpQueueDelay - framePeriod) / (framePeriod)));
 		l4sOverShootScale = std::min(1.0f, l4sOverShootScale + overShootRtpQ);
 		l4sOverShootScale *= 1.0 - (1.0 / 1024);
@@ -2220,6 +2220,7 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		   alpha = 1.0/16;
 		targetBitrate = (1.0 - alpha) * targetBitrate + alpha * tmp;
 
+#ifdef USE_NEW_INACTL4S	 
 	}
 	else {
 		l4sOverShootScale = 0.0;
@@ -2265,7 +2266,6 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		float sclI = 4 * (targetBitrate - targetBitrateI) / targetBitrateI;
 		sclI = std::max(0.2f, std::min(1.0f, sclI * sclI));
 
-
 		float cwndRatio = ((double)parent->mss) / parent->cwnd;
 		cwndRatio = std::min(1.0, std::max(0.01, cwndRatio * targetBitrate / 50e6));
 		float rateRtpLimit = std::max(targetBitrate, rateRtp);
@@ -2277,7 +2277,7 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 				/*
 				 * Increment bitrate
 				 */
-				float incrementScale = std::min(0.1f, parent->fastIncreaseFactor * cwndRatio);
+				float incrementScale = std::min(0.5f, parent->fastIncreaseFactor * cwndRatio);
 
 				increment = incrementScale * targetBitrate;
 				increment *= sclI;
@@ -2297,9 +2297,9 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 					}
 				}
 
-				float incrementScale = std::min(0.1f, 0.05f * cwndRatio);
+				float incrementScale = std::min(0.1f, 0.1f * cwndRatio);
 
-				incrementScale = incrementScale - 0.02f * std::min(1.0f, queueDelayTrend);
+				incrementScale = incrementScale - 0.01f * std::min(1.0f, queueDelayTrend);
 
 				increment = incrementScale * targetBitrate;
 
@@ -2346,12 +2346,13 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 					increment = 0.0f;
 				}
 			}
-
-
+ 
 			lastBitrateAdjustT_ntp = time_ntp;
 			targetBitrate += increment;
+			
 		}
 	}
+#endif
 
 	lossEventFlag = false;
 	ecnCeEventFlag = false;

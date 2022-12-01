@@ -601,7 +601,7 @@ int setup() {
 			ect == 1,
 			true,
 			enableClockDriftCompensation,
-		  2.0f);
+		    2.0f);
 	else
 		screamTx = new ScreamTx(scaleFactor, scaleFactor,
 			delayTarget,
@@ -613,8 +613,8 @@ int setup() {
 			ect == 1,
 			false,
 			enableClockDriftCompensation,
-		  2.0f,
-		  isNewCc);
+		    2.0f,
+		    isNewCc);
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow(5000);
 
