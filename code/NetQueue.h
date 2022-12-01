@@ -50,7 +50,6 @@ public:
     float lastRateUpdateT;
     float pDrop;
     float prevRateFrac;
-    float l4sTh;
 	float tQueueAvg;
 };
 

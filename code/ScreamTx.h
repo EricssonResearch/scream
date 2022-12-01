@@ -114,6 +114,8 @@ extern "C" {
 		* maxAdaptivePacingRateScale > 1.0 enables adaptive scaling of the pacing rate to transmit large frames faster. 
 		*  This feature is mostly relevant with L4S and has the potential to reduce unecessary queue build-up in the 
 		*  RTP queue, but can also potentially increase network queue build-up 
+		* isNewCc == true enables a new algorithm that is more stable when subject to competing L4S flows 
+		*  in the same boottleneck queue
 		*/
 		ScreamTx(float lossBeta = kLossBeta,
 			float ecnCeBeta = kEcnCeBeta,
@@ -127,7 +129,8 @@ extern "C" {
 			bool isL4s = false,
 			bool openWindow = false,
 			bool enableClockDriftCompensation = false,
-			float maxAdaptivePacingRateScale = 1.0); 
+			float maxAdaptivePacingRateScale = 1.0,
+			bool isNewCc = false); 
 
 		~ScreamTx();
 
@@ -357,6 +360,17 @@ extern "C" {
 			postCongestionDelay = a;
 		}
 
+		/*
+		* The fastIncreaseFactor replaces rampUpSpeed and rampUpScale when 
+		*  isNewCc = true
+		* 1.0 is typicall OK but can be set lower if a more cautios ramp up 
+		*  is desired.
+		*/
+		void setFastIncreaseFactor(float a) {
+			fastIncreaseFactor = a;
+		}
+
+
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -432,6 +446,8 @@ extern "C" {
 			void updateTargetBitrateI(float br);
 
 			void updateTargetBitrate(uint32_t time_ntp);
+			void updateTargetBitrateNew(uint32_t time_ntp);
+			void updateTargetBitrateOld(uint32_t time_ntp);
 
 			bool isRtpQueueDiscard();
 
@@ -524,6 +540,8 @@ extern "C" {
 			int frameSizeAcc;
 			float frameSizeAvg;
 			float adaptivePacingRateScale;
+			float l4sOverShootScale;
+			float framePeriod;
 		};
 
 		/*
@@ -653,6 +671,8 @@ extern "C" {
 		float gainUp;
 		float gainDown;
 		float packetPacingHeadroom;
+		bool isNewCc;
+		float fastIncreaseFactor;
 
 		uint32_t sRttSh_ntp;
 		uint32_t sRtt_ntp;
@@ -731,6 +751,9 @@ extern "C" {
 		*/
 		bool ecnCeEvent;
 		bool isCeThisFeedback;
+		bool isL4sActive;
+		uint32_t lastCeEventT_ntp;
+
 
 
 		/*
@@ -745,6 +768,7 @@ extern "C" {
 		float paceInterval;
 		float rateTransmittedAvg;
 		float maxAdaptivePacingRateScale;
+		float adaptivePacingRateScale;
 
 		/*
 		* Update control variables
