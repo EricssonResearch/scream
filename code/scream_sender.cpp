@@ -68,7 +68,7 @@ float txQueueSizeFactor = 0.1f;
 float queueDelayGuard = 0.05f;
 float hysteresis = 0.0f;
 float fastIncreaseFactor = 1.0f;
-floar isNewCc = false;
+float isNewCc = false;
 
 int periodicRateDropInterval = 600; // seconds*10
 

@@ -2166,7 +2166,7 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	* framePeriod should be computed
 	*/
 
-	if (parent->isL4sActive) {
+	if (true || parent->isL4sActive) {
 		/*
 		 * L4S capable mode and packets are indeed marked, L4S and the promise that RTT is fairly stable
 		 *  makes it possible to compute the target bitrate based on CWND and RTT
