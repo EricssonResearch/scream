@@ -1,6 +1,7 @@
 #ifndef RTP_QUEUE
 #define RTP_QUEUE
 
+#include <cstdint>
 /*
 * Implements a simple RTP packet queue, one RTP queue
 * per stream {SSRC,PT}
@@ -23,6 +24,7 @@ public:
     RtpQueueItem();
     void* packet;
     int size;
+    uint32_t ssrc;
     unsigned short seqNr;
     float ts;
     bool isMark;
@@ -34,15 +36,15 @@ class RtpQueue : public RtpQueueIface {
 public:
     RtpQueue();
 
-    bool push(void *rtpPacket, int size, unsigned short seqNr, bool isMark, float ts);
-    bool pop(void **rtpPacket, int &size, unsigned short &seqNr, bool &isMark);
+    bool push(void *rtpPacket, int size, uint32_t ssrc, unsigned short seqNr, bool isMark, float ts);
+    bool pop(void **rtpPacket, int &size, uint32_t &ssrc, unsigned short &seqNr, bool &isMark);
     int sizeOfNextRtp();
     int seqNrOfNextRtp();
     int seqNrOfLastRtp();
     int bytesInQueue(); // Number of bytes in queue
     int sizeOfQueue();  // Number of items in queue
     float getDelay(float currTs);
-    bool sendPacket(void **rtpPacket, int &size, unsigned short &seqNr);
+    bool sendPacket(void **rtpPacket, int &size, uint32_t &ssrc, unsigned short &seqNr);
     int clear();
     int getSizeOfLastFrame() {return sizeOfLastFrame;};
     void setSizeOfLastFrame(int sz) {sizeOfLastFrame=sz;};

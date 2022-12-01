@@ -10,6 +10,8 @@ using namespace std;
  * Implements a simple RTP packet queue
  */
 
+const float l4sThLo = 0.002f;
+const float l4sThHi = 0.010f;
 NetQueueItem::NetQueueItem() {
 	packet = 0;
 	used = false;
@@ -36,7 +38,6 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_, bool isL4s_) {
     lastRateUpdateT = 0;
     pDrop = 0.0f;
     prevRateFrac = 0.0f;
-	l4sTh = 0.002;//std::max(0.005, 5.0 * 1200 * 8 / rate);
 	tQueueAvg = 0.0;
 }
 
@@ -66,6 +67,12 @@ void NetQueue::insert(float time,
 		}
 	}
 	items[head]->tRelease = std::max(items[head]->tRelease, nextTx);
+	if (isL4s && rate > 0) {
+		float pMark = std::max(0.0f, std::min(1.0f, (items[head]->tRelease - time - l4sThLo) / (l4sThHi-l4sThLo)));
+		if ((rand() % 1000) / 1000 < pMark)
+			items[head]->isCe = true;
+		//if (items[head]->tRelease - time > l4sTh)
+	}
 	nextTx = items[head]->tRelease;
 }
 
@@ -97,21 +104,13 @@ bool NetQueue::extract(float time,
                 isCe = true;
                 lastQueueLow = time;
             }
-			tQueueAvg = (time-items[tail]->tQueue);
+			//tQueueAvg = (time-items[tail]->tQueue);
 			//if (isL4s && time - items[tail]->tQueue > l4sTh && rate > 0.0) {
-			if (false && rate > 0)
-			cerr << tQueueAvg << endl;
-			if (isL4s && tQueueAvg > l4sTh && rate > 0.0) {
-              isCe = true;
-            }
-            if (false && isL4s && pDrop > 0.0f) {
-              float rnd = float(rand()) / RAND_MAX;
-              if (rnd < pDrop) {
-                  isCe = true;
-              }
-          }
-          bytesTx += size;
-          tail++; if (tail == NetQueueSize) tail = 0;
+			//if (isL4s && tQueueAvg > l4sTh && rate > 0.0) {
+              //isCe = true;
+            //}
+            bytesTx += size;
+            tail++; if (tail == NetQueueSize) tail = 0;
 
 		  return true;
 		}

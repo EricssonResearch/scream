@@ -40,6 +40,14 @@ cd scripts
 ./sender.sh
 ```
 
+# Running remote rendering test applications with 3 video screams
+```bash
+cd scripts
+# first window
+./receiver_3.sh
+# second window
+./sender_3.sh
+```
 # Issues
 [Issues with nvenc bitrate changes run time](with https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189 )
 

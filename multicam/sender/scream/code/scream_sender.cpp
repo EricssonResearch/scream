@@ -22,7 +22,7 @@ struct sigaction sa;
 using namespace std;
 
 /*
- * Stub function 
+ * Stub function
  */
 void packet_free(void* a) {//
 }
@@ -85,6 +85,8 @@ float rateMax[MAX_SOURCES]={30000,30000,10000,10000};
 float rateIncrease[MAX_SOURCES]={10000,10000,10000,10000};
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
 float pacingHeadroom = 1.2;
+float fastIncreaseFactor = 1.0;
+bool isNewCc = false;
 
 struct sockaddr_in in_rtp_addr[MAX_SOURCES];
 struct sockaddr_in out_rtcp_addr[MAX_SOURCES];
@@ -165,7 +167,7 @@ void readList(char *buf, float *list) {
 	   	s = strtok(NULL,":");
    }
 }
-	
+
 int main(int argc, char* argv[]) {
 
    struct timeval tp;
@@ -178,6 +180,7 @@ int main(int argc, char* argv[]) {
     */
     if (argc <= 1) {
         cerr << "Usage : " << endl << " scream_sender <options> nsources out_ip out_port prio_1 ..  prio_n" << endl;
+        cerr << " -newcc             : Use new congestion control algorithm (nov 2022)" << endl;
         cerr << " -ect n             : ECN capable transport. n = 0 for ECT(0), n=1 for ECT(1). Default Not-ECT" << endl;
         cerr << " -cscale val        : Congestion scale factor, range [0.5..1.0], default = 0.9" << endl;
         cerr << "                      it can be necessary to set scale 1.0 if the LTE modem drops packets" << endl;
@@ -202,7 +205,7 @@ int main(int argc, char* argv[]) {
         cerr << "    example -priority 1.0:0.5:0.2:0.1" << endl;
         cerr << " -ratescale list    : Compensate for systematic error in actual vs desired rate" << endl;
         cerr << "    example -ratescale 0.6:0.5:1.0:1.0" << endl;
-        
+
         cerr << " nsources           : Number of sources, min=1, max=" << MAX_SOURCES << endl;
         cerr << " out_ip             : remote (SCReAM receiver) IP address" << endl;
         cerr << " out_port           : remote (SCReAM receiver) port" << endl;
@@ -303,6 +306,12 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
+        if (strstr(argv[ix], "-newcc")) {
+            isNewCc = true;
+            ix += 1;
+            nExpectedArgs += 1;
+            continue;
+        }
         if (strstr(argv[ix], "-pacingheadroom")) {
             pacingHeadroom = atof(argv[ix + 1]);
             ix += 2;
@@ -371,7 +380,7 @@ int main(int argc, char* argv[]) {
 
     /* Create Receive RTP thread(s) */
     pthread_create(&rx_rtp_thread[0], NULL, rxRtpThread0, "RTP thread 0...");
-    
+
     if (nSources > 1)
         pthread_create(&rx_rtp_thread[1], NULL, rxRtpThread1, "RTP thread 1...");
     if (nSources > 2)
@@ -379,7 +388,7 @@ int main(int argc, char* argv[]) {
     if (nSources > 2)
         pthread_create(&rx_rtp_thread[3], NULL, rxRtpThread3, "RTP thread 3...");
     cerr << "RX RTP thread(s) started" << endl;
-    
+
     /* Create RTCP thread */
     pthread_create(&rx_rtcp_thread, NULL, rxRtcpThread, "RTCP thread...");
     cerr << "RTCP thread started" << endl;
@@ -394,11 +403,11 @@ int main(int argc, char* argv[]) {
         char s[1000];
         time_ntp = getTimeInNtp();
 
-        
+
         if (time_ntp - lastLogT_ntp > 16384) { // 0.25s in Q16
 			lastLogT_ntp = time_ntp;
             char s1[1000];
-            
+
             //pthread_mutex_lock(&lock_scream);
             time_ntp = getTimeInNtp();
             time_s = (time_ntp) / 65536.0f;
@@ -430,8 +439,8 @@ int main(int argc, char* argv[]) {
                 memcpy(s1 + 2 + n * 4, &in_ssrc_network[n], 4);
             }
             sendPacket(s1, 2 + nSources * 4);
-            
-            
+
+
            // pthread_mutex_lock(&lock_scream);
             time_ntp = getTimeInNtp();
             time_s = (time_ntp) / 65536.0f;
@@ -441,28 +450,28 @@ int main(int argc, char* argv[]) {
             if (time_ntp-lastRtcpT_ntp > 8192) {
                 sendBreakSignal = true;
             }
-            
+
             if (sendBreakSignal) {
                 cerr << "RTCP feedback missing" << endl;
                 /*
                 * Signal to RC car to break
-                */            
- 
+                */
+
                 qualityIndex=-1;
             }
             sprintf(s,"%d",qualityIndex);
-            sendto(fd_python,(const char*)s,strlen(s),MSG_CONFIRM,(const struct sockaddr*)&python_addr, sizeof(python_addr));			
-            
-            //pthread_mutex_lock(&lock_scream);            
+            sendto(fd_python,(const char*)s,strlen(s),MSG_CONFIRM,(const struct sockaddr*)&python_addr, sizeof(python_addr));
+
+            //pthread_mutex_lock(&lock_scream);
             time_ntp = getTimeInNtp();
             time_s = (time_ntp) / 65536.0f;
             qualityIndex = int16_t(screamTx->getQualityIndex(time_s,rateMax[0]*1000.0f,0.05f)+0.5f);
             //pthread_mutex_unlock(&lock_scream);
-            
+
             qualityIndex = htons(qualityIndex);
-                        
+
             sendto(fd_out_ctrl, &qualityIndex, 2, 0, (struct sockaddr *)&out_ctrl_addr, sizeof(out_ctrl_addr));
-            
+
             if (fp_log) {
                 fflush(fp_log);
             }
@@ -679,7 +688,7 @@ void *rxRtpThread0(void *arg) {
     }
     /*
      * ToDo delete rtpBufs ?
-     */ 
+     */
     return NULL;
 }
 void *rxRtpThread1(void *arg) {
@@ -745,7 +754,7 @@ void *rxRtcpThread(void *arg) {
 			sprintf(s, "%1.4f", getTimeInNtp() / 65536.0f);
 			screamTx->setTimeString(s);
             pthread_mutex_lock(&lock_scream);
-            screamTx->incomingStandardizedFeedback(getTimeInNtp(), buf_rtcp, recvlen);            
+            screamTx->incomingStandardizedFeedback(getTimeInNtp(), buf_rtcp, recvlen);
             lastRtcpT_ntp = getTimeInNtp();
             pthread_mutex_unlock(&lock_scream);
         } else {
@@ -789,7 +798,7 @@ int setup() {
           return 0;
         }
     }
-    
+
     out_ctrl_addr.sin_family = AF_INET;
     inet_aton(in_ip, (in_addr*)&out_ctrl_addr.sin_addr.s_addr);
     out_ctrl_addr.sin_port = htons(33000);
@@ -870,8 +879,9 @@ int setup() {
         bytesInFlightHistSize,
         (ect == 1),
         false,
-        false, 
-        2.0f);
+        false,
+        2.0f,
+        isNewCc);
     screamTx->setCwndMinLow(10000); // ~1.5Mbps at RTT = 50ms
     screamTx->setPostCongestionDelay(1.0);
     screamTx->setMaxTotalBitrate(maxTotalRate);

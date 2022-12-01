@@ -1,5 +1,6 @@
 use failure::Error;
 use std::env;
+use std::process::exit;
 
 extern crate argparse;
 extern crate failure;
@@ -45,6 +46,13 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
 
     let pls = env::var("SENDPIPELINE").unwrap();
     println!("Pipeline: {}", pls);
+    let n_encoder0 = pls.matches("name=encoder0").count();
+    let n_encoders = pls.matches("name=encoder").count();
+    if n_encoder0 == 0 {
+        println!("missing name=encoder0");
+        exit(0);
+    }
+
     let pipeline = gst::parse_launch(&pls).unwrap();
     let pipeline = pipeline.downcast::<gst::Pipeline>().unwrap();
 
@@ -58,14 +66,22 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
     /*  TBD
      * set ecn bits
      */
-    sender_util::stats(&pipeline_clone, &Some("screamtx".to_string()));
-    sender_util::run_time_bitrate_set(
-        &pipeline_clone,
-        verbose,
-        &Some("screamtx".to_string()),
-        &Some("video".to_string()),
-        ratemultiply_opt,
-    );
+    for n in 0..n_encoders {
+        let n_string = n.to_string();
+        sender_util::stats(
+            &pipeline_clone,
+            n,
+            &Some("screamtx".to_string() + &n_string),
+        );
+        sender_util::run_time_bitrate_set(
+            &pipeline_clone,
+            verbose,
+            &Some("screamtx".to_string() + &n_string),
+            &Some("encoder".to_string() + &n_string),
+            ratemultiply_opt,
+        );
+    }
+
     let main_loop_cloned = main_loop.clone();
     let bus = pipeline_clone.bus().unwrap();
     bus.add_watch(move |_, msg| {

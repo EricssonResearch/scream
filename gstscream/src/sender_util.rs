@@ -21,7 +21,7 @@ struct RateInfo {
     count: u32,
 }
 
-pub fn stats(bin: &gst::Pipeline, screamtx_name_opt: &Option<String>) {
+pub fn stats(bin: &gst::Pipeline, n: usize, screamtx_name_opt: &Option<String>) {
     let sender_stats_timer: u32 = env::var("SENDER_STATS_TIMER")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -36,13 +36,12 @@ pub fn stats(bin: &gst::Pipeline, screamtx_name_opt: &Option<String>) {
     }
     let pipeline_clock = bin.pipeline_clock();
 
-    let sender_stats_file_name: String;
-
-    sender_stats_file_name =
-        env::var("SENDER_STATS_FILE_NAME").unwrap_or_else(|_| "sender_scream_stats.csv".into());
+    let repl_string = "_".to_owned() + &n.to_string() + ".csv";
+    let sender_stats_file_name: String = env::var("SENDER_STATS_FILE_NAME")
+        .unwrap_or_else(|_| "sender_scream_stats.csv".into())
+        .replace(".csv", &repl_string);
     println!("SENDER_STATS_FILE_NAME={}", sender_stats_file_name);
-    let mut out: File;
-    out = File::create(&sender_stats_file_name).unwrap();
+    let mut out: File = File::create(&sender_stats_file_name).unwrap();
 
     let scream_name = screamtx_name_opt.as_ref().unwrap();
     let screamtx_e = match bin.by_name(scream_name) {
@@ -56,7 +55,7 @@ pub fn stats(bin: &gst::Pipeline, screamtx_name_opt: &Option<String>) {
     let screamtx_e_clone = screamtx_e.clone();
     let stats_str_header = screamtx_e.property::<String>("stats-header");
 
-    writeln!(out, "time-ns, {}", stats_str_header).unwrap();
+    writeln!(out, "time-ns,{}", stats_str_header).unwrap();
 
     let outp_opt: Option<Arc<Mutex<File>>> = Some(Arc::new(Mutex::new(out)));
 
@@ -99,8 +98,11 @@ pub fn run_time_bitrate_set(
         encoder_name_opt, screamtx_name_opt, ratemultiply_opt
     );
     let encoder_name = encoder_name_opt.as_ref().unwrap();
-    println!("{:?}", encoder_name);
-    let video = bin.by_name(encoder_name).expect("Failed to by_name video");
+    println!("encoder_name {:?}", encoder_name);
+    let encoder_name_clone = encoder_name.clone();
+    let video = bin
+        .by_name(encoder_name)
+        .expect("Failed to by_name encoder");
 
     let video_cloned = video;
     match screamtx_name_opt.as_ref() {
@@ -111,22 +113,21 @@ pub fn run_time_bitrate_set(
                     scream.connect("notify::current-max-bitrate", false,  move |_values| {
                         let rate = scream_cloned.property::<u32>("current-max-bitrate");
                         let rate = rate * ratemultiply;
+                        let prev_br:u32 = video_cloned.property::<u32>("bitrate");
                         video_cloned
                             .set_property("bitrate", &rate);
                         let n = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                        let rate_prev;
-                        let st_prev;
                         let mut rate_info_prev = RATE_INFO_PREV.lock().unwrap();
-                        rate_prev = rate_info_prev.rate;
-                        st_prev = rate_info_prev.st;
+                        let rate_prev = rate_info_prev.rate;
+                        let st_prev = rate_info_prev.st;
                         let diff = n.as_secs() - st_prev.as_secs();
                         if diff >= 1 {
                             if rate != rate_prev {
                                 if verbose {
-                                    println!("notif: {}.{:06} rate {:08} rate_prev {:08} time_prev {}.{:06} diff {} count {}",
-                                             n.as_secs(), n.subsec_micros(), rate, rate_prev, st_prev.as_secs(),
-                                             st_prev.subsec_micros(), diff, rate_info_prev.count);
+                                    println!("notif: {} {}.{:06} rate {:08} rate_prev {:08} time_prev {}.{:06} diff {} count {} prev_br {}",
+                                             encoder_name_clone, n.as_secs(), n.subsec_micros(), rate, rate_prev, st_prev.as_secs(),
+                                             st_prev.subsec_micros(), diff, rate_info_prev.count, prev_br);
                                 }
                                 rate_info_prev.rate = rate;
                                 rate_info_prev.st = n;

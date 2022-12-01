@@ -50,7 +50,7 @@ impl Screamrx {
         _element: &super::Screamrx,
         buffer: gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
-        gstreamer::trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
+        // gstreamer::trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
         let rtp_buffer = RTPBuffer::from_buffer_readable(&buffer).unwrap();
         let seq = rtp_buffer.seq();
         let payload_type = rtp_buffer.payload_type();
@@ -61,11 +61,13 @@ impl Screamrx {
         trace!(
             CAT,
             obj: pad,
-            "gstscream Handling rtp buffer seq {} payload_type {} timestamp {} ",
+            "gstscream Handling rtp buffer seq {} ssrc {}, payload_type {} timestamp {} ",
             seq,
+            ssrc,
             payload_type,
             timestamp
         );
+
         drop(rtp_buffer);
         let size: u32 = buffer.size().try_into().unwrap();
         // TBD get ECN

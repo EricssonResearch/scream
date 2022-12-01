@@ -143,7 +143,7 @@ The SCReAM code comes in two (three) applications
 
 - Windows based test application : This application implements a simple bottleneck and does only local simulation. Open the scream.sln application in Visual studio and build.
 - Linux based BW test application :  Makes in possible to benchmark the throughput live networks and test beds. The tool models a video encoder. See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx for further instructions.
-- gstreamer plugin : This application is kept in ./code/gscream . It is however currently not maintained and may not work properly
+- gstreamer plugin : This application is kept in ./gstscream. See ./gstscream/README.md for details.
 
 ### Build SCReAM BW test application
 

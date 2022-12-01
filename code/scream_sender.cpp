@@ -66,7 +66,9 @@ bool pushTraffic = false;
 float packetPacingHeadroom = 1.25f;
 float txQueueSizeFactor = 0.1f;
 float queueDelayGuard = 0.05f;
-float hysteresis = 0.0;
+float hysteresis = 0.0f;
+float fastIncreaseFactor = 1.0f;
+floar isNewCc = false;
 
 int periodicRateDropInterval = 600; // seconds*10
 
@@ -140,7 +142,7 @@ long getTimeInUs(){
 }
 */
 
-void packet_free(void *buf) {
+void packet_free(void *buf, uint32_t ssrc) {
     free(buf);
 }
 
@@ -244,11 +246,12 @@ void *transmitRtpThread(void *arg) {
 					accumulatedPaceTime += retVal;
 				if (retVal != -1.0) {
                     void *buf;
+                    uint32_t ssrc_unused;
 					pthread_mutex_lock(&lock_rtp_queue);
-					rtpQueue->pop(&buf, size, seqNr, isMark);
+					rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
 					sendPacket(buf, size);
 					pthread_mutex_unlock(&lock_rtp_queue);
-                    packet_free(buf);
+                    packet_free(buf, SSRC);
                     buf = NULL;
 					pthread_mutex_lock(&lock_scream);
 					time_ntp = getTimeInNtp();
@@ -415,12 +418,12 @@ void *createRtpThread(void *arg) {
 
 			if (pushTraffic) {
 				sendPacket(buf_rtp, recvlen);
-                packet_free(buf_rtp);
+                packet_free(buf_rtp, SSRC);
                 buf_rtp = NULL;
 			}
 			else {
 				pthread_mutex_lock(&lock_rtp_queue);
-				rtpQueue->push(buf_rtp, recvlen, seqNr, isMark, (time_ntp) / 65536.0f);
+				rtpQueue->push(buf_rtp, recvlen, SSRC, seqNr, isMark, (time_ntp) / 65536.0f);
 				pthread_mutex_unlock(&lock_rtp_queue);
 
 				pthread_mutex_lock(&lock_scream);
@@ -597,7 +600,8 @@ int setup() {
 			20,
 			ect == 1,
 			true,
-			enableClockDriftCompensation);
+			enableClockDriftCompensation,
+		  2.0f);
 	else
 		screamTx = new ScreamTx(scaleFactor, scaleFactor,
 			delayTarget,
@@ -608,7 +612,9 @@ int setup() {
 			20,
 			ect == 1,
 			false,
-			enableClockDriftCompensation);
+			enableClockDriftCompensation,
+		  2.0f,
+		  isNewCc);
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow(5000);
 
@@ -669,12 +675,13 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2022-06-10" << endl;
+		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2022-12-01" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;
 		cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
 		cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
+		cerr << "     -newcc                   use new congestion control algorithm (Nov 2022)" << endl;
 		cerr << "     -nopace                  disable packet pacing" << endl;
 		cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
 		cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
@@ -797,6 +804,11 @@ int main(int argc, char* argv[]) {
 		}
 		if (strstr(argv[ix], "-nopace")) {
 			disablePacing = true;
+			ix++;
+			continue;
+		}
+		if (strstr(argv[ix], "-newcc")) {
+			isNewCc = true;
 			ix++;
 			continue;
 		}
