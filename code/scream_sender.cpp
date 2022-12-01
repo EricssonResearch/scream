@@ -617,6 +617,8 @@ int setup() {
 		    isNewCc);
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow(5000);
+    screamTx->setFastIncreaseFactor(fastIncreaseFactor);
+	
 
 	if (fixedRate > 0) {
 		screamTx->registerNewStream(rtpQueue,
@@ -681,7 +683,8 @@ int main(int argc, char* argv[]) {
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;
 		cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
 		cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
-		cerr << "     -newcc                   use new congestion control algorithm (Nov 2022)" << endl;
+		cerr << "     -newcc                   use new congestion control algorithm (dec 2022)" << endl;
+        cerr << "     -fincrease val           fast increase factor for newcc (default 1.0)" << endl;
 		cerr << "     -nopace                  disable packet pacing" << endl;
 		cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
 		cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
@@ -812,6 +815,11 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
+        if (strstr(argv[ix], "-fincrease")) {
+            fastIncreaseFactor = atof(argv[ix + 1]);
+            ix += 2;
+            continue;
+        }                		
 		if (strstr(argv[ix], "-fps")) {
 			FPS = atof(argv[ix + 1]);
 			ix += 2;
