@@ -618,7 +618,7 @@ int setup() {
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow(5000);
     screamTx->setFastIncreaseFactor(fastIncreaseFactor);
-	
+
 
 	if (fixedRate > 0) {
 		screamTx->registerNewStream(rtpQueue,
@@ -677,7 +677,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2022-12-01" << endl;
+		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2022-12-05" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;
@@ -819,7 +819,7 @@ int main(int argc, char* argv[]) {
             fastIncreaseFactor = atof(argv[ix + 1]);
             ix += 2;
             continue;
-        }                		
+        }
 		if (strstr(argv[ix], "-fps")) {
 			FPS = atof(argv[ix + 1]);
 			ix += 2;

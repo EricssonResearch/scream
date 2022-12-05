@@ -69,6 +69,8 @@ extern "C" {
 	static const float kPacketPacingHeadRoom = 1.25f;
 
 
+
+
 	/*
 	* Max number of RTP packets in flight
 	* With an MSS = 1200 byte and an RTT = 50ms
@@ -91,6 +93,7 @@ extern "C" {
 	static const int kRateUpDateSize = 8;
 	static const int kTargetBitrateHistSize = 3;
 	static const int kLossRateHistSize = 10;
+	static const int kSrttHistBins = 100;
 
 	class RtpQueueIface;
 	class ScreamTx {
@@ -125,7 +128,7 @@ extern "C" {
 			float gainDown = kGainDown,
 			int cwnd = 0,  // An initial cwnd larger than 2*mss
 			float packetPacingHeadroom = kPacketPacingHeadRoom,
-			int bytesInFlightHistSize = 5,
+			int bytesInFlightHistSize = 30,
 			bool isL4s = false,
 			bool openWindow = false,
 			bool enableClockDriftCompensation = false,
@@ -542,6 +545,9 @@ extern "C" {
 			float adaptivePacingRateScale;
 			float l4sOverShootScale;
 			float framePeriod;
+
+			float rtpQOvershoot;
+			uint32_t lastTargetBitrateHUpdateT_ntp;
 		};
 
 		/*
@@ -753,6 +759,7 @@ extern "C" {
 		bool isCeThisFeedback;
 		bool isL4sActive;
 		uint32_t lastCeEventT_ntp;
+		float fractionMarked;
 
 
 
@@ -791,6 +798,16 @@ extern "C" {
 		float queueDelayMin;
 		float queueDelayMinAvg;
 		bool enableRateUpdate;
+
+		/*
+		* SSRT histogram
+		*/
+		float sRttHist[kSrttHistBins];
+		float sRttLow;
+		float sRttHigh;
+
+		float cwndRatio = 0.001f;
+		float cwndRatioScale = 1.0f;
 
 		/*
 		* Variables for multiple steams handling
