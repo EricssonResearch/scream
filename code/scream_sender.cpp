@@ -29,8 +29,8 @@ using namespace std;
 
 #define BUFSIZE 2048
 
-float minPaceInterval = 0.002f;
-int minPaceIntervalUs = 1900;
+float minPaceInterval = 0.001f;
+int minPaceIntervalUs = 900;
 
 #define ECN_CAPABLE
 /*
@@ -428,7 +428,7 @@ void *createRtpThread(void *arg) {
 
 				pthread_mutex_lock(&lock_scream);
 				time_ntp = getTimeInNtp();
-				screamTx->newMediaFrame(time_ntp, SSRC, recvlen, false);
+				screamTx->newMediaFrame(time_ntp, SSRC, recvlen, isMark);
 				pthread_mutex_unlock(&lock_scream);
 			}
 			seqNr++;

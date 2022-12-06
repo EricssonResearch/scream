@@ -558,11 +558,11 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 	* an RTP packet
 	*/
 	bool exit = false;
-	if (queueDelay < queueDelayTarget) {
-		if (false && isNewCc)
-			exit = (bytesInFlight + sizeOfNextRtp) > cwnd*adaptivePacingRateScale + mss;
-		else 
-			exit = (bytesInFlight + sizeOfNextRtp) > cwnd + mss;
+	bool condition = queueDelay < queueDelayTarget;
+	if (isNewCc)
+	   condition = inFastStart;
+	if (condition) {
+		exit = (bytesInFlight + sizeOfNextRtp) > cwnd + mss;
 	} else {
 		exit = (bytesInFlight + sizeOfNextRtp) > cwnd;
 	}
@@ -1512,17 +1512,15 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 			 * This should be identical to TCP Prague
 			 */
 			double tmp = std::min(1.0f, sRtt / kSrttVirtual);
-			cwndRatioAdjusted *= tmp * tmp;
+			cwndRatioAdjusted *= tmp;
 			if (!inFastStart)
 				cwndRatioAdjusted *= 0.1f + cwndRatioScale * 0.9f;
 		}
-
 		if (inFastStart) {
 			/*
 			* In fast start
 			*/
 			if (queueDelayTrend < 0.2) {
-				//if (!isNewCc && queueDelayTrend < 0.2 || isNewCc && getQueueDelayFraction() < 0.2) {
 				/*
 				* CWND is increased by the number of ACKed bytes if
 				* window is used to 1/1.5 = 67%
