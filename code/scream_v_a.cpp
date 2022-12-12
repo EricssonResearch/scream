@@ -11,13 +11,14 @@
 
 using namespace std;
 
-const float Tmax = 200;
+const float Tmax = 50;
 const bool isChRate = false;
 const bool printLog = true;
-const bool ecnCapable = false;
+const bool ecnCapable = true;
 const bool isL4s = ecnCapable;
 const float FR = 50.0f;
 const bool isNewCc = true;
+const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
@@ -38,12 +39,14 @@ int main(int argc, char* argv[])
 	screamTx->setCwndMinLow(2000);
 	screamTx->setPostCongestionDelay(0.1);
     screamTx->setFastIncreaseFactor(1.0);
+    screamTx->enablePacketPacing(enablePacing);
+
 
     ScreamRx *screamRx = new ScreamRx(0,1,1);
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
     NetQueue *netQueueDelay = new NetQueue(0.02f, 0.0f, 0.0f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 10e6, 0.0f, isL4s);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 30e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);

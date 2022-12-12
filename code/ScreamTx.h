@@ -373,6 +373,12 @@ extern "C" {
 			fastIncreaseFactor = a;
 		}
 
+		/*
+		* Enable/disable packet pacing
+		*/
+		void enablePacketPacing(bool isEnable) {
+			isEnablePacketPacing = isEnable;
+		}
 
 	private:
 		/*
@@ -679,6 +685,7 @@ extern "C" {
 		float packetPacingHeadroom;
 		bool isNewCc;
 		float fastIncreaseFactor;
+		bool isEnablePacketPacing;
 
 		uint32_t sRttSh_ntp;
 		uint32_t sRtt_ntp;
@@ -760,6 +767,7 @@ extern "C" {
 		bool isL4sActive;
 		uint32_t lastCeEventT_ntp;
 		float fractionMarked;
+		float ceDensity;
 
 
 

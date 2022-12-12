@@ -26,8 +26,6 @@ const char *log_tag = "";
 //     with these disabled
 // Fast start can resume if little or no congestion detected
 static const bool kEnableConsecutiveFastStart = true;
-// Packet pacing reduces jitter
-static const bool kEnablePacketPacing = true;
 
 // Rate update interval
 static const uint32_t kRateAdjustInterval_ntp = 1311; // 20ms in NTP domain
@@ -89,6 +87,8 @@ static const float kSrttLowPercentile = 0.1f;
 
 static const float kSrttVirtual = 0.025f; // Virtual SRTT, similar to Prague CC
 
+static const float kCeDensityAlpha = 1.0f / 16;
+
 
 
 ScreamTx::ScreamTx(float lossBeta_,
@@ -134,6 +134,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	queueDelaySbdVar(0.0),
 	queueDelaySbdMean(0.0),
 	queueDelaySbdMeanSh(0.0),
+	isEnablePacketPacing(true),
 
 	bytesNewlyAcked(0),
 	mss(kInitMss),
@@ -163,6 +164,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	postCongestionDelay(0.1f),
 	bytesInFlightRatio(0.0f),
 	isL4sActive(true),
+	ceDensity(1.0f),
 
 	paceInterval_ntp(0),
 	paceInterval(0.0f),
@@ -571,7 +573,7 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 	*/
 	float retVal = 0.0f;
 	uint32_t tmp_l = nextTransmitT_ntp - time_ntp;
-	if (kEnablePacketPacing && (nextTransmitT_ntp > time_ntp) && (tmp_l < 0xFFFF0000)) {
+	if (isEnablePacketPacing && (nextTransmitT_ntp > time_ntp) && (tmp_l < 0xFFFF0000)) {
 		retVal = (nextTransmitT_ntp - time_ntp) * ntp2SecScaleFactor;
 	}
 
@@ -652,7 +654,7 @@ float ScreamTx::addTransmitted(uint32_t time_ntp,
 	/*
 	* Determine when next RTP packet can be transmitted
 	*/
-	if (kEnablePacketPacing)
+	if (isEnablePacketPacing)
 		nextTransmitT_ntp = time_ntp + paceInterval_ntp;
 	else
 		nextTransmitT_ntp = time_ntp;
@@ -821,6 +823,19 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			lastCeEventT_ntp = time_ntp;
 
 		}
+
+		if (!isEnablePacketPacing && !inFastStart && isNewCc) {
+			/*
+			 * The CE density is a metric of the fraction of updated RTCP
+			 *  feedback that indicates CE marking when congestion occurs
+			 * This scales down the CE mark fraction when packet pacing
+			 *  is disabled
+			 */
+			if (isCeThisFeedback)
+				ceDensity += kCeDensityAlpha;
+			ceDensity *= 1.0f - kCeDensityAlpha;
+			ceDensity = std::max(0.25f, ceDensity);
+		}
 		isCeThisFeedback = false;
 		if (isL4s) {
 			/*
@@ -831,8 +846,16 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				if (bytesDeliveredThisRtt > 0) {
 					fractionMarked = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
+					if (fractionMarked == 1.0) {
+						/*
+						 * Likely a fast reduction in throughput, reset ceDensity
+						 *  so that CWND is reduced properly
+						 */
+						ceDensity = 1.0;
+					}
+
 					if (isNewCc)
-						fractionMarked *= cwndRatioScale;
+						fractionMarked *= cwndRatioScale*ceDensity;
 
 					/*
 					 * L4S alpha (backoff factor) is averaged and limited
@@ -1283,7 +1306,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	*/
 	paceInterval = kMinPaceInterval;
 	adaptivePacingRateScale = 1.0;
-	if ((queueDelayFractionAvg > 0.02f || isL4s || maxTotalBitrate > 0) && kEnablePacketPacing) {
+	if ((queueDelayFractionAvg > 0.02f || isL4s || maxTotalBitrate > 0) && isEnablePacketPacing) {
 		float headroom = packetPacingHeadroom;
 		if (lastCongestionDetectedT_ntp == 0) {
 			/*
@@ -2286,7 +2309,20 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	* TCP Prague flows.
 	*/
 	float tmp = 1.0 / (kMaxBytesInFlightHeadRoom);
-	tmp /= (parent->packetPacingHeadroom * (1.0 + 0.5*rtpQOvershoot));
+	tmp /= (1.0 + 0.5*rtpQOvershoot);
+	if (parent->isEnablePacketPacing) {
+		/*
+		 * Scale down proportional to the packet pacing headroom
+		 */
+		tmp /= parent->packetPacingHeadroom;
+	}
+	else {
+		/*
+		 * A reasonable down scaling to ensure that the RTP queue
+		 *  does not build up when esp. when virtual queue is used in network
+		 */
+		tmp /= 1.5;
+	}
 
 	/*
 	* Use the high SRTT percentile computed from histogram to avoid oscillation
