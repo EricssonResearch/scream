@@ -119,6 +119,7 @@ extern "C" {
 		*  RTP queue, but can also potentially increase network queue build-up 
 		* isNewCc == true enables a new algorithm that is more stable when subject to competing L4S flows 
 		*  in the same boottleneck queue
+		* 
 		*/
 		ScreamTx(float lossBeta = kLossBeta,
 			float ecnCeBeta = kEcnCeBeta,
