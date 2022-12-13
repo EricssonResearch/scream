@@ -11,7 +11,7 @@
 
 using namespace std;
 
-const float Tmax = 50;
+const float Tmax = 1000;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = true;
@@ -22,8 +22,8 @@ const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-//#define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_flat.txt"
+#define TRACEFILE "../traces/trace_no_key.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = audio, 0x2 = video, 0x3 = 1+2 
@@ -46,7 +46,7 @@ int main(int argc, char* argv[])
     RtpQueue *rtpQueue[3] = { new RtpQueue(), new RtpQueue(), new RtpQueue() };
     VideoEnc *videoEnc[3] = { 0, 0, 0};
     NetQueue *netQueueDelay = new NetQueue(0.02f, 0.0f, 0.0f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 30e6, 0.0f, isL4s);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 25e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR, (char*)TRACEFILE, 100);
@@ -191,11 +191,11 @@ int main(int argc, char* argv[])
         screamTx->setTargetPriority(11, 0.5);
         */
         if (isChRate) {
-            if ((time > 20.0 && time < 30) && isChRate) {
-                netQueueRate->rate = 10000e3;
+            if ((time > 5.0 && time < 10) && isChRate) {
+                netQueueRate->rate = 20000e3;
             }
             else {
-                netQueueRate->rate = 2000e3;
+                netQueueRate->rate = 30000e3;
             }
         }
         

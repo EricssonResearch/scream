@@ -41,6 +41,73 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_, bool isL4s_) {
 	tQueueAvg = 0.0;
 }
 
+
+
+void NetQueue::insert(float time,
+	void* rtpPacket,
+	unsigned int ssrc,
+	int size,
+	unsigned short seqNr,
+	bool isCe) {
+	int prevHead = head;
+	if (false && nItems > 1000)
+		return;
+	nItems++;
+	head++; if (head == NetQueueSize) head = 0;
+	items[head]->used = true;
+	items[head]->packet = rtpPacket;
+	items[head]->ssrc = ssrc;
+	items[head]->size = size;
+	items[head]->seqNr = seqNr;
+	items[head]->tRelease = time + delay + jitter * (rand() / float(RAND_MAX));
+	items[head]->tReleaseExt = items[head]->tRelease;
+	items[head]->tQueue = time;
+	items[head]->isCe = isCe;
+}
+
+bool NetQueue::extract(float time,
+	void* rtpPacket,
+	unsigned int& ssrc,
+	int& size,
+	unsigned short& seqNr,
+	bool& isCe) {
+	if (items[tail]->used == false) {
+		lastQueueLow = time;
+		return false;
+	}
+	else {
+		//cerr << time << " " << nextTx << " " << items[tail]->tRelease << " " << delay << endl;
+		if (time >= std::max(items[tail]->tRelease, nextTx)) {
+			items[tail]->tReleaseExt = time;
+			nextTx = time;
+			if (rate > 0) 
+				nextTx += size * 8 / rate;
+			rtpPacket = items[tail]->packet;
+			seqNr = items[tail]->seqNr;
+			ssrc = items[tail]->ssrc;
+			size = items[tail]->size;
+			isCe = items[tail]->isCe;
+			items[tail]->used = false;
+			float qDelay = items[tail]->tReleaseExt - items[tail]->tRelease;
+			if (isL4s && rate > 0) {
+				float pMark = std::max(0.0f, std::min(1.0f, (qDelay - l4sThLo) / (l4sThHi - l4sThLo)));
+				if ((rand() % 1000) / 1000 < pMark)
+					items[head]->isCe = true;
+			}
+
+
+			bytesTx += size;
+			tail++; if (tail == NetQueueSize) tail = 0;
+			nItems = std::max(0, nItems - 1);
+
+			return true;
+		}
+		return false;
+	}
+}
+
+
+/*
 void NetQueue::insert(float time, 
 	                  void *rtpPacket,  
 					  unsigned int ssrc,
@@ -48,6 +115,9 @@ void NetQueue::insert(float time,
 					  unsigned short seqNr,
                       bool isCe) {
 	int prevHead = head;
+	if (nItems > 1000)
+		return;
+	nItems++;
 	head++; if (head == NetQueueSize) head = 0;
 	items[head]->used = true;
 	items[head]->packet = rtpPacket;
@@ -71,7 +141,6 @@ void NetQueue::insert(float time,
 		float pMark = std::max(0.0f, std::min(1.0f, (items[head]->tRelease - time - l4sThLo) / (l4sThHi-l4sThLo)));
 		if ((rand() % 1000) / 1000 < pMark)
 			items[head]->isCe = true;
-		//if (items[head]->tRelease - time > l4sTh)
 	}
 	nextTx = items[head]->tRelease;
 }
@@ -93,9 +162,8 @@ bool NetQueue::extract(float time,
             size = items[tail]->size;
             isCe = items[tail]->isCe;
             items[tail]->used = false;
-            /*
-            * Implement a rudimentary CoDel-ish ECN marker (without the 1/sqrt(N) part)
-            */
+            
+            //Implement a rudimentary CoDel-ish ECN marker (without the 1/sqrt(N) part)
             float qDel = time - items[tail]->tQueue;
             if (!isL4s && time - items[tail]->tQueue <= 0.005 && rate > 0.0) {
                 lastQueueLow = time;
@@ -111,12 +179,14 @@ bool NetQueue::extract(float time,
             //}
             bytesTx += size;
             tail++; if (tail == NetQueueSize) tail = 0;
+			nItems = std::max(0, nItems-1);
 
 		  return true;
 		}
 		return false;
 	}
 }
+*/
 
 int NetQueue::sizeOfQueue() {
 	int size = 0;

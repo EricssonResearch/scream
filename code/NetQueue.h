@@ -10,6 +10,7 @@ public:
     int size;
     unsigned short seqNr;
     float tRelease;
+    float tReleaseExt;
     float tQueue;
     bool isCe;
     bool used;

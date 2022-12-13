@@ -808,14 +808,12 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	*/
 	bool isMark = false;
 	isCeThisFeedback |= markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
-
 	/*
 	* Detect lost packets
 	*/
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		detectLoss(time_ntp, txPackets, seqNr, stream);
 	}
-
 	if (isLast) {
 		if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) { // CE event at least every 30ms
 			ecnCeEvent = true;
@@ -845,6 +843,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			*/
 			if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(1966u,sRtt_ntp)) { // Update at least every 10ms
 				lastL4sAlphaUpdateT_ntp = time_ntp;
+				fractionMarked = 0.0f;
 				if (bytesDeliveredThisRtt > 0) {
 					fractionMarked = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
 					if (fractionMarked == 1.0) {
@@ -1445,17 +1444,16 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		}
 		float sRttHighMark = sRttSum * kSrttHighPercentile;
 		float sRttLowMark = sRttSum * kSrttLowPercentile;
-		sRttSum = 0.0;
+		sRttSum = 0;
 		int indexHigh = 0;
 		int indexLow = 0;
-		while (sRttSum < sRttHighMark) {
+		do {
 			sRttSum += sRttHist[indexHigh];
 			indexHigh++;
 			if (sRttSum < sRttLowMark)
 				indexLow++;
-
-
-		}
+		} while (sRttSum < sRttHighMark && indexHigh < kSrttHistBins);
+			
 		sRttHigh = (indexHigh + 1) * kSrttHistBinSize;
 		sRttLow = (indexLow + 1) * kSrttHistBinSize;
 
@@ -1555,9 +1553,10 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 				* Congestion window increase is limited for the 1st few seconds after congestion
 				*/
 				float bytesInFlightMargin = 1.5f;
-				if (bytesInFlight * bytesInFlightMargin + bytesNewlyAcked > cwnd) {
+				if ((bytesInFlight + bytesNewlyAcked) * bytesInFlightMargin > cwnd) {
 					if (isNewCc) {
 						float increment = postCongestionScale * fastIncreaseFactor * bytesNewlyAckedLimited * cwndRatioAdjusted;
+
 						cwnd = cwnd + (int)(increment + 0.5);
 					}
 					else {
@@ -1576,7 +1575,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 				* is used to 1/1.2 = 83%
 				*/
 				float bytesInFlightMargin = 1.2f;
-				if (bytesInFlight * bytesInFlightMargin + bytesNewlyAcked > cwnd) {
+				if ((bytesInFlight + bytesNewlyAcked) * bytesInFlightMargin > cwnd) {
 					float increment = gainUp * offTarget * bytesNewlyAckedLimited * cwndRatioAdjusted;
 					cwnd += (int)(increment + 0.5f);
 				}
@@ -2309,7 +2308,26 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	* All this has to be balanced to avoid that SCReAM is starved out by competing
 	* TCP Prague flows.
 	*/
-	float tmp = 1.0 / (kMaxBytesInFlightHeadRoom);
+	float scl = 0.0;
+	if (parent->isInFastStart()) {
+		/*
+		* Variable scale to avoid that rate jumps when switching to fast start
+		*/
+		float deltaT = (time_ntp - parent->lastCongestionDetectedT_ntp) * ntp2SecScaleFactor;
+		scl = std::min(1.0f, deltaT / 5.0f);
+	}
+
+	float tmp = 1.0;
+	if (parent->isInFastStart()) {
+		/*
+		* Variable scale down in fast start 
+		*/
+		tmp /= 1.0 + (1.0f - scl) * (kMaxBytesInFlightHeadRoom - 1.0f);
+	}
+	else {
+		tmp /= kMaxBytesInFlightHeadRoom;
+	}
+
 	tmp /= (1.0 + 0.5*rtpQOvershoot);
 	if (parent->isEnablePacketPacing) {
 		/*
@@ -2320,7 +2338,7 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	else {
 		/*
 		 * A reasonable down scaling to ensure that the RTP queue
-		 *  does not build up when esp. when virtual queue is used in network
+		 *  does not build up esp. when virtual queue is used in network
 		 */
 		tmp /= 1.5;
 	}
@@ -2330,8 +2348,9 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	* when L4S is not active
 	*/
 	float sRtt = parent->sRtt;
-	if (!(parent->isL4sActive) || parent->isInFastStart())
-		sRtt = std::max(sRtt, parent->sRttHigh);
+	if (!parent->isL4sActive) {
+		sRtt = std::max(sRtt, (1.0f - scl) * parent->sRttHigh + scl * sRtt);
+	}
 	/*
 	* Compute target bitrate.
 	*/
@@ -2341,11 +2360,11 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	lossEventFlag = false;
 	ecnCeEventFlag = false;
 
+	targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate));
+
 	/*
 	* Update targetBitrateH
 	*/
-	targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate));
-
 	float diff = (targetBitrate * targetRateScale - targetBitrateH) / targetBitrateH;
 	if (diff > hysteresis || diff < -hysteresis / 4) {
 		/*
