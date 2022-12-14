@@ -60,13 +60,23 @@ bool RtpQueue::pop(void **rtpPacket, int& size, uint32_t& ssrc, unsigned short& 
         size = items[tail]->size;
 
 #ifndef IGNORE_PACKET
-		*rtpPacket = items[tail]->packet;
+		    *rtpPacket = items[tail]->packet;
 #endif
-		seqNr = items[tail]->seqNr;
+		    seqNr = items[tail]->seqNr;
         ssrc = items[tail]->ssrc;
         isMark = items[tail]->isMark;
         items[tail]->used = false;
-        tail++; if (tail == kRtpQueueSize) tail = 0;
+        /*
+        * Thread safe update of tail to avoid that tail points outside
+        *  array, which can cause e.g RtpQueue::getDelay to give a
+        *  segmentation fault.
+        * This should not really be needed because
+        *  we use mutex to make the pop function atomic
+        */
+        if (tail == kRtpQueueSize - 1)
+            tail = 0;
+        else
+            tail++;
         bytesInQueue_ -= size;
         sizeOfQueue_ -= 1;
         computeSizeOfNextRtp();

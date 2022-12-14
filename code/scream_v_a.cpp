@@ -11,10 +11,10 @@
 
 using namespace std;
 
-const float Tmax = 1000;
+const float Tmax = 100;
 const bool isChRate = false;
 const bool printLog = true;
-const bool ecnCapable = true;
+const bool ecnCapable = false;
 const bool isL4s = ecnCapable;
 const float FR = 50.0f;
 const bool isNewCc = true;
