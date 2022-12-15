@@ -94,6 +94,7 @@ extern "C" {
 	static const int kTargetBitrateHistSize = 3;
 	static const int kLossRateHistSize = 10;
 	static const int kSrttHistBins = 100;
+	static const int kRelFrameSizeHistBins = 20;
 
 	class RtpQueueIface;
 	class ScreamTx {
@@ -553,8 +554,12 @@ extern "C" {
 			float l4sOverShootScale;
 			float framePeriod;
 
-			float rtpQOvershoot;
+			float rtpQOverShoot;
 			uint32_t lastTargetBitrateHUpdateT_ntp;
+
+			float relFrameSizeHist[kRelFrameSizeHistBins];
+			float relFrameSizeHigh;
+
 		};
 
 		/*

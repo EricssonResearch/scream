@@ -89,6 +89,8 @@ static const float kSrttVirtual = 0.025f; // Virtual SRTT, similar to Prague CC
 
 static const float kCeDensityAlpha = 1.0f / 16;
 
+static const float kRelFrameSizeHistDecay = 1.0f / 128;
+static const float kRelFrameSizeHighPercentile = 0.75f;
 
 
 ScreamTx::ScreamTx(float lossBeta_,
@@ -245,7 +247,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	queueDelayMin = 1000.0;
 
 	for (int n = 0; n < kSrttHistBins; n++) {
-		sRttHist[n] = 0.02f;
+		sRttHist[n] = 0;
 	}
 
 	statistics = new Statistics();
@@ -2066,8 +2068,15 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	adaptivePacingRateScale = 1.0;
 	l4sOverShootScale = 0.0;
 	framePeriod = 0.02;
-	rtpQOvershoot = 0.0f;
+	rtpQOverShoot = 0.0f;
 	lastTargetBitrateHUpdateT_ntp = 0;
+
+	relFrameSizeHist[0] = 1.0f;
+	for (int n = 1; n < kRelFrameSizeHistBins; n++) {
+		relFrameSizeHist[n] = 0.0f;
+	}
+	relFrameSizeHigh = 1.0f;
+
 }
 
 /*
@@ -2153,7 +2162,7 @@ void ScreamTx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMar
 		 * New frame, compute RTP overshoot based on amount of data from old frame
 		 * still in RTP queue
 		 */
-		rtpQOvershoot = std::max(0.0f,
+		rtpQOverShoot = std::max(0.0f,
 			std::min(2.0f, (rtpQueue->bytesInQueue() - frameSizeAvg) / frameSizeAvg));
 	}
 
@@ -2175,8 +2184,35 @@ void ScreamTx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMar
 		}
 		lastFrameT_ntp = time_ntp;
 
-		frameSizeAvg = frameSizeAcc * kFrameSizeAvgAlpha + frameSizeAvg * (1.0 - kFrameSizeAvgAlpha);
+		if (frameSizeAvg == 0.0f)
+			frameSizeAvg = frameSizeAcc;
+		else 
+			frameSizeAvg = frameSizeAcc * kFrameSizeAvgAlpha + frameSizeAvg * (1.0 - kFrameSizeAvgAlpha);
 		frameSize = std::max(rtpQueue->bytesInQueue(),frameSizeAcc);
+		/*
+		 * Calculate a histogram over how much the frame sizes exceeds the average. This helps to avoid that
+		 *  the RTP queue builds up when the video encoder generates frames with very varying sizes.
+		 */
+		if (frameSizeAcc > frameSizeAvg) {
+			int ix = std::max(0, std::min(kRelFrameSizeHistBins - 1, (int)((frameSizeAcc - frameSizeAvg) / frameSizeAvg * kRelFrameSizeHistBins)));
+			relFrameSizeHist[ix]++;
+			for (int n = 0; n < kRelFrameSizeHistBins; n++) {
+				relFrameSizeHist[n] *= (1.0f - kRelFrameSizeHistDecay);
+			}
+			float sum = 0.0f;
+			for (int n = 0; n < kRelFrameSizeHistBins; n++) {
+				sum += relFrameSizeHist[n];
+			}
+			float relFrameSizeHighMark = sum * kRelFrameSizeHighPercentile;
+			ix = 1;
+			sum = relFrameSizeHist[0];
+			while (sum < relFrameSizeHighMark && ix < kRelFrameSizeHistBins) {
+				sum += relFrameSizeHist[ix];ix++;
+			}
+			ix--;
+			relFrameSizeHigh = 1.0f+((float)ix) / kRelFrameSizeHistBins;
+		}
+
 		frameSizeAcc = 0;
 
 		if (frameSizeAvg > 500.0f) {
@@ -2328,7 +2364,18 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		tmp /= kMaxBytesInFlightHeadRoom;
 	}
 
-	tmp /= (1.0 + 0.5*rtpQOvershoot);
+	/*
+	 * Compensate for the case where the video coder produce wildly varying frame sizes
+	 * This can make SCReAM starve when there are competing scalable flows over the same
+	 *  bottleneck, but as the key goal is to ensure low latency there is not much of a choice.
+	 */
+	tmp /= relFrameSizeHigh;
+
+	/*
+	 * Scale down if RTP queue grows, this should happen seldom
+	 */
+	tmp /= (1.0 + 0.5*rtpQOverShoot);
+
 	if (parent->isEnablePacketPacing) {
 		/*
 		 * Scale down proportional to the packet pacing headroom
