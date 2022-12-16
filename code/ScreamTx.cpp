@@ -89,7 +89,7 @@ static const float kSrttVirtual = 0.025f; // Virtual SRTT, similar to Prague CC
 
 static const float kCeDensityAlpha = 1.0f / 16;
 
-static const float kRelFrameSizeHistDecay = 1.0f / 128;
+static const float kRelFrameSizeHistDecay = 1.0f / 1024;
 static const float kRelFrameSizeHighPercentile = 0.75f;
 
 

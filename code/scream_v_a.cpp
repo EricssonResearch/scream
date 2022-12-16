@@ -21,8 +21,8 @@ const bool isNewCc = true;
 const bool enablePacing = true;
 
 int swprio = -1;
-//#define TRACEFILE "../traces/trace_key.txt"
-#define TRACEFILE "../traces/trace_no_key.txt"
+#define TRACEFILE "../traces/trace_key.txt"
+//#define TRACEFILE "../traces/trace_no_key.txt"
 //#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
