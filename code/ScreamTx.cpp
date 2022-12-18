@@ -398,7 +398,7 @@ void ScreamTx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, boo
 		*/
 		stream->updateTargetBitrate(time_ntp);
 	}
-	if (time_ntp - lastBaseDelayRefreshT_ntp < sRtt_ntp * 2) {
+	if (time_ntp - lastBaseDelayRefreshT_ntp < sRtt_ntp * 2 && time_ntp > sRtt_ntp * 2) {
 		/*
 		* _Very_ long periods of congestion can cause the base delay to increase
 		* with the effect that the queue delay is estimated wrong, therefore we seek to
