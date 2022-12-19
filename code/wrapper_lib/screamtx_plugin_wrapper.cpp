@@ -31,11 +31,13 @@ stream_t streams[kMaxStreams];
  * Get the stream that matches ssrc
  */
 stream_t *getStream(uint32_t ssrc) {
- 	for (int n = 0; n < kMaxStreams; n++) {
- 		if (streams[n].ssrc == ssrc) {
- 			return &streams[n];
- 		}
- 	}
+    if (ssrc > 0) {
+            for (int n = 0; n < kMaxStreams; n++) {
+                if (streams[n].ssrc == ssrc) {
+                    return &streams[n];
+                }
+            }
+    }
     printf("%s %u no stream  ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
  	return NULL;
 }
@@ -761,6 +763,10 @@ void ScreamSenderStats(char     *s,
     uint32_t time_ntp = getTimeInNtp();
     float time_s = time_ntp/65536.0f;
     stream_t *stream = getStream(ssrc);
+    if (!stream) {
+        *len = 0;
+        return;
+    }
     screamTx->getLog(time_s, s, ssrc, clear != 0);
     snprintf(buffer, 50, ",%lu", stream->rtpqueue_full);
     strcat(s, buffer);
