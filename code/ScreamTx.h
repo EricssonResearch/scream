@@ -725,6 +725,7 @@ extern "C" {
 		int bytesNewlyAcked;
 		int mss; // Maximum Segment Size
 		int cwnd; // congestion window
+		int cwndI; // congestion window inflexion point
 		int cwndMin;
 		int cwndMinLow;
 		bool openWindow;
@@ -757,6 +758,7 @@ extern "C" {
 		float postCongestionScale;
 		float postCongestionDelay;
 		float bytesInFlightRatio;
+		uint32_t lastCwndIUpdateT_ntp;
 
 		/*
 		* Loss event

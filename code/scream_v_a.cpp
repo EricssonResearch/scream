@@ -11,7 +11,7 @@
 
 using namespace std;
 
-const float Tmax = 0.2;
+const float Tmax = 50;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = true;
@@ -22,8 +22,8 @@ const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-//#define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_flat.txt"
+#define TRACEFILE "../traces/trace_no_key.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = audio, 0x2 = video, 0x3 = 1+2 
@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
 
 	screamTx->setCwndMinLow(2000);
 	screamTx->setPostCongestionDelay(0.1);
-    screamTx->setFastIncreaseFactor(1.0);
+    screamTx->setFastIncreaseFactor(10.0);
     screamTx->enablePacketPacing(enablePacing);
 
 

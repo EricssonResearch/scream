@@ -141,6 +141,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	bytesNewlyAcked(0),
 	mss(kInitMss),
 	cwnd(kInitMss * 2),
+	cwndI(1),
 	cwndMin(kInitMss * 2),
 	cwndMinLow(0),
 	lastBytesInFlightT_ntp(0),
@@ -176,6 +177,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	isInitialized(false),
 	lastSRttUpdateT_ntp(0),
 	lastBaseOwdAddT_ntp(0),
+	lastCwndIUpdateT_ntp(0),
 	baseOwdResetT_ntp(0),
 	lastAddToQueueDelayFractionHistT_ntp(0),
 	lastLossEventT_ntp(0),
@@ -1243,6 +1245,7 @@ void ScreamTx::initialize(uint32_t time_ntp) {
 	lastBaseDelayRefreshT_ntp = time_ntp - 1;
 	lastL4sAlphaUpdateT_ntp = time_ntp;
 	initTime_ntp = time_ntp;
+	lastCwndIUpdateT_ntp = time_ntp;
 	lastCongestionDetectedT_ntp = 0;
 }
 
@@ -1489,7 +1492,16 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	}
 	else if (ecnCeEvent) {
 		/*
-		* loss event detected, decrease congestion window
+		* CE event detected
+		* 
+		* Update inflexion point
+		*/
+		if (time_ntp - lastCwndIUpdateT_ntp > 16384) {
+			lastCwndIUpdateT_ntp = time_ntp;
+			cwndI = cwnd;
+		}
+		/*
+		* CE event detected, decrease congestion window
 		*/
 		if (isL4s) {
 			if (isNewCc) {
@@ -1557,7 +1569,17 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 				float bytesInFlightMargin = 1.5f;
 				if ((bytesInFlight + bytesNewlyAcked) * bytesInFlightMargin > cwnd) {
 					if (isNewCc) {
-						float increment = postCongestionScale * fastIncreaseFactor * bytesNewlyAckedLimited * cwndRatioAdjusted;
+						/*
+						* sclI scales down the cwnd increase when cwnd is close to the last
+						* known max that caused a congestion event
+						*/
+						float sclI = (cwnd - cwndI) / float(cwndI); sclI *= 2.0;
+						sclI = std::max(1.0f / (fastIncreaseFactor + 1.0f), std::min(1.0f, sclI * sclI));
+						/*
+						* Calculate CWND increment 
+						*/
+						float increment = sclI* postCongestionScale * fastIncreaseFactor * 
+							bytesNewlyAckedLimited * cwndRatioAdjusted;
 
 						cwnd = cwnd + (int)(increment + 0.5);
 					}
