@@ -400,14 +400,16 @@ void ScreamTx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, boo
 		*/
 		stream->updateTargetBitrate(time_ntp);
 	}
-	if (time_ntp - lastBaseDelayRefreshT_ntp < sRtt_ntp * 2 && time_ntp > sRtt_ntp * 2) {
+	if (!isL4sActive && (time_ntp - lastBaseDelayRefreshT_ntp < sRtt_ntp * 2 && time_ntp > sRtt_ntp * 2)) {
 		/*
 		* _Very_ long periods of congestion can cause the base delay to increase
-		* with the effect that the queue delay is estimated wrong, therefore we seek to
-		* refresh the whole thing by deliberately allowing the network queue to drain
+		*  with the effect that the queue delay is estimated wrong, therefore we seek to
+		*  refresh the whole thing by deliberately allowing the network queue to drain
 		* Clear the RTP queue for 2 RTTs, this will allow the queue to drain so that we
-		* get a good estimate for the min queue delay.
+		*  get a good estimate for the min queue delay.
 		* This funtion is executed very seldom so it should not affect overall experience too much
+		* This function is disabled when L4S is active as congestion queue build up is then 
+		*  very limited
 		*/
 		int cur_cleared = stream->rtpQueue->clear();
         if (cur_cleared) {
