@@ -11,7 +11,7 @@
 
 using namespace std;
 
-const float Tmax = 50;
+const float Tmax = 100;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = true;
@@ -40,6 +40,7 @@ int main(int argc, char* argv[])
 	screamTx->setPostCongestionDelay(0.1);
     screamTx->setFastIncreaseFactor(10.0);
     screamTx->enablePacketPacing(enablePacing);
+    screamTx->setMaxTotalBitrate(20e6);
 
 
     ScreamRx *screamRx = new ScreamRx(0,1,1);

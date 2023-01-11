@@ -481,7 +481,7 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 		* Updated target bitrates if total RTP bitrate
 		* exceeds maxTotalBitrate
 		*/
-		if (maxTotalBitrate > 0) {
+		if (maxTotalBitrate > 0 && !isNewCc) {
 			float tmp = maxTotalBitrate * 0.9f;
 			if (rateRtp > tmp) {
 				inFastStart = false;
@@ -1460,7 +1460,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 			if (sRttSum < sRttLowMark)
 				indexLow++;
 		} while (sRttSum < sRttHighMark && indexHigh < kSrttHistBins);
-			
+
 		sRttHigh = (indexHigh + 1) * kSrttHistBinSize;
 		sRttLow = (indexLow + 1) * kSrttHistBinSize;
 
@@ -1495,7 +1495,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	else if (ecnCeEvent) {
 		/*
 		* CE event detected
-		* 
+		*
 		* Update inflexion point
 		*/
 		if (time_ntp - lastCwndIUpdateT_ntp > 16384) {
@@ -1578,9 +1578,9 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 						float sclI = (cwnd - cwndI) / float(cwndI); sclI *= 2.0;
 						sclI = std::max(1.0f / (fastIncreaseFactor + 1.0f), std::min(1.0f, sclI * sclI));
 						/*
-						* Calculate CWND increment 
+						* Calculate CWND increment
 						*/
-						float increment = sclI* postCongestionScale * fastIncreaseFactor * 
+						float increment = sclI * postCongestionScale * fastIncreaseFactor *
 							bytesNewlyAckedLimited * cwndRatioAdjusted;
 
 						cwnd = cwnd + (int)(increment + 0.5);
@@ -1644,11 +1644,14 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Congestion window validation, checks that the congestion window is
 	* not considerably higher than the actual number of bytes in flight
-	* Disable congestion window validation if L4S is active because the 
+	* Disable congestion window validation if L4S is active because the
 	*  L4S marking will keep the congestion window bounded
 	*/
 	if (!isNewCc && maxBytesInFlight > 5000 && lastCongestionDetectedT_ntp > 0) {
 		cwnd = std::min(cwnd, (int)maxBytesInFlight);
+	}
+	if (isNewCc && maxTotalBitrate > 0) {
+		cwnd = std::min(cwnd, int(packetPacingHeadroom*kMaxBytesInFlightHeadRoom*maxTotalBitrate * sRtt / 8));
 	}
 
 	cwnd = std::max(cwndMin, cwnd);
