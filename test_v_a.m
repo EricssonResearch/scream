@@ -25,7 +25,7 @@ function test_v_a(a,Tlim,I,Bmax,Cmax,Dmax)
     subplot(2,1,1);
     plot(T,a(:,8)); 
     set(gca,'FontSize',12);grid on;
-    axis([Tlim(1) Tlim(2) 0 0.12]);grid on;
+    axis([Tlim(1) Tlim(2) 0 0.05]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay [s]');
     subplot(2,1,2);
@@ -33,16 +33,17 @@ function test_v_a(a,Tlim,I,Bmax,Cmax,Dmax)
     set(gca,'FontSize',12);grid on;
     axis([Tlim(1) Tlim(2) 0 Bmax(1)]);grid on;
     title('Bitrate [Mbps]');    
-    %legend('Target','Transmitted', 'RTP', 'X');
+    legend('Target','Transmitted', 'RTP', 'X');
     xlabel('T [s]');
     end
+
     if I>1
     K = 6;    
     figure(3);
     subplot(2,1,1);
     plot(T,a(:,8+K)); 
     set(gca,'FontSize',12);grid on;
-    axis([0 Tmax 0 0.05]);grid on;
+    axis([Tlim(1) Tlim(2) 0 0.05]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
@@ -53,21 +54,40 @@ function test_v_a(a,Tlim,I,Bmax,Cmax,Dmax)
     legend('Target','Transmitted', 'RTP');
     xlabel('T [s]');
     end
+
     if I>2        
     K = 12;    
     figure(4);
     subplot(2,1,1);
     plot(T,a(:,8+K)); 
     set(gca,'FontSize',12);grid on;
-    axis([Tlim(1) Tlim(2) 0 0.12]);grid on;
+    axis([Tlim(1) Tlim(2) 0 0.05]);grid on;
     set(gca,'XTickLabel',[]);
     title('RTP queue delay');
     subplot(2,1,2);
-    plot(T,a(:,9+K),T,a(:,11+K),T,a(:,10+K));
+    plot(T,a(:,9+K)/1000,T,a(:,11+K)/1000,T,a(:,10+K)/1000);
     set(gca,'FontSize',12);grid on;
     axis([Tlim(1) Tlim(2) 0 Bmax(3)]);grid on;
     title('Bitrate [kbps]');    
-    %legend('Target','Transmitted', 'RTP');
+    legend('Target','Transmitted', 'RTP');
+    xlabel('T [s]');
+    end
+
+    if I>3        
+    K = 18;    
+    figure(5);
+    subplot(2,1,1);
+    plot(T,a(:,8+K)); 
+    set(gca,'FontSize',12);grid on;
+    axis([Tlim(1) Tlim(2) 0 0.05]);grid on;
+    set(gca,'XTickLabel',[]);
+    title('RTP queue delay');
+    subplot(2,1,2);
+    plot(T,a(:,9+K)/1000,T,a(:,11+K)/1000,T,a(:,10+K)/1000);
+    set(gca,'FontSize',12);grid on;
+    axis([Tlim(1) Tlim(2) 0 Bmax(3)]);grid on;
+    title('Bitrate [kbps]');    
+    legend('Target','Transmitted', 'RTP');
     xlabel('T [s]');
     end
     

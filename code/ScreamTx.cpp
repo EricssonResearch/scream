@@ -1016,6 +1016,14 @@ bool ScreamTx::markAcked(uint32_t time_ntp,
 			* Convert from NTP domain OWD to an OWD in [s]
 			*/
 			queueDelay = qDel * ntp2SecScaleFactor;
+			if (isL4sActive || queueDelay < 0.001f) {
+				/*
+				* Either L4S marking or that a long standing queue is avoided
+				*  no need to refresh the base delay for a foreseeable future
+				*/
+				lastBaseDelayRefreshT_ntp = time_ntp - 3*sRtt_ntp;
+			}
+
 
 			uint32_t rtt = time_ntp - tmp->timeTx_ntp;
 
@@ -1837,7 +1845,6 @@ void ScreamTx::determineActiveStreams(uint32_t time_ntp) {
 		if (time_ntp - streams[n]->lastFrameT_ntp > 65536 && streams[n]->isActive) {
 			streams[n]->isActive = false;
 			surplusBitrate += streams[n]->targetBitrate;
-			//streams[n]->targetBitrate = streams[n]->minBitrate;
 			streamSetInactive = true;
 		}
 		else {
@@ -1913,9 +1920,10 @@ void ScreamTx::subtractCredit(uint32_t time_ntp, Stream* servedStream, int trans
 *  fairness.
 */
 void ScreamTx::adjustPriorities(uint32_t time_ntp) {
-	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536) {
+	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536 || isNewCc || queueDelayTrend < 0.2 || !isL4sActive) {
 		/*
 		* Skip if only one stream or if adjustment done recently
+		* Function does not have any meaning when the new CC algo is used
 		*/
 		return;
 	}
@@ -1930,9 +1938,11 @@ void ScreamTx::adjustPriorities(uint32_t time_ntp) {
 		for (int n = 0; n < nStreams; n++) {
 			if (streams[n]->isActive) {
 				float fairRate = rateTransmitted * streams[n]->targetPriority / totalPriority;
-				if (streams[n]->rateRtp > fairRate*1.2f) {
-					float scale = std::max(0.8,1.0f - 0.1f*queueDelayTrend - l4sAlpha * (1.0 - postCongestionScale));
-					streams[n]->targetBitrate = std::max(streams[n]->minBitrate, streams[n]->targetBitrate*scale);
+				if (streams[n]->rateRtp > fairRate*1.05f) {
+					//float scale = std::max(0.8f, 1.0f - 0.1f * queueDelayTrend - l4sAlpha);//*(1.0f - postCongestionScale));
+					streams[n]->targetBitrate = std::max(streams[n]->minBitrate, streams[n]->targetBitrate*0.9f);
+				} else if (streams[n]->rateRtp < fairRate*0.9) {
+					streams[n]->targetBitrate = std::min(streams[n]->maxBitrate, streams[n]->targetBitrate * 1.1f);
 				}
 			}
 		}
