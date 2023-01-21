@@ -1516,6 +1516,16 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		if (isL4s) {
 			if (isNewCc) {
 				cwnd = std::max(cwndMin, (int)((1.0f - l4sAlpha / 2.0) * cwnd) + mss);
+				if (time_ntp - lastCongestionDetectedT_ntp > 5 * 65536) {
+					/*
+					* First congestion event for a long while. It is likely that the congestion window
+					*  has inflated. The latter is to cope with video encoders that can lock to 
+					*  low bitrates. 
+					* Reduce the congestion window to a more sensible level to make congestion reaction 
+					*  faster.
+					*/
+					cwnd = std::min(cwnd, (int)(bytesInFlightHistHiMem * kMaxBytesInFlightHeadRoom));
+				}
 			}
 			else {
 				cwnd = std::max(cwndMin, (int)((1.0f - l4sAlpha / (2.0 * packetPacingHeadroom)) * cwnd) + mss);
@@ -1577,6 +1587,13 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 				* Congestion window increase is limited for the 1st few seconds after congestion
 				*/
 				float bytesInFlightMargin = 1.5f;
+				if (isL4s && isNewCc) {
+					/*
+					* Allow the congestion window to inflate. This makes it possible to handle 
+					*  cases when the video encoders lock to low bitrates
+					*/
+					bytesInFlightMargin = 3.0f;
+				}
 				if ((bytesInFlight + bytesNewlyAcked) * bytesInFlightMargin > cwnd) {
 					if (isNewCc) {
 						/*
@@ -1655,6 +1672,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 	* Disable congestion window validation if L4S is active because the
 	*  L4S marking will keep the congestion window bounded
 	*/
+
 	if (!isNewCc && maxBytesInFlight > 5000 && lastCongestionDetectedT_ntp > 0) {
 		cwnd = std::min(cwnd, (int)maxBytesInFlight);
 	}
@@ -1920,10 +1938,18 @@ void ScreamTx::subtractCredit(uint32_t time_ntp, Stream* servedStream, int trans
 *  fairness.
 */
 void ScreamTx::adjustPriorities(uint32_t time_ntp) {
-	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536 || isNewCc || queueDelayTrend < 0.2 || !isL4sActive) {
+	if (isNewCc) {
 		/*
-		* Skip if only one stream or if adjustment done recently
 		* Function does not have any meaning when the new CC algo is used
+		*/
+		return;
+	}
+
+	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536 || 
+		queueDelayTrend < 0.2 && !isL4sActive) {
+		/*
+		* Skip if not only one stream or less than 1 second since last adjustment or
+		*  if not congested
 		*/
 		return;
 	}
@@ -2643,7 +2669,7 @@ void ScreamTx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 				 *  the target rate. We don't want to deadlock the bitrate rampup because of this so
 				 *  we gradually reduce the increment the larger the difference is
 				 */
-				float scale = std::max(-1.0f, 2.0f*(rateRtpLimit / targetBitrate - 1.0f));
+				float scale = std::max(-1.0f, 1.0f*(rateRtpLimit / targetBitrate - 1.0f));
 				increment *= (1.0 + scale);
 			}
 			/*
@@ -2688,11 +2714,6 @@ void ScreamTx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 
 			if (increment > 0) {
 				wasFastStart = true;
-				/*
-				 * Take it easy with the ramp-up after congestion
-				 */
-				//increment *= parent->postCongestionScale;
-
     			/*
 				 * At very low bitrates it is necessary to actively try to push the
 				 *  the bitrate up some extra
@@ -2704,7 +2725,6 @@ void ScreamTx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 					* Limit the bitrate increase so that it does not go faster than rampUpSpeedTmp
 					* This limitation is not in effect if competing flows are detected
 					*/
-					//increment *= sclI;
 					increment = std::min(increment, (float)(rampUpSpeedTmp*(kRateAdjustInterval_ntp * ntp2SecScaleFactor)));
 				}
 				/*
@@ -2718,14 +2738,14 @@ void ScreamTx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 					 *  the target rate. We don't want to deadlock the bitrate rampup because of this so
 					 *  we gradually reduce the increment the larger the difference is
 					 */
-					float scale = std::max(-1.0f, 2.0f*(rateRtpLimit / targetBitrate - 1.0f));
+					float scale = std::max(-1.0f, 2.0f * (rateRtpLimit / targetBitrate - 1.0f));
 					increment *= (1.0 + scale);
 				}
 			}
 			else {
 				if (rateRtpLimit < targetBitrate) {
 					/*
-					 * Limit decrease if target bitrate is higher than actuall bitrate,
+					 * Limit decrease if target bitrate is higher than actual bitrate,
 					 *  this a possible indication of an idle source, but it may also be the case
 					 *  that the video coder consistently delivers a lower bitrate than the target
 					 */
