@@ -1954,6 +1954,7 @@ void ScreamTx::adjustPriorities(uint32_t time_ntp) {
 		return;
 	}
 
+
 	if (rateTransmitted > 0) {
 		float totalPriority = 0.0f;
 		for (int n = 0; n < nStreams; n++) {
