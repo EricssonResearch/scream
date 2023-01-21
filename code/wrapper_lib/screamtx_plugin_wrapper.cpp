@@ -5,9 +5,6 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <sys/time.h>
-#include <sys/timerfd.h>
-struct itimerval timer;
 
 extern const char *log_tag;
 
