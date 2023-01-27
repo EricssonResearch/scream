@@ -5,7 +5,21 @@ function test_v_a(a,Tlim,I,Bmax,Cmax,Dmax)
 
         
     figure(1);
-    subplot(2,1,1);
+    subplot(3,1,1);
+    ce = a(:,13);
+    if (I>1)
+      k = 6;
+      for n=2:I
+        ce = ce+a(:,13+k);k=k+6;
+      end
+    end  
+    plot(T,a(:,6)/1e3,T,ce/1e3);
+    set(gca,'FontSize',12);grid on;
+    set(gca,'XTickLabel',[]);    
+    axis([Tlim(1) Tlim(2) 0 Bmax(1)*1.5]);grid on;
+    title('Throughput and CE rate [Mbps]');
+    
+    subplot(3,1,2);
     plot(T,a(:,2),T,a(:,3));
     %,T,a(:,4)); 
     set(gca,'FontSize',12);grid on;
@@ -13,7 +27,7 @@ function test_v_a(a,Tlim,I,Bmax,Cmax,Dmax)
     axis([Tlim(1) Tlim(2) 0 Dmax]);grid on;
     title('qdel[s]');
     
-    subplot(2,1,2);
+    subplot(3,1,3);
     plot(T,a(:,4),T,a(:,5),T,a(:,7)*20000,'k');
     set(gca,'FontSize',12);grid on;
     axis([Tlim(1) Tlim(2) 0 Cmax]);grid on;    

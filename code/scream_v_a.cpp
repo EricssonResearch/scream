@@ -11,13 +11,13 @@
 
 using namespace std;
 
-const float Tmax = 100;
+const float Tmax = 200;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = true;
 const bool isL4s = ecnCapable;
-const float FR = 50.0f;
-const float FR2 = 25.0f;
+const float FR = 50.0f; // Frame rate for stream 0
+const int FR_DIV = 2;   // Divisor for framerate for streams 1...N
 const bool isNewCc = true;
 const bool enablePacing = true;
 
@@ -27,15 +27,16 @@ int swprio = -1;
 //#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
-* 0x1 = audio, 0x2 = video, 0x3 = 1+2 
+* 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2 
 */
 const int mode = 0x0F;
-const double timeBase = 100000.0;
+
+
 
 int main(int argc, char* argv[])
 {
-    int tick = (int)(timeBase / FR);
-    int tick2 = (int)(timeBase / FR2);
+
+    int tick = (int)(65536.0f / FR);
     ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 10000, 1.2f, 20, isL4s, false, false, 2.0f, isNewCc);
 
 	screamTx->setCwndMinLow(2000);
@@ -49,25 +50,24 @@ int main(int argc, char* argv[])
     RtpQueue *rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
     VideoEnc *videoEnc[4] = { 0, 0, 0, 0};
     NetQueue *netQueueDelay = new NetQueue(0.02f, 0.0f, 0.0f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 20e6, 0.0f, isL4s);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 15e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
-	videoEnc[1] = new VideoEnc(rtpQueue[1], FR2, (char*)TRACEFILE, 50);
-    videoEnc[2] = new VideoEnc(rtpQueue[2], FR2, (char*)TRACEFILE, 100);
-    videoEnc[3] = new VideoEnc(rtpQueue[3], FR2, (char*)TRACEFILE, 150);
+	videoEnc[1] = new VideoEnc(rtpQueue[1], FR/FR_DIV, (char*)TRACEFILE, 50);
+    videoEnc[2] = new VideoEnc(rtpQueue[2], FR/FR_DIV, (char*)TRACEFILE, 100);
+    videoEnc[3] = new VideoEnc(rtpQueue[3], FR/FR_DIV, (char*)TRACEFILE, 150);
     if (mode & 0x01)
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 3e6f, 10e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 3e6f, 20e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
     if (mode & 0x02)
-		screamTx->registerNewStream(rtpQueue[1], 11, 0.5f, 0.5e6f, 1e6f, 5e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
+		screamTx->registerNewStream(rtpQueue[1], 11, 0.4f, 0.5e6f, 1e6f, 3e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
     if (mode & 0x04)
-        screamTx->registerNewStream(rtpQueue[2], 12, 0.5f, 0.5e6f, 1e6f, 5e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
+        screamTx->registerNewStream(rtpQueue[2], 12, 0.3f, 0.5e6f, 1e6f, 3e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
     if (mode & 0x08)
-        screamTx->registerNewStream(rtpQueue[3], 13, 0.5f, 0.5e6f, 1e6f, 5e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
+        screamTx->registerNewStream(rtpQueue[3], 13, 0.2f, 0.5e6f, 1e6f, 3e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
 
     float time = 0.0f;
     uint32_t time_ntp = 0;
     uint32_t time_ntp_rx = 0;
     int n = 0;
-    int nPkt = 0;
     uint32_t ssrc;
     char rtpPacket[2000];
     int size;
@@ -75,48 +75,57 @@ int main(int argc, char* argv[])
     int nextCallN = -1;
     bool isFeedback = false;
     double lastLogT = -1.0;
+    time = 0;
     while (time <= Tmax) {
+        time_ntp = n+0;
+        time_ntp_rx = n+0;
         float retVal = -1.0;
-        time = n / timeBase;
-        time_ntp = n*(65536 / timeBase) + 100;
-        time = time_ntp / 65536.0f;
-        time_ntp_rx = n * (65536.0f / timeBase);
+        time = n / 65536.0f;
+
         netQueueRate->updateRate(time);
         bool isEvent = false;
 
+        bool isFrame = false;
         if (n % tick == 0) {
             // "Encode" audio + video frame
             if (mode & 0x01) {
                 float br = screamTx->getTargetBitrate(10);
-                //if (br < 2.5e6) br /= 3.0;//1.0e6;
                 videoEnc[0]->setTargetBitrate(br);
                 int bytes = videoEnc[0]->encode(time);
                 screamTx->newMediaFrame(time_ntp, 10, bytes, true);
+                isFrame = true;
             }
-            if (n % tick2 == 0) {
-                if (mode & 0x02) {
-                    videoEnc[1]->setTargetBitrate(screamTx->getTargetBitrate(11));
-                    int bytes = videoEnc[1]->encode(time);
-                    screamTx->newMediaFrame(time_ntp, 11, bytes, true);
-                }
-                if (mode & 0x04) {
-                    videoEnc[2]->setTargetBitrate(screamTx->getTargetBitrate(12));
-                    int bytes = videoEnc[2]->encode(time);
-                    screamTx->newMediaFrame(time_ntp, 12, bytes, true);
-                }
-                if (mode & 0x08) {
-                    videoEnc[3]->setTargetBitrate(screamTx->getTargetBitrate(13));
-                    int bytes = videoEnc[3]->encode(time);
-                    screamTx->newMediaFrame(time_ntp, 13, bytes, true);
-                }
+        }
+        if (n % (tick*FR_DIV) == 0) {
+            if (mode & 0x02) {
+                videoEnc[1]->setTargetBitrate(screamTx->getTargetBitrate(11));
+                int bytes = videoEnc[1]->encode(time);
+                screamTx->newMediaFrame(time_ntp, 11, bytes, true);
+                isFrame = true;
             }
+            if (mode & 0x04) {
+                videoEnc[2]->setTargetBitrate(screamTx->getTargetBitrate(12));
+                int bytes = videoEnc[2]->encode(time);
+                screamTx->newMediaFrame(time_ntp, 12, bytes, true);
+                isFrame = true;
+            }
+            if (mode & 0x08) {
+                videoEnc[3]->setTargetBitrate(screamTx->getTargetBitrate(13));
+                int bytes = videoEnc[3]->encode(time);
+                screamTx->newMediaFrame(time_ntp, 13, bytes, true);
+                isFrame = true;
+            }
+        }
+        if (isFrame) {
             /*
             * New RTP packets added, try if OK to transmit
             */
             retVal = screamTx->isOkToTransmit(time_ntp, ssrc);
-            isEvent = true;
-			//cerr << time << "  "  << screamTx->getQualityIndex(time, 25e6, 0.05) << endl;
-        }
+            if (retVal > 0) {
+                nextCallN = n + max(1, (int)(65536.0f * retVal));
+                isEvent = true;
+            }
+	    }
 
 
         bool isCe = false;
@@ -124,32 +133,23 @@ int main(int argc, char* argv[])
             netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr, isCe);
         }
 
-        if (true || time < 30.0 || time > 30.1) {
+        if (true) {
             if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe)) {
-                if (seqNr % 200 == 19 && false) {
-                    cerr << "lost " << seqNr << endl;
+                uint8_t ceBits = 0x00;
+                if (ecnCapable) {
+                    if (isL4s)
+                        ceBits = 0x01;
+                    else
+                        ceBits = 0x02;
+                    if (isCe || (rand() % 1000) < 0) ceBits = 0x03;
                 }
-                else {
-                    uint8_t ceBits = 0x00;
-                    if (ecnCapable) {
-                        if (isL4s)
-                            ceBits = 0x01;
-                        else
-                            ceBits = 0x02;
-                        if (isCe || (rand() % 1000) < 0) ceBits = 0x03;
-                    }
-					//if (isCe)
-					//cerr << time << " " << isCe << endl;
-
-					screamRx->receive(time_ntp_rx, 0, ssrc, size, seqNr, ceBits);
-                }
-                nPkt++;
+   		        screamRx->receive(time_ntp_rx, 0, ssrc, size, seqNr, ceBits);
             }
         }
 
         unsigned char buf[2000];
         int fb_size = -1;
-        if (true || time < 30.0 || time > 30.5) {
+        if (true) {
             bool isFeedback = screamRx->isFeedback(time_ntp_rx) &&
                 (time_ntp_rx - screamRx->getLastFeedbackT() > screamRx->getRtcpFbInterval() || screamRx->checkIfFlushAck());
 
@@ -163,7 +163,7 @@ int main(int argc, char* argv[])
         if (n == nextCallN && retVal != 0.0f) {
             retVal = screamTx->isOkToTransmit(time_ntp, ssrc);
             if (retVal > 0) {
-                nextCallN = n + max(1, (int)(timeBase*retVal));
+                nextCallN = n + max(1, (int)(65536.0f*retVal));
                 isEvent = true;
             }
         }
@@ -189,9 +189,9 @@ int main(int argc, char* argv[])
                 break;
             }
             netQueueDelay->insert(time, rtpPacket, ssrc, size, seqNr);
-            bool isMark = false; //XXX TODO: figure out correct value
+            bool isMark = false; 
             retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark);
-            nextCallN = n + max(1, (int)(1000.0*retVal));
+            nextCallN = n + max(1, (int)(65536.0f*retVal));
             isEvent = true;
         }
 
@@ -204,13 +204,6 @@ int main(int argc, char* argv[])
             lastLogT = time;
         }
 
-        /*
-        * Test the set traget priority feature
-        if (time > 30 && time < 100)
-        screamTx->setTargetPriority(11, 0.1);
-        else if (time > 50)
-        screamTx->setTargetPriority(11, 0.5);
-        */
         if (isChRate) {
             if ((time > 20.0 && time < 30) && isChRate) {
                 netQueueRate->rate = 3000e3;
@@ -219,7 +212,7 @@ int main(int argc, char* argv[])
                 netQueueRate->rate = 15000e3;
             }
         }
-        
+
         if (time > 30 && swprio == 0) {
             swprio = 1;
             screamTx->setTargetPriority(10, 0.2);
@@ -230,21 +223,7 @@ int main(int argc, char* argv[])
             screamTx->setTargetPriority(10, 1.0);
             screamTx->setTargetPriority(11, 0.2);
         }
-
-        if (false && time > 50)
-            netQueueRate->rate = 8e6;
            
-        /*
-
-            if ((time >= 60) && (time < 80) && isChRate)
-            netQueueRate->rate = 600e3;
-
-            if ((time >= 80) && (time < 100) && isChRate)
-            netQueueRate->rate = 1000e3;
-
-            if ((time >= 100) && isChRate)
-            netQueueRate->rate = 2000e3;
-            */
         n++;
 #ifdef _WIN32
         Sleep(0);
