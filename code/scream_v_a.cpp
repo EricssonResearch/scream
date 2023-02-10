@@ -18,7 +18,7 @@ const bool ecnCapable = true;
 const bool isL4s = ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
-const bool isNewCc = true;
+const bool isNewCc = false;
 const bool enablePacing = true;
 
 int swprio = -1;
@@ -37,9 +37,9 @@ int main(int argc, char* argv[])
 {
 
     int tick = (int)(65536.0f / FR);
-    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 10000, 1.2f, 20, isL4s, false, false, 4.0f, isNewCc);
+    ScreamTx *screamTx = new ScreamTx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 10000, 1.2f, 20, isL4s, false, false, 2.0f, isNewCc);
 
-	screamTx->setCwndMinLow(50000);
+	screamTx->setCwndMinLow(80000);
 	screamTx->setPostCongestionDelay(0.1);
     screamTx->setFastIncreaseFactor(10.0);
     screamTx->enablePacketPacing(enablePacing);

@@ -579,10 +579,11 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 	bool condition = queueDelay < queueDelayTarget;
 	if (isNewCc)
 	   condition = inFastStart;
+
 	if (condition) {
-		exit = (bytesInFlight + sizeOfNextRtp) > cwnd + mss;
+		exit = (bytesInFlight + sizeOfNextRtp) > cwnd*adaptivePacingRateScale + mss;
 	} else {
-		exit = (bytesInFlight + sizeOfNextRtp) > cwnd;
+		exit = (bytesInFlight + sizeOfNextRtp) > cwnd*adaptivePacingRateScale;
 	}
 	/*
 	* Enforce packet pacing
@@ -2452,6 +2453,7 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		priorityShare = targetPriority / prioritySum;
 		cwndShare *= priorityShare;
 	}
+
 
 	/*
 	* Scale the target bitrate down in relation to maxBytesInFlightHeadroom and packet pacing headroom
