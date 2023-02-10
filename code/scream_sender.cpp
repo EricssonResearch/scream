@@ -679,7 +679,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2023-01-21" << endl;
+		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2023-02-10" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;

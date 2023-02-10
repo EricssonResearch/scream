@@ -150,6 +150,7 @@ ScreamTx::ScreamTx(float lossBeta_,
 	bytesInFlightHistLoMem(0),
 	bytesInFlightHistHiMem(0),
 	maxBytesInFlight(0.0f),
+	isAutoTuneMinCwnd(false),
 
 	lossEvent(false),
 	wasLossEvent(false),
@@ -190,6 +191,9 @@ ScreamTx::ScreamTx(float lossBeta_,
 	rateTransmitted(0.0f),
 	rateAcked(0.0f),
 	rateRtp(0.0f),
+	rateTransmittedLog(0.0f),
+	rateAckedLog(0.0f),
+	rateRtpLog(0.0f),
 	queueDelayTrendMem(0.0f),
 	lastCwndUpdateT_ntp(0),
 	bytesInFlight(0),
@@ -455,12 +459,18 @@ float ScreamTx::isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc) {
 		rateTransmitted = 0.0f;
 		rateAcked = 0.0f;
 		rateRtp = 0.0f;
+		rateTransmittedLog = 0.0f;
+		rateAckedLog = 0.0f;
+		rateRtpLog = 0.0f;
 		for (int n = 0; n < nStreams; n++) {
 			streams[n]->updateRate(time_ntp);
 			rateTransmitted += streams[n]->rateTransmitted;
+			rateTransmittedLog += streams[n]->rateTransmittedLog;
 			rateRtp += streams[n]->rateRtp;
+			rateRtpLog += streams[n]->rateRtpLog;
 			rateTransmittedAvg = 0.9f*rateTransmittedAvg + 0.1f*rateTransmitted;
 			rateAcked += streams[n]->rateAcked;
+			rateAckedLog += streams[n]->rateAckedLog;
 			if (n == 0)
 				statistics->add(streams[0]->rateTransmitted, streams[0]->rateLost, sRtt, queueDelay);
 		}
@@ -847,7 +857,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* L4S mode compute a congestion scaling factor that is dependent on the fraction
 			*  of ECN marked packets
 			*/
-			if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(1966u,sRtt_ntp)) { // Update at least every 10ms
+			if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(1966u,sRtt_ntp)) { // Update at least every 30ms
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				fractionMarked = 0.0f;
 				if (bytesDeliveredThisRtt > 0) {
@@ -871,6 +881,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 					 *   3) L4S marking algorithm can lag behind a little and potentially overmark
 					 */
 					l4sAlpha = std::min(kL4sAlphaMax, kL4sG * fractionMarked + (1.0f - kL4sG)*l4sAlpha);
+
 					bytesDeliveredThisRtt = 0;
 					bytesMarkedThisRtt = 0;
 				}
@@ -920,7 +931,7 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		if (fp_log && completeLogItem) {
 			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d",
-                    cwnd, bytesInFlight, inFastStart, rateTransmitted, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe, isMark);
+                    cwnd, bytesInFlight, inFastStart, rateTransmittedLog, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtpLog, stream->rateTransmittedLog, stream->rateAckedLog, stream->rateLostLog, stream->rateCeLog, isMark);
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
 			}
@@ -1148,7 +1159,7 @@ void ScreamTx::getLog(float time, char *s, uint32_t ssrc, bool clear) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
         log_tag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
-		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
+		cwnd, bytesInFlightLog, rateTransmittedLog / 1000.0f, isInFastStart());
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
@@ -1163,8 +1174,8 @@ void ScreamTx::getLog(float time, char *s, uint32_t ssrc, bool clear) {
             tmp->rtpQueue->sizeOfQueue(),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
             tmp->packetsRtp,
-			tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
-			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f,
+			tmp->rateTransmittedLog / 1000.0f, tmp->rateAckedLog / 1000.0f,
+			tmp->rateLostLog / 1000.0f, tmp->rateCeLog / 1000.0f,
             tmp->packetsCe,
             tmp->hiSeqTx,
             tmp->hiSeqAck,
@@ -1185,7 +1196,7 @@ void ScreamTx::getShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
         log_tag, queueDelay, sRtt,
-		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
+		cwnd, bytesInFlightLog, rateTransmittedLog / 1000.0f, isInFastStart());
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
@@ -1193,9 +1204,9 @@ void ScreamTx::getShortLog(float time, char *s) {
 		char s2[200];
 		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f,",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
-			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
-			tmp->rateTransmitted / 1000.0f,
-			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
+			tmp->targetBitrate / 1000.0f, tmp->rateRtpLog / 1000.0f,
+			tmp->rateTransmittedLog / 1000.0f,
+			tmp->rateLostLog / 1000.0f, tmp->rateCeLog / 1000.0f);
 		strcat(s, s2);
 	}
 }
@@ -1204,14 +1215,14 @@ void ScreamTx::getVeryShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, ",
         log_tag, queueDelay, sRtt,
-		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f);
+		cwnd, bytesInFlightLog, rateTransmittedLog / 1000.0f);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < 1; n++) {
 		Stream *tmp = streams[n];
 		char s2[200];
 		sprintf(s2, "%5.0f, %5.0f, ",
-			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
+			tmp->rateLostLog / 1000.0f, tmp->rateCeLog / 1000.0f);
 		strcat(s, s2);
 	}
 }
@@ -1443,35 +1454,48 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		}
 
 
-		/*
-		 * Update the SRTT histogram and compute an upper percentile SRTT
-		 *  that is in turn used to compute a more stable bitrate
-		 *  when L4S is inactive (new congestion control algorithm)
-		 */
-		for (int n = 0; n < kSrttHistBins; n++) {
-			sRttHist[n] *= (1.0 - kSrttHistDecay);
-		}
-		int index = std::max(0, (std::min(kSrttHistBins - 1, int(sRtt / kSrttHistBinSize - 1 + 0.5f))));
-		sRttHist[index]++;
-		float sRttSum = 0.0;
-		for (int n = 0; n < kSrttHistBins; n++) {
-			sRttSum += sRttHist[n];
-		}
-		float sRttHighMark = sRttSum * kSrttHighPercentile;
-		float sRttLowMark = sRttSum * kSrttLowPercentile;
-		sRttSum = 0;
-		int indexHigh = 0;
-		int indexLow = 0;
-		do {
-			sRttSum += sRttHist[indexHigh];
-			indexHigh++;
-			if (sRttSum < sRttLowMark)
-				indexLow++;
-		} while (sRttSum < sRttHighMark && indexHigh < kSrttHistBins);
+		if (time_ntp - initTime_ntp > 2 * 65536) {
+			/*
+			 * Update the SRTT histogram and compute an upper percentile SRTT
+			 *  that is in turn used to compute a more stable bitrate
+			 *  when L4S is inactive (new congestion control algorithm)
+			 * Updated is allowed when sRtt has stabilized 
+			 */
+			for (int n = 0; n < kSrttHistBins; n++) {
+				sRttHist[n] *= (1.0 - kSrttHistDecay);
+			}
+			int index = std::max(0, (std::min(kSrttHistBins - 1, int(sRtt / kSrttHistBinSize - 1 + 0.5f))));
+			sRttHist[index]++;
+			float sRttSum = 0.0;
+			for (int n = 0; n < kSrttHistBins; n++) {
+				sRttSum += sRttHist[n];
+			}
+			float sRttHighMark = sRttSum * kSrttHighPercentile;
+			float sRttLowMark = sRttSum * kSrttLowPercentile;
+			sRttSum = 0;
+			int indexHigh = 0;
+			int indexLow = 0;
+			do {
+				sRttSum += sRttHist[indexHigh];
+				indexHigh++;
+				if (sRttSum < sRttLowMark)
+					indexLow++;
+			} while (sRttSum < sRttHighMark && indexHigh < kSrttHistBins);
 
-		sRttHigh = (indexHigh + 1) * kSrttHistBinSize;
-		sRttLow = (indexLow + 1) * kSrttHistBinSize;
+			sRttHigh = (indexHigh + 1) * kSrttHistBinSize;
+			sRttLow = (indexLow + 1) * kSrttHistBinSize;
 
+			/*
+			* Update cwndMinLow if isAutoTuneMinCwnd == true
+			*/
+			if (isAutoTuneMinCwnd) {
+				float minBitrateSum = 0.0f;
+				for (int n = 0; n < nStreams; n++) {
+					minBitrateSum += streams[n]->minBitrate;
+				}
+				cwndMinLow = minBitrateSum / 8.0f * sRttLow;
+			}
+		}
 		/*
 		 * Scale down the impact of L4S marking when MSS becomes
 		 *  larger in relation to the congestion window
@@ -1480,6 +1504,16 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 		cwndRatioScale = 1.0f - std::min(1.0f, std::max(0.0f,
 			cwndRatio * kSrttVirtual / sRttLow - kCwndRatioThLow) / (kCwndRatioThHigh - kCwndRatioThLow));
 
+		/*
+		* l4sAlpha min can actually be calculated from the relation R=1/p-1
+		*  => p = 1/(R+1)
+		* This speeds up the rate reduction somewhat when throughput drops dramatically
+		*  as l4sAlpha does not need to average up from nearly zero
+		*/
+		if (isNewCc) {
+			float l4sAlphaMin = 1.0f / (getTotalTargetBitrate() / 1.0e6f + 1.0f);
+			l4sAlpha = std::max(l4sAlpha, l4sAlphaMin);
+		}
 
 		lastAddToQueueDelayFractionHistT_ntp = time_ntp;
 	}
@@ -1521,10 +1555,10 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 					* First congestion event for a long while. It is likely that the congestion window
 					*  has inflated. The latter is to cope with video encoders that can lock to 
 					*  low bitrates. 
-					* Reduce the congestion window to a more sensible level to make congestion reaction 
-					*  faster.
+					* Reduce the congestion window to a more sensible level (twice the bytes in flight history)
+					*  to make congestion reaction faster.
 					*/
-					cwnd = std::min(cwnd, (int)(bytesInFlightHistHiMem * kMaxBytesInFlightHeadRoom));
+					cwnd = std::min(cwnd, (int)(bytesInFlightHistHiMem * 2.0));
 				}
 			}
 			else {
@@ -1607,6 +1641,12 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 						*/
 						float increment = sclI * postCongestionScale * fastIncreaseFactor *
 							bytesNewlyAckedLimited * cwndRatioAdjusted;
+						/*
+						* Additionally scale increment with the RTT
+						*/
+						float sRttScale = std::max(1.0f, sRttLow / kSrttVirtual);
+						sRttScale = sRttScale * sRttScale;
+						increment *= sRttScale;
 
 						cwnd = cwnd + (int)(increment + 0.5);
 					}
@@ -2084,7 +2124,11 @@ ScreamTx::Stream::Stream(ScreamTx *parent_,
 	rateTransmitted = 0.0f;
 	rateAcked = 0.0f;
 	rateLost = 0.0f;
-	rateCe = 0.0;
+	rateCe = 0.0f;
+	rateTransmittedLog = 0.0f;
+	rateAckedLog = 0.0f;
+	rateLostLog = 0.0f;
+	rateCeLog = 0.0f;
 	lossEventFlag = false;
 	ecnCeEventFlag = false;
 	txSizeBitsAvg = 0.0f;
@@ -2156,7 +2200,14 @@ void ScreamTx::Stream::updateRate(uint32_t time_ntp) {
 		rateCeHist[rateUpdateHistPtr] = bytesCe * 8.0f / tDelta;
 		rateRtpHist[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
 
+		rateTransmittedLog = rateTransmittedHist[rateUpdateHistPtr];
+		rateAckedLog = rateAckedHist[rateUpdateHistPtr];
+		rateLostLog = rateLostHist[rateUpdateHistPtr];
+		rateCeLog = rateCeHist[rateUpdateHistPtr];
+		rateRtpLog = rateRtpHist[rateUpdateHistPtr];
+
 		rateUpdateHistPtr = (rateUpdateHistPtr + 1) % kRateUpDateSize;
+
 		rateTransmitted = 0.0f;
 		rateAcked = 0.0f;
 		rateLost = 0.0f;
@@ -2227,7 +2278,7 @@ void ScreamTx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMar
 		 * still in RTP queue
 		 */
 		rtpQOverShoot = std::max(0.0f,
-			std::min(2.0f, (rtpQueue->bytesInQueue() - frameSizeAvg) / frameSizeAvg));
+			std::min(2.0f, (rtpQueue->bytesInQueue() - relFrameSizeHigh*frameSizeAvg) / frameSizeAvg));
 	}
 
 	frameSizeAcc += bytesRtp;
@@ -2465,7 +2516,7 @@ void ScreamTx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	/*
 	* Compute target bitrate.
 	*/
-	tmp *= 8 * cwndShare / std::max(0.01f, std::min(0.1f, sRtt));
+	tmp *= 8 * cwndShare / std::max(0.01f, std::min(0.2f, sRtt));
 	targetBitrate = tmp;
 
 	lossEventFlag = false;

@@ -93,7 +93,7 @@ extern "C" {
 	static const int kRateUpDateSize = 8;
 	static const int kTargetBitrateHistSize = 3;
 	static const int kLossRateHistSize = 10;
-	static const int kSrttHistBins = 100;
+	static const int kSrttHistBins = 200;
 	static const int kRelFrameSizeHistBins = 20;
 
 	class RtpQueueIface;
@@ -382,6 +382,17 @@ extern "C" {
 			isEnablePacketPacing = isEnable;
 		}
 
+		/*
+		* Autotune min CWND, if true, the min CWND will be autotuned according to the 
+		*  equation minCwnd = sum(min bitrates)/8*sRttLow
+		* Use this with care because it can potentially starve out parallel traffic
+		*/
+		void autoTuneMinCwnd(bool isAutotune) {
+			isAutoTuneMinCwnd = isAutotune;
+		}
+
+
+
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -500,6 +511,10 @@ extern "C" {
 			float rateAcked;        // ACKed rate
 			float rateLost;         // Lost packets (bit)rate
 			float rateCe;           // Ce marked packets (bit)rate
+			float rateTransmittedLog;  
+			float rateAckedLog;        
+			float rateLostLog;         
+			float rateCeLog;           
 			uint16_t hiSeqAck;      // Highest sequence number ACKed
 			uint16_t hiSeqTx;       // Highest sequence number transmitted
 			float minBitrate;       // Min bitrate
@@ -521,6 +536,7 @@ extern "C" {
 			int bytesRtp;           // Number of RTP bytes from media coder
             uint64_t packetsRtp;
 			float rateRtp;          // Media bitrate
+			float rateRtpLog;
 			float rateRtpHist[kRateUpDateSize];
 			float rateAckedHist[kRateUpDateSize];
 			float rateLostHist[kRateUpDateSize];
@@ -746,6 +762,9 @@ extern "C" {
 		float rateTransmitted;
 		float rateAcked;
 		float rateRtp;
+		float rateTransmittedLog;
+		float rateAckedLog;
+		float rateRtpLog;
 		float queueDelayTrendMem;
 		float maxRate;
 		uint32_t lastCwndUpdateT_ntp;
@@ -759,6 +778,7 @@ extern "C" {
 		float postCongestionDelay;
 		float bytesInFlightRatio;
 		uint32_t lastCwndIUpdateT_ntp;
+		bool isAutoTuneMinCwnd;
 
 		/*
 		* Loss event
