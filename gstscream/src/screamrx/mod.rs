@@ -4,6 +4,8 @@ mod imp;
 
 mod ScreamRx;
 
+mod ecn;
+
 // The public Rust wrapper type for our element
 glib::wrapper! {
     pub struct Screamrx(ObjectSubclass<imp::Screamrx>) @extends gst::Element, gst::Object;

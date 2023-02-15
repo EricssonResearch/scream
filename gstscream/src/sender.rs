@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use failure::Error;
 use std::env;
 use std::process::exit;

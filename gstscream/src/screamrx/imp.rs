@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use glib::subclass::prelude::*;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
@@ -15,6 +16,9 @@ pub use gstreamer_rtp::rtp_buffer::RTPBufferExt;
 use once_cell::sync::Lazy;
 
 use super::ScreamRx;
+
+#[cfg(feature = "ecn-enabled")]
+use super::ecn;
 
 struct ClockWait {
     clock_id: Option<gst::ClockId>,
@@ -50,28 +54,49 @@ impl Screamrx {
         _element: &super::Screamrx,
         buffer: gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
-        // gstreamer::trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
         let rtp_buffer = RTPBuffer::from_buffer_readable(&buffer).unwrap();
         let seq = rtp_buffer.seq();
         let payload_type = rtp_buffer.payload_type();
         let timestamp = rtp_buffer.timestamp();
         let ssrc = rtp_buffer.ssrc();
         let marker = rtp_buffer.is_marker();
+        drop(rtp_buffer);
+        #[cfg(not(feature = "ecn-enabled"))]
+        let ecn_ce: u8 = 0;
+        #[cfg(feature = "ecn-enabled")]
+        let ecn_ce: u8;
+        #[cfg(feature = "ecn-enabled")]
+        {
+            let ecn_meta: *mut ecn::GstNetEcnMeta;
+            unsafe {
+                ecn_meta = gstreamer_sys::gst_buffer_get_meta(
+                    buffer.as_mut_ptr(),
+                    ecn::gst_net_ecn_meta_api_get_type(),
+                ) as *mut ecn::GstNetEcnMeta;
+            }
+            if ecn_meta.is_null() {
+                gstreamer::debug!(CAT, obj: pad, "Buffer did not contain an ECN meta");
+                ecn_ce = 0_u8;
+            } else {
+                unsafe {
+                    ecn_ce = (*ecn_meta).cp as u8;
+                }
+            }
+        }
 
+        let size: u32 = buffer.size().try_into().unwrap();
         trace!(
             CAT,
             obj: pad,
-            "gstscream Handling rtp buffer seq {} ssrc {}, payload_type {} timestamp {} ",
+            "gstscream Handling rtp buffer seq {} ssrc {}, payload_type {} timestamp {} marker {} ecn_ce {} ",
             seq,
             ssrc,
             payload_type,
-            timestamp
+            timestamp,
+            marker,
+            ecn_ce
         );
 
-        drop(rtp_buffer);
-        let size: u32 = buffer.size().try_into().unwrap();
-        // TBD get ECN
-        let ecn_ce: u8 = 0;
         {
             let mut screamrx = self.lib_data.lock().unwrap();
             screamrx.ScreamReceiver(size, seq, payload_type, timestamp, ssrc, marker, ecn_ce);
@@ -100,6 +125,8 @@ impl Screamrx {
                 "gstscream Handling sink StreamStarT event {:?} ;  {:?}; {}",
                 event, ev, stream_id
             );
+            #[cfg(feature = "ecn-enabled")]
+            println!("screamrx/imp.rs ecn-enabled");
             self.srcpad
                 .push_event(gst::event::StreamStart::new(stream_id));
             let rtcp_srcpad = self.rtcp_srcpad.as_ref().unwrap().lock().unwrap();
@@ -232,21 +259,21 @@ impl ObjectSubclass for Screamrx {
                 Screamrx::catch_panic_pad_function(
                     parent,
                     || Err(gst::FlowError::Error),
-                    |screamrx, element| screamrx.sink_chain(pad, element, buffer),
+                    |screamrx| screamrx.sink_chain(pad, &screamrx.obj(), buffer),
                 )
             })
             .event_function(|pad, parent, event| {
                 Screamrx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamrx, element| screamrx.sink_event(pad, element, event),
+                    |screamrx| screamrx.sink_event(pad, &screamrx.obj(), event),
                 )
             })
             .query_function(|pad, parent, query| {
                 Screamrx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamrx, element| screamrx.sink_query(pad, element, query),
+                    |screamrx| screamrx.sink_query(pad, &screamrx.obj(), query),
                 )
             })
             .build();
@@ -257,14 +284,14 @@ impl ObjectSubclass for Screamrx {
                 Screamrx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamrx, element| screamrx.src_event(pad, element, event),
+                    |screamrx| screamrx.src_event(pad, &screamrx.obj(), event),
                 )
             })
             .query_function(|pad, parent, query| {
                 Screamrx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamrx, element| screamrx.src_query(pad, element, query),
+                    |screamrx| screamrx.src_query(pad, &screamrx.obj(), query),
                 )
             })
             .build();
@@ -276,14 +303,14 @@ impl ObjectSubclass for Screamrx {
                 Screamrx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamrx, element| screamrx.rtcp_src_event(pad, element, event),
+                    |screamrx| screamrx.rtcp_src_event(pad, &screamrx.obj(), event),
                 )
             })
             .query_function(|pad, parent, query| {
                 Screamrx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamrx, element| screamrx.rtcp_src_query(pad, element, query),
+                    |screamrx| screamrx.rtcp_src_query(pad, &screamrx.obj(), query),
                 )
             })
             .build();
@@ -332,16 +359,16 @@ impl ObjectSubclass for Screamrx {
 // Implementation of glib::Object virtual methods
 impl ObjectImpl for Screamrx {
     // Called right after construction of a new instance
-    fn constructed(&self, obj: &Self::Type) {
+    fn constructed(&self) {
         // Call the parent class' ::constructed() implementation first
-        self.parent_constructed(obj);
+        self.parent_constructed();
 
         // Here we actually add the pads we created in Screamrx::new() to the
         // element so that GStreamer is aware of their existence.
-        obj.add_pad(&self.sinkpad).unwrap();
+        self.obj().add_pad(&self.sinkpad).unwrap();
         let rtcp_srcpad = self.rtcp_srcpad.as_ref().unwrap().lock().unwrap();
-        obj.add_pad(&*rtcp_srcpad).unwrap();
-        obj.add_pad(&self.srcpad).unwrap();
+        self.obj().add_pad(&*rtcp_srcpad).unwrap();
+        self.obj().add_pad(&self.srcpad).unwrap();
     }
 }
 
@@ -384,7 +411,7 @@ impl ElementImpl for Screamrx {
             // pads that could exist for this type.
 
             // Our element can accept any possible caps on both pads
-            let caps = gst::Caps::new_simple("application/x-rtp", &[]);
+            let caps = gst::Caps::new_empty_simple("application/x-rtp");
             let src_pad_template = gst::PadTemplate::new(
                 "src",
                 gst::PadDirection::Src,
@@ -421,7 +448,6 @@ impl ElementImpl for Screamrx {
     // the element again.
     fn change_state(
         &self,
-        element: &Self::Type,
         transition: gst::StateChange,
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
         match transition {
@@ -431,8 +457,8 @@ impl ElementImpl for Screamrx {
                     log!(CAT, "screamrx.ScreamReceiverPluginInit()");
                     screamrx.ScreamReceiverPluginInit(self.rtcp_srcpad.clone());
                 }
-
-                debug!(CAT, obj: element, "Waiting for 1s before retrying");
+                let element = self.obj();
+                debug!(CAT, imp: self, "Waiting for 1s before retrying");
                 let clock = gst::SystemClock::obtain();
                 let wait_time = clock.time().unwrap() + gst::ClockTime::SECOND;
                 let mut clock_wait = self.clock_wait.lock().unwrap();
@@ -446,7 +472,7 @@ impl ElementImpl for Screamrx {
                             Some(element) => element,
                         };
 
-                        let lib_data = Screamrx::from_instance(&element);
+                        let lib_data = element.imp();
                         let mut screamrx = lib_data.lib_data.lock().unwrap();
                         screamrx.periodic_flush();
                     })
@@ -461,8 +487,8 @@ impl ElementImpl for Screamrx {
             _ => (),
         }
 
-        trace!(CAT, obj: element, "Changing state {:?}", transition);
+        trace!(CAT, imp: self, "Changing state {:?}", transition);
         // Call the parent class' implementation of ::change_state()
-        self.parent_change_state(element, transition)
+        self.parent_change_state(transition)
     }
 }

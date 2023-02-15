@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use crate::glib::translate::IntoGlibPtr;
 use glib::prelude::*;
 use glib::subclass::prelude::*;
@@ -343,14 +344,7 @@ extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
     if is_push == 1 {
         // println!("imp.rs push before");
         unsafe {
-            (*stx)
-                .srcpad
-                .push(buf)
-                .expect("Screamtx callback srcpad.push failed");
-            // println!("imp.rs push after");
-            /*
             let fls = (*stx).srcpad.pad_flags();
-            //            if fls.contains(gst::PadFlags::FLUSHING) || fls.contains(gst::PadFlags::EOS)
             if fls.contains(gst::PadFlags::EOS) {
                 println!("screamtx EOS {:?}", fls);
                 drop(buf);
@@ -358,14 +352,11 @@ extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
                 println!("screamtx FL {:?}", fls);
                 drop(buf);
             } else {
-                println!("imp.rs push before {:?}, buf {:?}", (*stx), buf);
                 (*stx)
                     .srcpad
                     .push(buf)
                     .expect("Screamtx callback srcpad.push failed");
-                println!("imp.rs push after");
             }
-            */
         }
     } else {
         drop(buf);
@@ -431,21 +422,21 @@ impl ObjectSubclass for Screamtx {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || Err(gst::FlowError::Error),
-                    |screamtx, element| screamtx.sink_chain(pad, element, buffer),
+                    |screamtx| screamtx.sink_chain(pad, &screamtx.obj(), buffer),
                 )
             })
             .event_function(|pad, parent, event| {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.sink_event(pad, element, event),
+                    |screamtx| screamtx.sink_event(pad, &screamtx.obj(), event),
                 )
             })
             .query_function(|pad, parent, query| {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.sink_query(pad, element, query),
+                    |screamtx| screamtx.sink_query(pad, &screamtx.obj(), query),
                 )
             })
             .build();
@@ -456,21 +447,21 @@ impl ObjectSubclass for Screamtx {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || Err(gst::FlowError::Error),
-                    |screamtx, element| screamtx.rtcp_sink_chain(pad, element, buffer),
+                    |screamtx| screamtx.rtcp_sink_chain(pad, &screamtx.obj(), buffer),
                 )
             })
             .event_function(|pad, parent, event| {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.rtcp_sink_event(pad, element, event),
+                    |screamtx| screamtx.rtcp_sink_event(pad, &screamtx.obj(), event),
                 )
             })
             .query_function(|pad, parent, query| {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.rtcp_sink_query(pad, element, query),
+                    |screamtx| screamtx.rtcp_sink_query(pad, &screamtx.obj(), query),
                 )
             })
             .build();
@@ -481,14 +472,14 @@ impl ObjectSubclass for Screamtx {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.src_event(pad, element, event),
+                    |screamtx| screamtx.src_event(pad, &screamtx.obj(), event),
                 )
             })
             .query_function(|pad, parent, query| {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.src_query(pad, element, query),
+                    |screamtx| screamtx.src_query(pad, &screamtx.obj(), query),
                 )
             })
             .build();
@@ -499,14 +490,14 @@ impl ObjectSubclass for Screamtx {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.rtcp_src_event(pad, element, event),
+                    |screamtx| screamtx.rtcp_src_event(pad, &screamtx.obj(), event),
                 )
             })
             .query_function(|pad, parent, query| {
                 Screamtx::catch_panic_pad_function(
                     parent,
                     || false,
-                    |screamtx, element| screamtx.rtcp_src_query(pad, element, query),
+                    |screamtx| screamtx.rtcp_src_query(pad, &screamtx.obj(), query),
                 )
             })
             .build();
@@ -529,16 +520,16 @@ impl ObjectSubclass for Screamtx {
 // Implementation of glib::Object virtual methods
 impl ObjectImpl for Screamtx {
     // Called right after construction of a new instance
-    fn constructed(&self, obj: &Self::Type) {
+    fn constructed(&self) {
         // Call the parent class' ::constructed() implementation first
-        self.parent_constructed(obj);
+        self.parent_constructed();
 
         // Here we actually add the pads we created in Screamtx::new() to the
         // element so that GStreamer is aware of their existence.
-        obj.add_pad(&self.sinkpad).unwrap();
-        obj.add_pad(&self.rtcp_sinkpad).unwrap();
-        obj.add_pad(&self.srcpad).unwrap();
-        obj.add_pad(&self.rtcp_srcpad).unwrap();
+        self.obj().add_pad(&self.sinkpad).unwrap();
+        self.obj().add_pad(&self.rtcp_sinkpad).unwrap();
+        self.obj().add_pad(&self.srcpad).unwrap();
+        self.obj().add_pad(&self.rtcp_srcpad).unwrap();
     }
     // Called whenever a value of a property is changed. It can be called
     // at any time from any thread.
@@ -547,54 +538,34 @@ impl ObjectImpl for Screamtx {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
             vec![
-                glib::ParamSpecString::new(
-                    "params",
-                    "Params",
-                    "scream lib command line args",
-                    None,
-                    glib::ParamFlags::READWRITE,
-                ),
-                glib::ParamSpecString::new(
-                    "stats",
-                    "Stats",
-                    "screamtx get_property lib stats in csv format",
-                    None,
-                    glib::ParamFlags::READWRITE,
-                ),
-                glib::ParamSpecString::new(
-                    "stats-clear",
-                    "StatsClear",
-                    "screamtx get_property lib stats in csv format and clear counters",
-                    None,
-                    glib::ParamFlags::READWRITE,
-                ),
-                glib::ParamSpecString::new(
-                    "stats-header",
-                    "StatsHeader",
-                    "screamtx get_property lib stats-header in csv format",
-                    None,
-                    glib::ParamFlags::READWRITE,
-                ),
-                glib::ParamSpecUInt::new(
-                    "current-max-bitrate",
-                    "Current-max-bitrate",
-                    "Current max bitrate in kbit/sec, set by scream or by application",
-                    0,
-                    u32::MAX,
-                    DEFAULT_CURRENT_MAX_BITRATE,
-                    glib::ParamFlags::READWRITE,
-                ),
+                glib::ParamSpecString::builder("params")
+                    .nick("Params")
+                    .blurb("scream lib command line args")
+                    .build(),
+                glib::ParamSpecString::builder("stats")
+                    .nick("Stats")
+                    .blurb("screamtx get_property lib stats in csv format")
+                    .build(),
+                glib::ParamSpecString::builder("stats-clear")
+                    .nick("StatsClear")
+                    .blurb("screamtx get_property lib stats in csv format and clear counters")
+                    .build(),
+                glib::ParamSpecString::builder("stats-header")
+                    .nick("StatsHeader")
+                    .blurb("screamtx get_property lib stats-header in csv format")
+                    .build(),
+                glib::ParamSpecUInt::builder("current-max-bitrate")
+                    .nick("Current-max-bitrate")
+                    .blurb("Current max bitrate in kbit/sec, set by scream or by application")
+                    .minimum(0)
+                    .maximum(u32::MAX)
+                    .default_value(DEFAULT_CURRENT_MAX_BITRATE)
+                    .build(),
             ]
         });
         PROPERTIES.as_ref()
     }
-    fn set_property(
-        &self,
-        obj: &Self::Type,
-        _id: usize,
-        value: &glib::Value,
-        pspec: &glib::ParamSpec,
-    ) {
+    fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
         match pspec.name() {
             "params" => {
                 let mut settings = self.settings.lock().unwrap();
@@ -605,7 +576,7 @@ impl ObjectImpl for Screamtx {
                 };
                 info!(
                     CAT,
-                    obj: obj,
+                    imp: self,
                     "Changing params  to {}",
                     settings.params.as_ref().unwrap()
                 );
@@ -615,7 +586,7 @@ impl ObjectImpl for Screamtx {
                 let rate = value.get().expect("type checked upstream");
                 info!(
                     CAT,
-                    obj: obj,
+                    imp: self,
                     "Changing current-max-bitrate from {} to {}",
                     settings.current_max_bitrate,
                     rate
@@ -628,7 +599,7 @@ impl ObjectImpl for Screamtx {
 
     // Called whenever a value of a property is read. It can be called
     // at any time from any thread.
-    fn property(&self, _obj: &Self::Type, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+    fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
         match pspec.name() {
             "params" => {
                 let settings = self.settings.lock().unwrap();
@@ -710,7 +681,7 @@ impl ElementImpl for Screamtx {
     fn pad_templates() -> &'static [gst::PadTemplate] {
         static PAD_TEMPLATES: Lazy<Vec<gst::PadTemplate>> = Lazy::new(|| {
             // Our element can accept any possible caps on both pads
-            let caps = gst::Caps::new_simple("application/x-rtp", &[]);
+            let caps = gst::Caps::new_empty_simple("application/x-rtp");
             let src_pad_template = gst::PadTemplate::new(
                 "src",
                 gst::PadDirection::Src,
@@ -719,7 +690,7 @@ impl ElementImpl for Screamtx {
             )
             .unwrap();
 
-            let caps = gst::Caps::new_simple("application/x-rtcp", &[]);
+            let caps = gst::Caps::new_empty_simple("application/x-rtcp");
             let rtcp_src_pad_template = gst::PadTemplate::new(
                 "rtcp_src",
                 gst::PadDirection::Src,
@@ -728,7 +699,7 @@ impl ElementImpl for Screamtx {
             )
             .unwrap();
 
-            let caps = gst::Caps::new_simple("application/x-rtp", &[]);
+            let caps = gst::Caps::new_empty_simple("application/x-rtp");
             let sink_pad_template = gst::PadTemplate::new(
                 "sink",
                 gst::PadDirection::Sink,
@@ -737,7 +708,7 @@ impl ElementImpl for Screamtx {
             )
             .unwrap();
 
-            let caps = gst::Caps::new_simple("application/x-rtcp", &[]);
+            let caps = gst::Caps::new_empty_simple("application/x-rtcp");
             let rtp_sink_pad_template = gst::PadTemplate::new(
                 "rtcp_sink",
                 gst::PadDirection::Sink,
@@ -761,12 +732,11 @@ impl ElementImpl for Screamtx {
     // the element again.
     fn change_state(
         &self,
-        element: &Self::Type,
         transition: gst::StateChange,
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
-        info!(CAT, obj: element, "Changing state {:?}", transition);
+        info!(CAT, imp: self, "Changing state {:?}", transition);
 
         // Call the parent class' implementation of ::change_state()
-        self.parent_change_state(element, transition)
+        self.parent_change_state(transition)
     }
 }

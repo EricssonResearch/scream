@@ -1,5 +1,7 @@
+#!/bin/bash
 SCRIPT_PATH=$(realpath  $0)
 SCRIPT_DIR=$(dirname  $SCRIPT_PATH)
+source $SCRIPT_DIR/ecn_env.sh
 SCREAMLIB_DIR=$SCRIPT_DIR/../../code/wrapper_lib
 SCREAM_TARGET_DIR=$SCRIPT_DIR/../target/debug/
 export GST_PLUGIN_PATH=$SCREAM_TARGET_DIR:$GST_PLUGIN_PATH
@@ -30,7 +32,7 @@ VIDEOSINK="videoconvert ! fpsdisplaysink video-sink=\"ximagesink\""
 #VIDEOSINK="fakesink"
 
 export RECVPIPELINE="rtpbin latency=10 name=r \
-udpsrc port=$PORT0_RTP address=$LOCAL_IP ! \
+udpsrc port=$PORT0_RTP address=$LOCAL_IP $RETRIEVE_ECN ! \
  queue $SCREAMRX0 ! application/x-rtp, media=video, encoding-name=H264, clock-rate=90000 ! r.recv_rtp_sink_0 r. ! rtph264depay ! h264parse ! $DECODER name=videodecoder0 ! $QUEUE ! $VIDEOSINK \
  r.send_rtcp_src_0 ! funnel name=f0 ! queue ! udpsink host=$DST_IP port=$PORT0_RTCP sync=false async=false \
  $SCREAMRX0_RTCP udpsrc port=$PORT0_RTCP ! r.recv_rtcp_sink_0 \

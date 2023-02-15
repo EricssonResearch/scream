@@ -1,8 +1,8 @@
+#![allow(clippy::uninlined_format_args)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 use std::cmp;
 use std::convert::TryInto;
-// use std::net::UdpSocket;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -11,8 +11,7 @@ use hashbrown::HashMap;
 use libc::timeval;
 use once_cell::sync::Lazy;
 
-use crate::gst::prelude::PadExtManual;
-//use crate::gst::PadExtManual;
+use crate::gst::prelude::PadExt;
 use crate::screamrx::imp::CAT;
 
 const kReportedRtpPackets: usize = 64;
@@ -218,7 +217,7 @@ impl ScreamRx {
          * New {SSRC,PT}
          */
         let mut stream = Stream::new(ssrc);
-        println!("new ssrc {}", ssrc);
+        println!("ScreamRx.rs: new ssrc {}", ssrc);
         stream.nReportedRtpPackets = self.nReportedRtpPackets as i32;
         stream.ix = self.ix + 1;
         stream.ssrc = ssrc;

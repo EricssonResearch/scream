@@ -9,6 +9,8 @@ description = "Rust Gstscream Scream Plugin"
 
 [dependencies]
 glib = { git = "https://github.com/gtk-rs/gtk-rs-core" }
+glib-sys = { git = "https://github.com/gtk-rs/gtk-rs-core" }
+
 gstreamer = { package = "gstreamer", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
 gstreamer-base = { package = "gstreamer-base", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
 gstreamer-video = { package = "gstreamer-video", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
@@ -43,5 +45,6 @@ gst-plugin-version-helper = "0.2.0"
 
 [features]
 screamrx-only = []
+ecn-enabled = []
 
 default = []

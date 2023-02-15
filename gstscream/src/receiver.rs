@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 extern crate failure;
 use failure::Error;
 

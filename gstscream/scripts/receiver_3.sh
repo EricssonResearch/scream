@@ -1,5 +1,6 @@
 SCRIPT_PATH=$(realpath  $0)
 SCRIPT_DIR=$(dirname  $SCRIPT_PATH)
+source $SCRIPT_DIR/ecn_env.sh
 SCREAMLIB_DIR=$SCRIPT_DIR/../../code/wrapper_lib
 SCREAM_TARGET_DIR=$SCRIPT_DIR/../target/debug/
 export GST_PLUGIN_PATH=$SCREAM_TARGET_DIR:$GST_PLUGIN_PATH
@@ -44,17 +45,17 @@ VIDEOSINK="videoconvert ! fpsdisplaysink video-sink=\"ximagesink\""
 #VIDEOSINK="fakesink"
 
 export RECVPIPELINE="rtpbin latency=10 name=r \
-udpsrc port=$PORT0_RTP address=$LOCAL_IP ! \
+udpsrc port=$PORT0_RTP address=$LOCAL_IP $RETRIEVE_ECN ! \
  queue $SCREAMRX0 ! application/x-rtp, media=video, encoding-name=H264, clock-rate=90000 ! r.recv_rtp_sink_0 r. ! rtph264depay ! h264parse ! $DECODER name=videodecoder0 ! $QUEUE ! $VIDEOSINK \
  r.send_rtcp_src_0 ! funnel name=f0 ! queue ! udpsink host=$DST_IP port=$PORT0_RTCP sync=false async=false \
  $SCREAMRX0_RTCP udpsrc port=$PORT0_RTCP ! r.recv_rtcp_sink_0 \
 \
-udpsrc port=$PORT1_RTP address=$LOCAL_IP ! \
+udpsrc port=$PORT1_RTP address=$LOCAL_IP $RETRIEVE_ECN ! \
  queue $SCREAMRX1 ! application/x-rtp, media=video, encoding-name=H264, clock-rate=90000 ! r.recv_rtp_sink_1 r. ! rtph264depay ! h264parse ! $DECODER name=videodecoder1 ! $QUEUE ! $VIDEOSINK \
   r.send_rtcp_src_1 ! funnel name=f1 ! queue ! udpsink host=$DST_IP port=$PORT1_RTCP sync=false async=false \
   $SCREAMRX1_RTCP udpsrc port=$PORT1_RTCP ! r.recv_rtcp_sink_1 \
 \
-udpsrc port=$PORT2_RTP address=$LOCAL_IP ! \
+udpsrc port=$PORT2_RTP address=$LOCAL_IP $RETRIEVE_ECN ! \
  queue $SCREAMRX2 ! application/x-rtp, media=video, encoding-name=H264, clock-rate=90000 ! r.recv_rtp_sink_2 r. ! rtph264depay ! h264parse ! $DECODER name=videodecoder2 ! $QUEUE ! $VIDEOSINK \
  r.send_rtcp_src_2 ! funnel name=f2 ! queue ! udpsink host=$DST_IP port=$PORT2_RTCP sync=false async=false \
  $SCREAMRX2_RTCP udpsrc port=$PORT2_RTCP ! r.recv_rtcp_sink_2 \
