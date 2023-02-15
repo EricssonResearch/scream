@@ -41,18 +41,18 @@ sudo ./scripts/sysctl.sh
 ./scripts/sender_bw.sh
 ```
 # Modifying gstreamer to use L4S
-Based on patch [https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/2717]
+Based on patch [https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/2717]  
+```bash
 cd scream/..
 git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git
 cd gstreamer
 meson setup --prefix=/path/to/install/prefix builddir
-
 meson compile -C builddir
 patch -p1 < <2717.patch
 # manually modify gstnvbaseenc.c to fix issue with  nvenc bitrate changes run time [https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189]
 meson compile -C builddir
 meson install -C builddir
-
+```
 # Build and run with modified gstreamer
 ## Modify scripts/ecn_env.sh 
 ECN_ENABLED=1
