@@ -871,8 +871,9 @@ void ScreamTx::incomingStandardizedFeedback(uint32_t time_ntp,
 						ceDensity = 1.0;
 					}
 
-					if (isNewCc)
-						fractionMarked *= cwndRatioScale*ceDensity;
+					if (isNewCc) {
+						fractionMarked *= cwndRatioScale * ceDensity;
+					}
 
 					/*
 					 * L4S alpha (backoff factor) is averaged and limited
@@ -1506,13 +1507,15 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 			cwndRatio * kSrttVirtual / sRttLow - kCwndRatioThLow) / (kCwndRatioThHigh - kCwndRatioThLow));
 
 		/*
-		* l4sAlpha min can actually be calculated from the relation R=1/p-1
-		*  => p = 1/(R+1)
+		* l4sAlpha min can actually be calculated from the assumption that 2 packets are marked per RTT 
+		*  at steady state
 		* This speeds up the rate reduction somewhat when throughput drops dramatically
 		*  as l4sAlpha does not need to average up from nearly zero
+		* The min value is limited to 0.2
 		*/
 		if (isNewCc) {
-			float l4sAlphaMin = 1.0f / (getTotalTargetBitrate() / 1.0e6f + 1.0f);
+			float tmp = getTotalTargetBitrate() * std::max(sRtt, kSrttVirtual) / 8 / mss;
+			float l4sAlphaMin = std::min(0.2f,2.0f / tmp);
 			l4sAlpha = std::max(l4sAlpha, l4sAlphaMin);
 		}
 
@@ -1559,7 +1562,7 @@ void ScreamTx::updateCwnd(uint32_t time_ntp) {
 					* Reduce the congestion window to a more sensible level (twice the bytes in flight history)
 					*  to make congestion reaction faster.
 					*/
-					cwnd = std::min(cwnd, (int)(bytesInFlightHistHiMem * 2.0));
+					cwnd = std::min(cwnd, (int)(bytesInFlightHistHiMem * 2.0f));
 				}
 			}
 			else {

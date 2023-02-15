@@ -87,12 +87,13 @@ bool NetQueue::extract(float time,
 			ssrc = items[tail]->ssrc;
 			size = items[tail]->size;
 			isCe = items[tail]->isCe;
+
 			items[tail]->used = false;
 			float qDelay = items[tail]->tReleaseExt - items[tail]->tRelease;
 			if (isL4s && rate > 0) {
 				float pMark = std::max(0.0f, std::min(1.0f, (qDelay - l4sThLo) / (l4sThHi - l4sThLo)));
 				if ((rand() % 1000) / 1000 < pMark)
-					items[head]->isCe = true;
+					isCe = true;
 			}
 
 
