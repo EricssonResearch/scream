@@ -28,13 +28,13 @@ if (($USE_SCREAM == 1)); then
     INIT_ENC_BITRATE=500
     #NOSUMMARY=" -nosummary"
 #
-    SCREAMTX0="queue ! screamtx name=\"screamtx0\" params=\"$NOSUMMARY -forceidr $SCREAMTX_PARAM_ECT -initrate 500 -minrate 200 -maxrate 8000\" ! queue !"
+    SCREAMTX0="queue ! screamtx name=\"screamtx0\" params=\"$NOSUMMARY -forceidr -priority 1.0 $SCREAMTX_PARAM_ECT -initrate 500 -minrate 200 -maxrate 8000\" ! queue !"
     SCREAMTX0_RTCP="screamtx0.rtcp_sink screamtx0.rtcp_src !"
 #
-    SCREAMTX1="queue ! screamtx name=\"screamtx1\" params=\"$NOSUMMARY -forceidr $SCREAMTX_PARAM_ECT -initrate 500 -minrate 200 -maxrate 15000\" ! queue !"
+    SCREAMTX1="queue ! screamtx name=\"screamtx1\" params=\"$NOSUMMARY -forceidr -priority 0.5 $SCREAMTX_PARAM_ECT -initrate 500 -minrate 200 -maxrate 15000\" ! queue !"
     SCREAMTX1_RTCP="screamtx1.rtcp_sink screamtx1.rtcp_src !"
 #
-    SCREAMTX2="queue ! screamtx name=\"screamtx2\" params=\"$NOSUMMARY -forceidr $SCREAMTX_PARAM_ECT -initrate 500 -minrate 200 -maxrate 1000\" ! queue !"
+    SCREAMTX2="queue ! screamtx name=\"screamtx2\" params=\"$NOSUMMARY -forceidr -priority 0.2 $SCREAMTX_PARAM_ECT -initrate 500 -minrate 200 -maxrate 1000\" ! queue !"
     SCREAMTX2_RTCP="screamtx2.rtcp_sink screamtx2.rtcp_src !"
 else
     SCREAMTX0=""

@@ -76,6 +76,7 @@ int initRate = 1000;
 int minRate = 1000;
 int maxRate = 200000;
 int rateIncrease = 10000;
+float priority = 1.0;
 float rateScale = 0.5f;
 float rateMultiply = 1.0;
 float dscale = 10.0f;
@@ -327,6 +328,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     cerr << "     -rateincrease value   set a max allowed rate increase speed [kbps/s]," << endl;
     cerr << "                            default 10000kbps/s" << endl;
     cerr << "                            example -rateincrease 1000 " << endl;
+    cerr << "     -priority  value      set stream priorities" << endl;
     cerr << "     -ratescale value      set a max allowed rate increase speed as a fraction of the " << endl;
     cerr << "                            current rate, default 0.5" << endl;
     cerr << "                            example -ratescale 1.0 " << endl;
@@ -439,6 +441,11 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     }
     if (strstr(argv[ix],"-rateincrease")) {
       rateIncrease = atoi(argv[ix+1]);
+      ix+=2;
+			continue;
+    }
+    if (strstr(argv[ix],"-priority")) {
+      priority = atof(argv[ix+1]);
       ix+=2;
 			continue;
     }
@@ -562,7 +569,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
 
   screamTx->registerNewStream(stream->rtpQueue,
                               ssrc,
-                              1.0f,
+                              priority,
                               minRate * 1000,
                               initRate * 1000,
                               maxRate * 1000,
