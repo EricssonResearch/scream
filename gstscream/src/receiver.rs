@@ -45,7 +45,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
 
     let main_loop_clone = main_loop.clone();
     let bus = pipeline_clone.bus().unwrap();
-    bus.add_watch(move |_, msg| {
+    let _bus_watch = bus.add_watch(move |_, msg| {
         use gst::MessageView;
 
         // println!("bus {:?}", msg.view());
@@ -65,7 +65,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
                 main_loop.quit();
             }
             _ => (),
-        }
+        };
 
         glib::Continue(true)
     })

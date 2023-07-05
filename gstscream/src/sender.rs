@@ -85,7 +85,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
 
     let main_loop_cloned = main_loop.clone();
     let bus = pipeline_clone.bus().unwrap();
-    bus.add_watch(move |_, msg| {
+    let _bus_watch = bus.add_watch(move |_, msg| {
         use gst::MessageView;
         // println!("sender: {:?}", msg.view());
         match msg.view() {

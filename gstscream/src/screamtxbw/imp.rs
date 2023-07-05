@@ -238,7 +238,7 @@ impl ObjectSubclass for Screamtxbw {
         //
         // Details about what each function is good for is next to each function definition
         let templ = klass.pad_template("sink").unwrap();
-        let sinkpad = gst::Pad::builder_with_template(&templ, Some("sink"))
+        let sinkpad = gst::Pad::builder_from_template(&templ)
             .chain_function(|pad, parent, buffer| {
                 Screamtxbw::catch_panic_pad_function(
                     parent,
@@ -263,7 +263,7 @@ impl ObjectSubclass for Screamtxbw {
             .build();
 
         let templ = klass.pad_template("src").unwrap();
-        let srcpad = gst::Pad::builder_with_template(&templ, Some("src"))
+        let srcpad = gst::Pad::builder_from_template(&templ)
             .event_function(|pad, parent, event| {
                 Screamtxbw::catch_panic_pad_function(
                     parent,
