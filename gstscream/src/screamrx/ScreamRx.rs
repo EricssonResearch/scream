@@ -171,7 +171,7 @@ impl ScreamRx {
         if self.lastRateComputeT_ntp == 0 {
             self.lastRateComputeT_ntp = time_ntp;
         }
-        if time_ntp - self.lastRateComputeT_ntp > 6554 {
+        if time_ntp > self.lastRateComputeT_ntp && time_ntp - self.lastRateComputeT_ntp > 6554 {
             // 100ms in NTP domain
             /*
              * Media rate computation (for all medias) is done at least every 100ms
@@ -257,7 +257,9 @@ impl ScreamRx {
         let time_ntp = getTimeInNtp();
         let rtcpFbInterval_ntp = self.getRtcpFbInterval();
         if self.isFeedback(time_ntp)
-            && (self.checkIfFlushAck() || (time_ntp - self.getLastFeedbackT() > rtcpFbInterval_ntp))
+            && (self.checkIfFlushAck()
+                || (time_ntp > self.getLastFeedbackT()
+                    && time_ntp - self.getLastFeedbackT() > rtcpFbInterval_ntp))
         {
             trace!(CAT, "periodic_flush ssrc {} time_ntp {}, .getLastFeedbackT {},diff {} rtcpFbInterval_ntp {} averageReceivedRate {} ",
                      self.ssrc, time_ntp, self.getLastFeedbackT(), time_ntp - self.getLastFeedbackT(), rtcpFbInterval_ntp,  self.averageReceivedRate);

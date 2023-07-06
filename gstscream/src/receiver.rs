@@ -45,31 +45,32 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
 
     let main_loop_clone = main_loop.clone();
     let bus = pipeline_clone.bus().unwrap();
-    let _bus_watch = bus.add_watch(move |_, msg| {
-        use gst::MessageView;
+    let _bus_watch = bus
+        .add_watch(move |_, msg| {
+            use gst::MessageView;
 
-        // println!("bus {:?}", msg.view());
-        let main_loop = &main_loop_clone;
-        match msg.view() {
-            MessageView::Eos(..) => {
-                println!("### got Eos message");
-                main_loop.quit();
-            }
-            MessageView::Error(err) => {
-                println!(
-                    "### error from {:?}: {} ({:?})",
-                    err.src().map(|s| s.path_string()),
-                    err.error(),
-                    err.debug()
-                );
-                main_loop.quit();
-            }
-            _ => (),
-        };
+            // println!("bus {:?}", msg.view());
+            let main_loop = &main_loop_clone;
+            match msg.view() {
+                MessageView::Eos(..) => {
+                    println!("### got Eos message");
+                    main_loop.quit();
+                }
+                MessageView::Error(err) => {
+                    println!(
+                        "### error from {:?}: {} ({:?})",
+                        err.src().map(|s| s.path_string()),
+                        err.error(),
+                        err.debug()
+                    );
+                    main_loop.quit();
+                }
+                _ => (),
+            };
 
-        glib::Continue(true)
-    })
-    .expect("failed to add bus watch");
+            glib::Continue(true)
+        })
+        .expect("failed to add bus watch");
 
     main_loop.run();
     pipeline

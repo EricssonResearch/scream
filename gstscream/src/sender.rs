@@ -85,27 +85,28 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
 
     let main_loop_cloned = main_loop.clone();
     let bus = pipeline_clone.bus().unwrap();
-    let _bus_watch = bus.add_watch(move |_, msg| {
-        use gst::MessageView;
-        // println!("sender: {:?}", msg.view());
-        match msg.view() {
-            MessageView::Eos(..) => {
-                println!("Bus watch  Got eos");
-                main_loop_cloned.quit();
-            }
-            MessageView::Error(err) => {
-                println!(
-                    "Error from {:?}: {} ({:?})",
-                    err.src().map(|s| s.path_string()),
-                    err.error(),
-                    err.debug()
-                );
-            }
-            _ => (),
-        };
-        glib::Continue(true)
-    })
-    .expect("failed to add bus watch");
+    let _bus_watch = bus
+        .add_watch(move |_, msg| {
+            use gst::MessageView;
+            // println!("sender: {:?}", msg.view());
+            match msg.view() {
+                MessageView::Eos(..) => {
+                    println!("Bus watch  Got eos");
+                    main_loop_cloned.quit();
+                }
+                MessageView::Error(err) => {
+                    println!(
+                        "Error from {:?}: {} ({:?})",
+                        err.src().map(|s| s.path_string()),
+                        err.error(),
+                        err.debug()
+                    );
+                }
+                _ => (),
+            };
+            glib::Continue(true)
+        })
+        .expect("failed to add bus watch");
 
     main_loop.run();
     pipeline_clone

@@ -381,14 +381,12 @@ impl ObjectImpl for Screamtxbw {
                 let settings = self.settings.lock().unwrap();
                 settings.bitrate.to_value()
             }
-            "bitrate" => {
-                0u32.to_value()
-            }
+            "bitrate" => 0u32.to_value(),
 
             _ => {
                 println!("screamtxbw unimplemented {}", pspec.name());
                 unimplemented!();
-            },
+            }
         }
     }
 }
