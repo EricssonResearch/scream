@@ -248,6 +248,7 @@ extern "C" {
 		*  request a new key frame from a video encoder
 		*/
 		float getTargetBitrate(uint32_t ssrc);
+		float getTransmitBitrate(uint32_t ssrc);
 
 		/*
 		* Set target priority for a given stream, priority value should be in range ]0.0..1.0]
@@ -416,6 +417,7 @@ extern "C" {
 			Statistics();
 			void getSummary(float time, char s[]);
 			void add(float rateTx, float rateLost, float rtt, float queueDelay);
+			float getAvgRateTx() const { return avgRateTx; }
 		private:
 			float lossRateHist[kLossRateHistSize];
 			float rateLostAcc;

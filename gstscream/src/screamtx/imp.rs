@@ -30,6 +30,7 @@ struct Settings {
     params: Option<String>,
     ssrc: u32,
     current_max_bitrate: u32,
+    transmit_rate: u32,
 }
 
 impl Default for Settings {
@@ -38,6 +39,7 @@ impl Default for Settings {
             params: None,
             ssrc: 0,
             current_max_bitrate: DEFAULT_CURRENT_MAX_BITRATE,
+            transmit_rate: 0,
         }
     }
 }
@@ -123,7 +125,7 @@ impl Screamtx {
                 marker,
             );
             // println!("imp.rs push rtp size {} ssrc {}", size, ssrc);
-            ScreamSenderGetTargetRate(ssrc, &mut rate, &mut force_idr);
+            ScreamSenderGetTargetRate(ssrc, &mut rate, &mut force_idr, &mut settings.transmit_rate);
             // println!("ScreamSenderGetTargetRate ssrc {}, rate {}, force_idr {} ", ssrc, rate, force_idr);
             // println!("imp.rs push rtp rate {} {}", rate, force_idr);
         }
@@ -391,7 +393,7 @@ extern "C" {
         cb: extern "C" fn(stx: *const Screamtx, buf: gst::Buffer, is_push: u8),
     );
 
-    fn ScreamSenderGetTargetRate(ssrc: u32, rate_p: *mut u32, force_idr_p: *mut u32);
+    fn ScreamSenderGetTargetRate(ssrc: u32, rate_p: *mut u32, force_idr_p: *mut u32, transmit_rate_p: *mut u32);
 
 }
 // This trait registers our type with the GObject object system and
@@ -561,6 +563,14 @@ impl ObjectImpl for Screamtx {
                     .maximum(u32::MAX)
                     .default_value(DEFAULT_CURRENT_MAX_BITRATE)
                     .build(),
+                glib::ParamSpecUInt::builder("transmit-bitrate")
+                    .nick("Current Transmit Bitrate")
+                    .blurb("Current Transmit bitrate in kbit/sec from scream")
+                    .minimum(0)
+                    .maximum(u32::MAX)
+                    .default_value(0)
+                    .build(),
+
             ]
         });
         PROPERTIES.as_ref()
@@ -648,6 +658,11 @@ impl ObjectImpl for Screamtx {
                 let settings = self.settings.lock().unwrap();
                 settings.current_max_bitrate.to_value()
             }
+            "transmit-bitrate" => {
+                let settings = self.settings.lock().unwrap();
+                settings.transmit_rate.to_value()
+            }
+
             _ => unimplemented!(),
         }
     }

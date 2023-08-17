@@ -1138,8 +1138,13 @@ void ScreamTx::detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint
 
 float ScreamTx::getTargetBitrate(uint32_t ssrc) {
 	int id;
-	return  getStream(ssrc, id)->getTargetBitrate();
+	return getStream(ssrc, id)->getTargetBitrate();
 }
+
+float ScreamTx::getTransmitBitrate(uint32_t ssrc) {
+	return statistics->getAvgRateTx() / 1000.0f;
+}
+
 
 void ScreamTx::setTargetPriority(uint32_t ssrc, float priority) {
 	int id;
