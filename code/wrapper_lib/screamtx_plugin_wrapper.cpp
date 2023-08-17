@@ -81,6 +81,7 @@ float rateScale = 0.5f;
 float rateMultiply = 1.0;
 float dscale = 10.0f;
 bool enableClockDriftCompensation = false;
+static bool newCC = false;
 bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
@@ -505,7 +506,12 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       ix++;
 			continue;
     }
-    if (strstr(argv[ix],"-forceidr")) {
+    if (strstr(argv[ix],"-newcc")) {
+      newCc = true;
+      ix++;
+			continue;
+    }
+   if (strstr(argv[ix],"-forceidr")) {
       forceidr = true;
       ix++;
 			continue;
@@ -547,7 +553,9 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
                               20,
                               ect==1,
                               false,
-                              enableClockDriftCompensation);
+                              enableClockDriftCompensation,
+			      1.0,
+			      newCc);
       screamTx->setCwndMinLow(5000);
       if (logFile) {
           if (append)
