@@ -5,6 +5,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <cassert>
 
 extern const char *log_tag;
 
@@ -35,9 +36,13 @@ stream_t *getStream(uint32_t ssrc) {
                 }
             }
     }
-    printf("%s %u no stream  ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
- 	return NULL;
+    else {
+	    printf("%s %u stream ssrc 0 is invalid. It must be > 0\n", __FUNCTION__, __LINE__);
+    }
+    printf("%s %u no stream ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
+    return NULL;
 }
+
 static uint32_t cur_n_streams = 0;
 stream_t *addStream(uint32_t ssrc) {
  	for (int n = 0; n < kMaxStreams; n++) {
@@ -49,7 +54,7 @@ stream_t *addStream(uint32_t ssrc) {
  			return &streams[n];
  		}
  	}
-    printf("%s %u can't add  ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
+        printf("%s %u can't add  ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
  	return NULL;
 }
 
@@ -314,6 +319,12 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
   t0 = tp.tv_sec + tp.tv_usec*1e-6 - 1e-3;
   lastT_ntp = getTimeInNtp();
 
+  if (stream == nullptr)
+  {
+	  cerr << "ERROR: no stream with ssrc " << ssrc << " found!\n";
+	  exit(0);
+  }
+
   /*
   * Parse command line
   */
@@ -554,8 +565,8 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
                               ect==1,
                               false,
                               enableClockDriftCompensation,
-			      1.0,
-			      newCc);
+			                        1.0,
+			                        newCc);
       screamTx->setCwndMinLow(5000);
       if (logFile) {
           if (append)
@@ -573,7 +584,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       pthread_mutex_init(&lock_scream, NULL);
       pthread_mutex_init(&stream->lock_rtp_queue, NULL);
   }
-    stream->rtpQueue = new RtpQueue();
+  stream->rtpQueue = new RtpQueue();
 
   screamTx->registerNewStream(stream->rtpQueue,
                               ssrc,
@@ -720,11 +731,18 @@ uint8_t ScreamSenderRtcpPush(uint8_t*buf_rtcp, uint32_t recvlen) {
     return (1);
 }
 
-void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force_idr_p) {
+void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force_idr_p, uint32_t *transmit_rate_p) {
     int n = 0;
     *rate_p = 0;
     *force_idr_p = 0;
     stream_t *stream = NULL;
+
+    if (transmit_rate_p)
+    {
+	    float transmitRate = screamTx->getTransmitBitrate(ssrc);
+	    *transmit_rate_p = transmitRate;
+    }
+
     /*
      * Poll rate change for all media sources
      */
