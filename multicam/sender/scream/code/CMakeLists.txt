@@ -2,6 +2,9 @@
 SET(SRCS
 ../../../../code/RtpQueue.cpp
 ../../../../code/ScreamTx.cpp
+../../../../code/ScreamV1Tx.cpp
+../../../../code/ScreamV2Tx.cpp
+../../../../code/ScreamV2TxStream.cpp
 scream_sender.cpp
 )
 

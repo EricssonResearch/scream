@@ -128,9 +128,8 @@ float RtpQueue::getDelay(float currTs) {
     }
 }
 
-bool RtpQueue::sendPacket(void **rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr) {
+bool RtpQueue::sendPacket(void **rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr, bool &isMark) {
     if (sizeOfQueue() > 0) {
-        bool isMark;
         pop(rtpPacket, size, ssrc, seqNr, isMark);
         return true;
     }

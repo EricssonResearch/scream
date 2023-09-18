@@ -18,6 +18,18 @@ using namespace std;
 #define ECN_CAPABLE
 #define IS_STANDARD_FEEDBACK
 
+/*
+* Simple code to verify that L4S works
+* as intended
+* The intention is that
+* CWND = 2*mss/pMark [byte]
+* The bitrate should then become
+* rate = 2*mss*8/(pMark*RTT)
+*/
+//#define TEST_L4S
+double pMarkCarry = 0.0;
+#define PMARK 0.1;
+
 // Scream receiver side wrapper
 
 int fd_incoming_rtp;
@@ -339,7 +351,16 @@ int main(int argc, char* argv[])
 				* Generate RTCP feedback
 				*/
 				pthread_mutex_lock(&lock_scream);
-				screamRx->receive(getTimeInNtp(), 0, SSRC, recvlen, seqNr, received_ecn);
+#ifdef TEST_L4S
+        if (received_ecn == 0x1) {
+        	pMarkCarry += PMARK;
+					if (pMarkCarry >= 1.0) {
+						pMarkCarry -= 1.0;
+						received_ecn = 0x3;
+					}
+			  }
+#endif
+				screamRx->receive(getTimeInNtp(), 0, SSRC, recvlen, seqNr, received_ecn, isMark);
 				pthread_mutex_unlock(&lock_scream);
 
 				if (screamRx->checkIfFlushAck() || isMark) {

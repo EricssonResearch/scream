@@ -43,7 +43,6 @@ int VideoEnc::encode(float time) {
 	int rtpBytes = 0;
 	char rtpPacket[2000];
 	int bytes = (int)(frameSize[ix] / nominalBitrate * targetBitrate);
-
 	//nominalBitrate = 0.95*nominalBitrate + 0.05*frameSize[ix] * frameRate * 8;
     ix++; if (ix == nFrames) ix = 0;
     while (bytes > 0) {

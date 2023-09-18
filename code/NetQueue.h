@@ -10,9 +10,10 @@ public:
     int size;
     unsigned short seqNr;
     float tRelease;
-    float tReleaseExt;
+//    float tReleaseExt;
     float tQueue;
     bool isCe;
+    bool isMark;
     bool used;
 };
 const int NetQueueSize = 10000;
@@ -26,13 +27,15 @@ public:
         unsigned int ssrc,
         int size,
         unsigned short seqNr,
-        bool isCe = false);
+        bool isCe,
+        bool isMark);
     bool extract(float time, 
         void *rtpPacket, 
         unsigned int &ssrc,
         int& size, 
         unsigned short &seqNr,
-        bool &isCe);
+        bool &isCe,
+        bool &isMark);
     int sizeOfQueue();
 
     void updateRate(float time);
@@ -44,7 +47,8 @@ public:
     float delay;
     float rate;
     float jitter;
-    float nextTx;
+    float sendTime;
+   // float nextTx;
     float lastQueueLow;
     bool isL4s;
     int bytesTx;

@@ -21,8 +21,9 @@ struct sigaction sa;
 
 using namespace std;
 
+//#define V2
 /*
- * Stub function 
+ * Stub function
  */
 void packet_free(void* a, uint32_t ssrc) {//
 }
@@ -45,7 +46,6 @@ int fd_out_rtp;
 int fd_out_ctrl;
 int fd_in_rtp[MAX_SOURCES];
 int fd_out_rtcp[MAX_SOURCES];
-ScreamTx *screamTx = 0;
 RtpQueue *rtpQueue[MAX_SOURCES] = { 0, 0, 0};
 int nSources = 0;
 float delayTarget = 0.1f;
@@ -82,11 +82,18 @@ float maxTotalRate = 100000000;
 float rateInit[MAX_SOURCES]={3000,3000,1000,1000};
 float rateMin[MAX_SOURCES]={3000,3000,1000,1000};
 float rateMax[MAX_SOURCES]={30000,30000,10000,10000};
+#ifdef V2
+ScreamV2Tx *screamTx = 0;
+float pacingHeadroom = 1.5;
+float multiplicativeIncreaseFactor = 1.0;
+#else
+ScreamV1Tx *screamTx = 0;
 float rateIncrease[MAX_SOURCES]={10000,10000,10000,10000};
-float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
-float pacingHeadroom = 1.2;
 float fastIncreaseFactor = 1.0;
+float pacingHeadroom = 1.2;
 bool isNewCc = false;
+#endif
+float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
 
 struct sockaddr_in in_rtp_addr[MAX_SOURCES];
 struct sockaddr_in out_rtcp_addr[MAX_SOURCES];
@@ -167,7 +174,7 @@ void readList(char *buf, float *list) {
 	   	s = strtok(NULL,":");
    }
 }
-	
+
 int main(int argc, char* argv[]) {
 
    struct timeval tp;
@@ -179,6 +186,43 @@ int main(int argc, char* argv[]) {
     * Parse command line
     */
     if (argc <= 1) {
+#ifdef V2
+        cerr << "Usage : " << endl << " scream_sender <options> nsources out_ip out_port prio_1 ..  prio_n" << endl;
+        cerr << " -ect n             : ECN capable transport. n = 0 for ECT(0), n=1 for ECT(1). Default Not-ECT" << endl;
+        cerr << " -cscale val        : Congestion scale factor, range [0.5..1.0], default = 0.9" << endl;
+        cerr << "                      it can be necessary to set scale 1.0 if the LTE modem drops packets" << endl;
+        cerr << "                      already at low congestion levels." << endl;
+        cerr << " -delaytarget val   : Sets a queue delay target (default = 0.1s) " << endl;
+        cerr << " -mulincrease val   : multiplicative increase factor (default 0.05)" << endl;
+        cerr << " -in_ip_rtcp_addr   : Set in_ip_rtcp_addr" << endl;
+        cerr << "                      a larger memory can be beneficial in remote applications where the video input" << endl;
+        cerr << "                      is static for long periods. " << endl;
+        cerr << " -maxtotalrate val  : Set max total bitrate [kbps], default 100000." << endl;
+        cerr << " -pacingheadroom val: Set packet pacing headroom, default 1.5." << endl;
+        cerr << " -log log_file      : Save detailed per-ACK log to file" << endl;
+        cerr << " -ratemax list      : Set max rate [kbps] for streams" << endl;
+        cerr << "    example -ratemax 30000:20000" << endl;
+        cerr << " -ratemin list      : Set min rate [kbps] for streams" << endl;
+        cerr << "    example -ratemin 3000:3000" << endl;
+        cerr << " -rateinit list     : Set init rate [kbps] for streams" << endl;
+        cerr << "    example -rateinit 3000:3000}" << endl;
+        cerr << " -priority list     : Set stream priorities" << endl;
+        cerr << "    example -priority 1.0:0.5:0.2:0.1" << endl;
+        cerr << " -ratescale list    : Compensate for systematic error in actual vs desired rate" << endl;
+        cerr << "    example -ratescale 0.6:0.5:1.0:1.0" << endl;
+
+        cerr << " nsources           : Number of sources, min=1, max=" << MAX_SOURCES << endl;
+        cerr << " out_ip             : remote (SCReAM receiver) IP address" << endl;
+        cerr << " out_port           : remote (SCReAM receiver) port" << endl;
+        cerr << " Media sources: " << endl;
+        cerr << "   0 = Front camera encoded with omxh264" << endl;
+        cerr << "   1 = Rear camera encoded with omxh264" << endl;
+        cerr << "   2 = Not used" << endl;
+        cerr << "   3 = Not used" << endl;
+        cerr << endl;
+        cerr << "  Note. lists should not contain white space and can have 1 to 4 elements, delimited by ':' " << endl;
+        exit(-1);
+#else
         cerr << "Usage : " << endl << " scream_sender <options> nsources out_ip out_port prio_1 ..  prio_n" << endl;
         cerr << " -newcc             : Use new congestion control algorithm (dec 2022)" << endl;
         cerr << " -ect n             : ECN capable transport. n = 0 for ECT(0), n=1 for ECT(1). Default Not-ECT" << endl;
@@ -206,7 +250,7 @@ int main(int argc, char* argv[]) {
         cerr << "    example -priority 1.0:0.5:0.2:0.1" << endl;
         cerr << " -ratescale list    : Compensate for systematic error in actual vs desired rate" << endl;
         cerr << "    example -ratescale 0.6:0.5:1.0:1.0" << endl;
-        
+
         cerr << " nsources           : Number of sources, min=1, max=" << MAX_SOURCES << endl;
         cerr << " out_ip             : remote (SCReAM receiver) IP address" << endl;
         cerr << " out_port           : remote (SCReAM receiver) port" << endl;
@@ -218,6 +262,7 @@ int main(int argc, char* argv[]) {
         cerr << endl;
         cerr << "  Note. lists should not contain white space and can have 1 to 4 elements, delimited by ':' " << endl;
         exit(-1);
+#endif
     }
     int ix = 1;
     int nExpectedArgs = 1 + 2 + 1;
@@ -267,26 +312,10 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
-        if (strstr(argv[ix], "-rateincrease")) {
-			readList(argv[ix + 1],rateIncrease);
-            ix += 2;
-            nExpectedArgs += 2;
-            continue;
-        }
         if (strstr(argv[ix], "-ratescale")) {
-			readList(argv[ix + 1],rateScale);
+			 readList(argv[ix + 1],rateScale);
             ix += 2;
             nExpectedArgs += 2;
-            continue;
-        }
-        if (strstr(argv[ix], "-cwvmem")) {
-            bytesInFlightHistSize = atoi(argv[ix + 1]);
-            ix += 2;
-            nExpectedArgs += 2;
-            if (bytesInFlightHistSize > kBytesInFlightHistSizeMax || bytesInFlightHistSize < 2) {
-                cerr << "cwvmem must be in range [2 .. " << kBytesInFlightHistSizeMax << "]" << endl;
-                exit(0);
-            }
             continue;
         }
         if (strstr(argv[ix], "-maxtotalrate")) {
@@ -313,19 +342,44 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
+#ifdef V2
+        if (strstr(argv[ix], "-mulincrease")) {
+            multiplicativeIncreaseFactor = atof(argv[ix + 1]);
+            ix += 2;
+            nExpectedArgs += 2;
+            continue;
+        }
+#else
         if (strstr(argv[ix], "-fincrease")) {
             fastIncreaseFactor = atof(argv[ix + 1]);
             ix += 2;
             nExpectedArgs += 2;
             continue;
-        }                
+        }
+
         if (strstr(argv[ix], "-newcc")) {
             isNewCc = true;
             ix += 1;
             nExpectedArgs += 1;
             continue;
-        }        
-
+        }
+        if (strstr(argv[ix], "-cwvmem")) {
+            bytesInFlightHistSize = atoi(argv[ix + 1]);
+            ix += 2;
+            nExpectedArgs += 2;
+            if (bytesInFlightHistSize > kBytesInFlightHistSizeMax || bytesInFlightHistSize < 2) {
+                cerr << "cwvmem must be in range [2 .. " << kBytesInFlightHistSizeMax << "]" << endl;
+                exit(0);
+            }
+            continue;
+        }
+        if (strstr(argv[ix], "-rateincrease")) {
+      			readList(argv[ix + 1],rateIncrease);
+            ix += 2;
+            nExpectedArgs += 2;
+            continue;
+        }
+#endif
         fprintf(stderr, "unexpected arg %s\n", argv[ix]);
         ix += 1;
         nExpectedArgs += 1;
@@ -387,7 +441,7 @@ int main(int argc, char* argv[]) {
 
     /* Create Receive RTP thread(s) */
     pthread_create(&rx_rtp_thread[0], NULL, rxRtpThread0, "RTP thread 0...");
-    
+
     if (nSources > 1)
         pthread_create(&rx_rtp_thread[1], NULL, rxRtpThread1, "RTP thread 1...");
     if (nSources > 2)
@@ -395,7 +449,7 @@ int main(int argc, char* argv[]) {
     if (nSources > 2)
         pthread_create(&rx_rtp_thread[3], NULL, rxRtpThread3, "RTP thread 3...");
     cerr << "RX RTP thread(s) started" << endl;
-    
+
     /* Create RTCP thread */
     pthread_create(&rx_rtcp_thread, NULL, rxRtcpThread, "RTCP thread...");
     cerr << "RTCP thread started" << endl;
@@ -410,11 +464,11 @@ int main(int argc, char* argv[]) {
         char s[1000];
         time_ntp = getTimeInNtp();
 
-        
+
         if (time_ntp - lastLogT_ntp > 16384) { // 0.25s in Q16
 			lastLogT_ntp = time_ntp;
             char s1[1000];
-            
+
             //pthread_mutex_lock(&lock_scream);
             time_ntp = getTimeInNtp();
             time_s = (time_ntp) / 65536.0f;
@@ -446,8 +500,8 @@ int main(int argc, char* argv[]) {
                 memcpy(s1 + 2 + n * 4, &in_ssrc_network[n], 4);
             }
             sendPacket(s1, 2 + nSources * 4);
-            
-            
+
+
            // pthread_mutex_lock(&lock_scream);
             time_ntp = getTimeInNtp();
             time_s = (time_ntp) / 65536.0f;
@@ -457,28 +511,28 @@ int main(int argc, char* argv[]) {
             if (time_ntp-lastRtcpT_ntp > 8192) {
                 sendBreakSignal = true;
             }
-            
+
             if (sendBreakSignal) {
                 cerr << "RTCP feedback missing" << endl;
                 /*
                 * Signal to RC car to break
-                */            
- 
+                */
+
                 qualityIndex=-1;
             }
             sprintf(s,"%d",qualityIndex);
-            sendto(fd_python,(const char*)s,strlen(s),MSG_CONFIRM,(const struct sockaddr*)&python_addr, sizeof(python_addr));			
-            
-            //pthread_mutex_lock(&lock_scream);            
+            sendto(fd_python,(const char*)s,strlen(s),MSG_CONFIRM,(const struct sockaddr*)&python_addr, sizeof(python_addr));
+
+            //pthread_mutex_lock(&lock_scream);
             time_ntp = getTimeInNtp();
             time_s = (time_ntp) / 65536.0f;
             qualityIndex = int16_t(screamTx->getQualityIndex(time_s,rateMax[0]*1000.0f,0.05f)+0.5f);
             //pthread_mutex_unlock(&lock_scream);
-            
+
             qualityIndex = htons(qualityIndex);
-                        
+
             sendto(fd_out_ctrl, &qualityIndex, 2, 0, (struct sockaddr *)&out_ctrl_addr, sizeof(out_ctrl_addr));
-            
+
             if (fp_log) {
                 fflush(fp_log);
             }
@@ -579,7 +633,7 @@ void *txRtpThread(void *arg) {
                         pthread_mutex_lock(&lock_rtp_queue);
                         bool isMark;
 						uint32_t ssrc_unused;
-                        
+
                         rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
                         pthread_mutex_unlock(&lock_rtp_queue);
 
@@ -698,7 +752,7 @@ void *rxRtpThread0(void *arg) {
     }
     /*
      * ToDo delete rtpBufs ?
-     */ 
+     */
     return NULL;
 }
 void *rxRtpThread1(void *arg) {
@@ -764,7 +818,7 @@ void *rxRtcpThread(void *arg) {
 			sprintf(s, "%1.4f", getTimeInNtp() / 65536.0f);
 			screamTx->setTimeString(s);
             pthread_mutex_lock(&lock_scream);
-            screamTx->incomingStandardizedFeedback(getTimeInNtp(), buf_rtcp, recvlen);            
+            screamTx->incomingStandardizedFeedback(getTimeInNtp(), buf_rtcp, recvlen);
             lastRtcpT_ntp = getTimeInNtp();
             pthread_mutex_unlock(&lock_scream);
         } else {
@@ -808,7 +862,7 @@ int setup() {
           return 0;
         }
     }
-    
+
     out_ctrl_addr.sin_family = AF_INET;
     inet_aton(in_ip, (in_addr*)&out_ctrl_addr.sin_addr.s_addr);
     out_ctrl_addr.sin_port = htons(33000);
@@ -876,8 +930,23 @@ int setup() {
         cerr << "Listen on port " << out_port << " to receive RTCP from encoder " << endl;
     }
 
-
-    screamTx = new ScreamTx(
+#ifdef V2
+    screamTx = new ScreamV2Tx(
+        congestionScaleFactor,
+        congestionScaleFactor,
+        delayTarget,
+        12500,
+        pacingHeadroom,
+        pacingHeadroom,
+        2.0f,
+        multiplicativeIncreaseFactor,
+        ect == 1,
+        false,
+        false,
+        false);
+        screamTx->setPostCongestionDelay(4.0);
+#else
+    screamTx = new ScreamV1Tx(
         congestionScaleFactor,
         congestionScaleFactor,
         delayTarget,
@@ -889,22 +958,29 @@ int setup() {
         bytesInFlightHistSize,
         (ect == 1),
         false,
-        false, 
+        false,
         2.0f,
         isNewCc);
+        screamTx->setPostCongestionDelay(1.0);
+        screamTx->setFastIncreaseFactor(fastIncreaseFactor);
+#endif
     screamTx->setCwndMinLow(10000); // ~1.5Mbps at RTT = 50ms
-    screamTx->setPostCongestionDelay(1.0);
     screamTx->setMaxTotalBitrate(maxTotalRate);
-    screamTx->setFastIncreaseFactor(fastIncreaseFactor);
 
     for (int n = 0; n < nSources; n++) {
         rtpQueue[n] = new RtpQueue();
 
+#ifdef V2
+        screamTx->registerNewStream(rtpQueue[n],
+            in_ssrc[n], priority[n],
+            rateMin[n]*1000, rateInit[n]*1000, rateMax[n]*1000, 0.2f,false);
+#else
         screamTx->registerNewStream(rtpQueue[n],
             in_ssrc[n], priority[n],
             rateMin[n]*1000, rateInit[n]*1000, rateMax[n]*1000, rateIncrease[n]*1000, 0.5f,
             0.1f, 0.1f, 0.2f,
             congestionScaleFactor, congestionScaleFactor, true);
+#endif
     }
     return 1;
 }

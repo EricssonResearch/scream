@@ -19,6 +19,7 @@
 struct itimerval timer;
 struct sigaction sa;
 
+//#define V2
 struct periodicInfo
 {
 	int timer_fd;
@@ -53,9 +54,6 @@ float keyFrameSize = 1.0;
 int initRate = 1000;
 int minRate = 1000;
 int maxRate = 200000;
-int rateIncrease = 10000;
-float rateScale = 0.5f;
-float dscale = 10.0f;
 bool enableClockDriftCompensation = false;
 float burstTime = -1.0;
 float burstSleep = -1.0;
@@ -63,12 +61,28 @@ bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 bool pushTraffic = false;
+#ifdef V2
+float packetPacingHeadroom = 1.5f;
+float scaleFactor = 0.7f;
+ScreamV2Tx *screamTx = 0;
+float bytesInFlightHeadroom = 2.0f;
+float multiplicativeIncreaseFactor = 0.05f;
+#else
+int rateIncrease = 10000;
+float rateScale = 0.5f;
+float dscale = 10.0f;
 float packetPacingHeadroom = 1.25f;
+float scaleFactor = 0.9f;
+ScreamV1Tx *screamTx = 0;
+float bytesInFlightHeadroom = 1.25f;
 float txQueueSizeFactor = 0.1f;
 float queueDelayGuard = 0.05f;
-float hysteresis = 0.0f;
 float fastIncreaseFactor = 1.0f;
-float isNewCc = false;
+bool isNewCc = false;
+#endif
+float postCongestionDelay = 4.0f;
+float adaptivePaceHeadroom = 1.5f;
+float hysteresis = 0.0f;
 
 int periodicRateDropInterval = 600; // seconds*10
 
@@ -84,13 +98,11 @@ pthread_t rtcp_thread = 0;
 pthread_t sierra_python_thread = 0;
 bool sierraLog;
 
-float scaleFactor = 0.9f;
 float delayTarget = 0.06f;
 bool printSummary = true;
 
 int fd_outgoing_rtp;
 int fd_sierra_python;
-ScreamTx *screamTx = 0;
 RtpQueue *rtpQueue = 0;
 
 // We don't bother about SSRC in this implementation, it is only one stream
@@ -590,39 +602,85 @@ int setup() {
 	int tmp = 0;
 #endif
 	char buf[10];
-	if (fixedRate > 0)
-		screamTx = new ScreamTx(1.0f, 1.0f,
-			delayTarget,
-			false,
-			1.0f, 2.0f,
-			(fixedRate * 100) / 8,
-			1.5f,
-			20,
-			ect == 1,
-			true,
-			enableClockDriftCompensation,
-		    2.0f);
-	else
-		screamTx = new ScreamTx(scaleFactor, scaleFactor,
-			delayTarget,
-			false,
-			1.0f, dscale,
-			(initRate * 100) / 8,
-			packetPacingHeadroom,
-			20,
-			ect == 1,
-			false,
-			enableClockDriftCompensation,
-		    2.0f,
-		    isNewCc);
+	if (fixedRate > 0) {
+#ifdef V2
+			screamTx = new ScreamV2Tx(
+				1.0f,
+				1.0f,
+				delayTarget,
+				(fixedRate * 100) / 8,
+				1.5f,
+				1.5f,
+				2.0f,
+				0.05f,
+				ect == 1,
+				true,
+				false,
+				enableClockDriftCompensation);
+#else
+			screamTx = new ScreamV1Tx(1.0f, 1.0f,
+				delayTarget,
+				false,
+				1.0f, 2.0f,
+				(fixedRate * 100) / 8,
+				1.5f,
+				20,
+				ect == 1,
+				true,
+				enableClockDriftCompensation,
+			    2.0f);
+			screamTx->setFastIncreaseFactor(fastIncreaseFactor);
+#endif
+} else {
+#ifdef V2
+			screamTx = new ScreamV2Tx(
+				scaleFactor,
+				scaleFactor,
+				delayTarget,
+				(initRate * 100) / 8,
+				packetPacingHeadroom,
+				adaptivePaceHeadroom,
+				bytesInFlightHeadroom,
+				multiplicativeIncreaseFactor,
+				ect == 1,
+				false,
+				false,
+				enableClockDriftCompensation);
+#else
+			screamTx = new ScreamV1Tx(scaleFactor, scaleFactor,
+				delayTarget,
+				false,
+				1.0f, dscale,
+				(initRate * 100) / 8,
+				packetPacingHeadroom,
+				20,
+				ect == 1,
+				false,
+				enableClockDriftCompensation,
+			  2.0f,
+			  isNewCc);
+			screamTx->setFastIncreaseFactor(fastIncreaseFactor);
+#endif
+  }
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow(5000);
-  screamTx->setFastIncreaseFactor(fastIncreaseFactor);
+	screamTx->setPostCongestionDelay(postCongestionDelay);
 	if (disablePacing)
 	  screamTx->enablePacketPacing(false);
 
 
 	if (fixedRate > 0) {
+#ifdef V2
+		screamTx->registerNewStream(rtpQueue,
+			SSRC,
+			1.0f,
+			fixedRate*1000.0f,
+			fixedRate*1000.0f,
+			fixedRate*1000.0f,
+			10.0f,
+			false,
+			hysteresis);
+#else
 		screamTx->registerNewStream(rtpQueue,
 			SSRC,
 			1.0f,
@@ -638,8 +696,20 @@ int setup() {
 			scaleFactor,
 			false,
 			hysteresis);
+#endif
 	}
 	else {
+#ifdef V2
+		screamTx->registerNewStream(rtpQueue,
+			SSRC,
+			1.0f,
+			minRate * 1000,
+			initRate * 1000,
+			maxRate * 1000,
+			0.2f,
+			false,
+			hysteresis);
+#else
 		screamTx->registerNewStream(rtpQueue,
 			SSRC,
 			1.0f,
@@ -655,6 +725,7 @@ int setup() {
 			scaleFactor,
 			false,
 			hysteresis);
+#endif
 	}
 	return 1;
 }
@@ -679,14 +750,13 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, sender. Ericsson AB. Version 2023-02-10" << endl;
+#ifdef V2
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-09-18" << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;
 		cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
 		cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
-		cerr << "     -newcc                   use new congestion control algorithm (dec 2022)" << endl;
-        cerr << "     -fincrease val           fast increase factor for newcc (default 1.0)" << endl;
 		cerr << "     -nopace                  disable packet pacing" << endl;
 		cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
 		cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
@@ -701,20 +771,15 @@ int main(int argc, char* argv[]) {
 		cerr << "                               example -minrate 1000 " << endl;
 		cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << endl;
 		cerr << "                               example -maxrate 10000 " << endl;
-		cerr << "     -rateincrease value      set a max allowed rate increase speed [kbps/s]," << endl;
-		cerr << "                               default 10000kbps/s" << endl;
-		cerr << "                               example -rateincrease 1000 " << endl;
-		cerr << "     -ratescale value         set a max allowed rate increase speed as a fraction of the " << endl;
-		cerr << "                               current rate, default 0.5" << endl;
-		cerr << "                               example -ratescale 1.0 " << endl;
 		cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
 		cerr << "                               -1 for not-ECT (default)" << endl;
 		cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << endl;
-		cerr << "     -dscale value            scale factor in case of increased delay (default 10.0) " << endl;
 		cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
-		cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.25s) " << endl;
-		cerr << "     -txqueuesizefactor value reaction to increased RTP queue delay (default 0.1) " << endl;
-		cerr << "     -queuedelayguard value   reaction to increased network queue delay (default 0.05)" << endl;
+		cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << endl;
+		cerr << "     -adaptivepaceheadroom value set adaptive packet pacing headroom (default = 1.5) " << endl;
+		cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << endl;
+		cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << endl;
+		cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << endl;
 		cerr << "     -mtu value               set the max RTP payload size (default 1200 byte)" << endl;
 		cerr << "     -fps value               set the frame rate (default 50)" << endl;
 		cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
@@ -730,6 +795,60 @@ int main(int argc, char* argv[]) {
 		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
 		cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+#else
+	cerr << "SCReAM V1 BW test tool, sender. Ericsson AB. Version 2023-02-10" << endl;
+	cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
+	cerr << "     -newcc                   use new congestion control algorithm (dec 2022) " << endl;
+	cerr << "     -if name                 bind to specific interface" << endl;
+	cerr << "     -time value              run for time seconds (default infinite)" << endl;
+	cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
+	cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
+	cerr << "     -mulincrease val         multiplicative increase factor for v2 (default 0.05)" << endl;
+	cerr << "     -fincrease val           fast increase factor for newcc (default 1.0)" << endl;
+	cerr << "     -nopace                  disable packet pacing" << endl;
+	cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
+	cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
+	cerr << "                                must be used with -fixedrate option" << endl;
+	cerr << "     -key val1 val2           set a given key frame interval [s] and size multiplier " << endl;
+	cerr << "                               example -key 2.0 5.0 " << endl;
+	cerr << "     -rand value              framesizes vary randomly around the nominal " << endl;
+	cerr << "                               example -rand 10 framesize vary +/- 10% " << endl;
+	cerr << "     -initrate value          set a start bitrate [kbps]" << endl;
+	cerr << "                               example -initrate 2000 " << endl;
+	cerr << "     -minrate  value          set a min bitrate [kbps], default 1000kbps" << endl;
+	cerr << "                               example -minrate 1000 " << endl;
+	cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << endl;
+	cerr << "                               example -maxrate 10000 " << endl;
+	cerr << "     -rateincrease value      set a max allowed rate increase speed [kbps/s]," << endl;
+	cerr << "                               default 10000kbps/s" << endl;
+	cerr << "                               example -rateincrease 1000 " << endl;
+	cerr << "     -ratescale value         set a max allowed rate increase speed as a fraction of the " << endl;
+	cerr << "                               current rate, default 0.5" << endl;
+	cerr << "                               example -ratescale 1.0 " << endl;
+	cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
+	cerr << "                               -1 for not-ECT (default)" << endl;
+	cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << endl;
+	cerr << "     -dscale value            scale factor in case of increased delay (default 10.0) " << endl;
+	cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
+	cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.25s) " << endl;
+	cerr << "     -txqueuesizefactor value reaction to increased RTP queue delay (default 0.1) " << endl;
+	cerr << "     -queuedelayguard value   reaction to increased network queue delay (default 0.05)" << endl;
+	cerr << "     -mtu value               set the max RTP payload size (default 1200 byte)" << endl;
+	cerr << "     -fps value               set the frame rate (default 50)" << endl;
+	cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
+	cerr << "                               receiver end clock is faster" << endl;
+	cerr << "     -verbose                 print a more extensive log" << endl;
+	cerr << "     -nosummary               don't print summary" << endl;
+	cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
+	cerr << "     -ntp                     use NTP timestamp in logfile" << endl;
+	cerr << "     -append                  append logfile" << endl;
+	cerr << "     -itemlist                add item list in beginning of log file" << endl;
+	cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
+	cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
+	cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
+	cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
+	cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+#endif
 		exit(-1);
 	}
 	int ix = 1;
@@ -757,11 +876,6 @@ int main(int argc, char* argv[]) {
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-dscale")) {
-			dscale = atof(argv[ix + 1]);
-			ix += 2;
-			continue;
-		}
 		if (strstr(argv[ix], "-delaytarget")) {
 			delayTarget = atof(argv[ix + 1]);
 			ix += 2;
@@ -774,16 +888,24 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		if (strstr(argv[ix], "-txqueuesizefactor")) {
-			txQueueSizeFactor = atoi(argv[ix + 1]);
+		if (strstr(argv[ix], "-adativepaceheadroom")) {
+			adaptivePaceHeadroom = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
-		if (strstr(argv[ix], "-queuedelayguard")) {
-			queueDelayGuard = atoi(argv[ix + 1]);
+
+		if (strstr(argv[ix], "-postcongestiondelay")) {
+			postCongestionDelay = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
+
+		if (strstr(argv[ix], "-infligtheadroom")) {
+			bytesInFlightHeadroom = atof(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+
 		if (strstr(argv[ix], "-mtu")) {
 			mtu = atoi(argv[ix + 1]);
 			ix += 2;
@@ -812,16 +934,6 @@ int main(int argc, char* argv[]) {
 			ix++;
 			continue;
 		}
-		if (strstr(argv[ix], "-newcc")) {
-			isNewCc = true;
-			ix++;
-			continue;
-		}
-        if (strstr(argv[ix], "-fincrease")) {
-            fastIncreaseFactor = atof(argv[ix + 1]);
-            ix += 2;
-            continue;
-        }
 		if (strstr(argv[ix], "-fps")) {
 			FPS = atof(argv[ix + 1]);
 			ix += 2;
@@ -844,16 +956,6 @@ int main(int argc, char* argv[]) {
 		}
 		if (strstr(argv[ix], "-maxrate")) {
 			maxRate = atoi(argv[ix + 1]);
-			ix += 2;
-			continue;
-		}
-		if (strstr(argv[ix], "-rateincrease")) {
-			rateIncrease = atoi(argv[ix + 1]);
-			ix += 2;
-			continue;
-		}
-		if (strstr(argv[ix], "-ratescale")) {
-			rateScale = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}
@@ -936,6 +1038,50 @@ int main(int argc, char* argv[]) {
 			}
 			continue;
 		}
+
+#ifdef V2
+		if (strstr(argv[ix], "-mulincrease")) {
+			multiplicativeIncreaseFactor = atof(argv[ix + 1]);
+			ix += 2;
+		continue;
+		}
+#else
+		if (strstr(argv[ix], "-fincrease")) {
+			fastIncreaseFactor = atof(argv[ix + 1]);
+			ix += 2;
+		continue;
+		}
+		if (strstr(argv[ix], "-txqueuesizefactor")) {
+			txQueueSizeFactor = atoi(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+		if (strstr(argv[ix], "-queuedelayguard")) {
+			queueDelayGuard = atoi(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+		if (strstr(argv[ix], "-newcc")) {
+			isNewCc = true;
+			ix++;
+			continue;
+		}
+		if (strstr(argv[ix], "-dscale")) {
+			dscale = atof(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+		if (strstr(argv[ix], "-rateincrease")) {
+			rateIncrease = atoi(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+		if (strstr(argv[ix], "-ratescale")) {
+			rateScale = atof(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+#endif
 		cerr << "unexpected arg " << argv[ix] << endl;
 		exit(0);
 	}

@@ -23,11 +23,24 @@ using namespace std;
 * Media sources (max 6) are demultiplexed and forwarded to local RTP ports
 *  given by local_port list
 */
-
 #define BUFSIZE 2048
 
 #define MAX_SOURCES 6
 uint32_t SSRC_RTCP=10;
+
+
+/*
+* Simple code to verify that L4S works
+* as intended
+* The intention is that
+* CWND = 2*mss/pMark [byte]
+* The bitrate should then become
+* rate = 2*mss*8/(pMark*RTT)
+*/
+//#define TEST_L4S
+double pMarkCarry = 0.0;
+#define PMARK 0.1;
+
 
 
 // Input UDP socket, RTP packets come here and we send RTCP packets in the
@@ -418,6 +431,16 @@ int main(int argc, char* argv[])
       received_ecn = 0;
     }
 
+#ifdef TEST_L4S
+    if (received_ecn == 0x1) {
+      pMarkCarry += PMARK;
+      if (pMarkCarry >= 1.0) {
+    	  pMarkCarry -= 1.0;
+    		received_ecn = 0x3;
+    	}
+    }
+#endif
+
     uint32_t time_ntp = getTimeInNtp();
     if (recvlen > 1) {
       if (bufRtp[1] == 0x7F) {
@@ -459,6 +482,8 @@ int main(int argc, char* argv[])
         uint32_t ts;
         uint32_t ssrc;
         parseRtp(bufRtp,&seqNr, &ts, &ssrc);
+        bool isMark = (bufRtp[1] & 0x80) != 0;
+
         /*
         * Map the RTP packets to correct display by means of the ssrcMap
         */
@@ -481,7 +506,7 @@ int main(int argc, char* argv[])
         * Register received RTP packet with ScreamRx
         */
         pthread_mutex_lock(&lock_scream);
-        screamRx->receive(getTimeInNtp(), 0, ssrc, recvlen, seqNr, received_ecn);
+        screamRx->receive(getTimeInNtp(), 0, ssrc, recvlen, seqNr, received_ecn, isMark);
         pthread_mutex_unlock(&lock_scream);
 
         if (screamRx->checkIfFlushAck()) {

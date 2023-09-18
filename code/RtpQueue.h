@@ -44,7 +44,7 @@ public:
     int bytesInQueue(); // Number of bytes in queue
     int sizeOfQueue();  // Number of items in queue
     float getDelay(float currTs);
-    bool sendPacket(void **rtpPacket, int &size, uint32_t &ssrc, unsigned short &seqNr);
+    bool sendPacket(void **rtpPacket, int &size, uint32_t &ssrc, unsigned short &seqNr, bool &isMark);
     int clear();
     int getSizeOfLastFrame() {return sizeOfLastFrame;};
     void setSizeOfLastFrame(int sz) {sizeOfLastFrame=sz;};

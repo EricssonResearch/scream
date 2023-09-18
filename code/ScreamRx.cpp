@@ -25,6 +25,7 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
 	lastFeedbackT_ntp = 0;
 	nRtpSinceLastRtcp = 0;
 	firstReceived = false;
+	doFlush = false;
 
 	for (int n = 0; n < kRxHistorySize; n++) {
 		ceBitsHist[n] = 0x00;
@@ -36,7 +37,7 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
 
 bool ScreamRx::Stream::checkIfFlushAck(int ackDiff) {
 	uint32_t diff = highestSeqNr - highestSeqNrTx;
-	return (diff >= ackDiff);
+	return (diff >= ackDiff || doFlush);
 }
 
 void ScreamRx::Stream::receive(uint32_t time_ntp,
@@ -44,12 +45,15 @@ void ScreamRx::Stream::receive(uint32_t time_ntp,
 	int size,
 	uint16_t seqNr,
 	bool isEcnCe,
-	uint8_t ceBits_) {
+	uint8_t ceBits_,
+	bool isMarker) {
 
 	/*
 	* Count received RTP packets since last RTCP transmitted for this SSRC
 	*/
 	nRtpSinceLastRtcp++;
+
+	doFlush = isMarker;
 
 	/*
 	* Initialize on first received packet
@@ -209,7 +213,8 @@ void ScreamRx::receive(uint32_t time_ntp,
 	uint32_t ssrc,
 	int size,
 	uint16_t seqNr,
-	uint8_t ceBits) {
+	uint8_t ceBits,
+	bool isMark) {
 
 	bytesReceived += size;
 	if (lastRateComputeT_ntp == 0)
@@ -229,13 +234,14 @@ void ScreamRx::receive(uint32_t time_ntp,
 		*  to the range [2ms,100ms]
 		*/
 		float rate = 0.02f*averageReceivedRate / (100.0f * 8.0f); // RTCP overhead
-		rate = std::min(500.0f, std::max(10.0f, rate));
+		rate = std::min(100.0f, std::max(10.0f, rate));
 		/*
 		* More than one stream ?, increase the feedback rate as
 		*  we currently don't bundle feedback packets
 		*/
 		//rate *= streams.size();
 		rtcpFbInterval_ntp = uint32_t(65536.0f / rate); // Convert to NTP domain (Q16)
+		rtcpFbInterval_ntp = std::min(uint32_t(0.005f * 65536.0f), rtcpFbInterval_ntp);
 	}
 
 	if (!streams.empty()) {
@@ -245,7 +251,7 @@ void ScreamRx::receive(uint32_t time_ntp,
 				* Packets for this SSRC received earlier
 				* stream is thus already in list
 				*/
-				(*it)->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits);
+				(*it)->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits, isMark);
 				return;
 
 			}
@@ -257,7 +263,7 @@ void ScreamRx::receive(uint32_t time_ntp,
 	Stream *stream = new Stream(ssrc);
 	stream->nReportedRtpPackets = nReportedRtpPackets;
 	stream->ix = ix++;
-	stream->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits);
+	stream->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits, isMark);
 	streams.push_back(stream);
 }
 

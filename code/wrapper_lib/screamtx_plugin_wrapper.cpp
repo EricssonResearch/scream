@@ -105,7 +105,7 @@ bool forceidr = false;
 bool printSummary = true;
 
 static uint32_t first_ntp = 0;
-ScreamTx *screamTx = 0;
+ScreamV1Tx *screamTx = 0;
 
 uint32_t lastLogT_ntp = 0;
 uint32_t lastLogTv_ntp = 0;
@@ -544,7 +544,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     initRate = minRate;
 
   if (screamTx == NULL) {
-            screamTx = new ScreamTx(scaleFactor, scaleFactor,
+            screamTx = new ScreamV1Tx(scaleFactor, scaleFactor,
                               delayTarget,
                               false,
                               1.0f,dscale,

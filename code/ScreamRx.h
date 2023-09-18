@@ -52,7 +52,8 @@ public:
 			int size,
 			uint16_t seqNr,
 			bool isEcnCe,
-			uint8_t ceBits);
+			uint8_t ceBits,
+			bool isMarker);
 
 		/*
 		* Get SCReAM standardized RTCP feedback
@@ -84,6 +85,8 @@ public:
 		int ix;
 
 		int nReportedRtpPackets;
+		
+		bool doFlush;
 	};
 
 	/*
@@ -102,7 +105,8 @@ public:
 		uint32_t ssrc,
 		int size,
 		uint16_t seqNr,
-		uint8_t ceBits = 0x00);
+		uint8_t ceBits,
+		bool isMarker);
 
 	/*
 	* Return TRUE if an RTP packet has been received and there is
