@@ -337,7 +337,7 @@ void ScreamV1Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 		* Clear the RTP queue for 2 RTTs, this will allow the queue to drain so that we
 		*  get a good estimate for the min queue delay.
 		* This funtion is executed very seldom so it should not affect overall experience too much
-		* This function is disabled when L4S is active as congestion queue build up is then 
+		* This function is disabled when L4S is active as congestion queue build up is then
 		*  very limited
 		*/
 		int cur_cleared = stream->rtpQueue->clear();
@@ -770,7 +770,7 @@ void ScreamV1Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			 *  feedback that indicates CE marking when congestion occurs
 			 * This scales down the CE mark fraction when packet pacing
 			 *  is disabled
-			 * 
+			 *
 			 */
 			if (isCeThisFeedback)
 				ceDensity += kCeDensityAlpha;
@@ -833,7 +833,7 @@ void ScreamV1Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			/*
 			* There is no gain with a too frequent CWND update
 			* An update every 10ms is fast enough even at very high high bitrates
-			* Expections are loss or CE events 
+			* Expections are loss or CE events
 			*  or when a new frame arrives, in which case the packet pacing rate needs an update
 			*/
 			bytesInFlightRatio = std::min(1.0f,float(prevBytesInFlight) / cwnd);
@@ -1123,7 +1123,7 @@ void ScreamV1Tx::getShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
 		logTag, queueDelay, sRtt,
-		cwnd, bytesInFlightLog, rateTransmittedLog / 1000.0f, isInFastStart());
+		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
@@ -1131,9 +1131,9 @@ void ScreamV1Tx::getShortLog(float time, char *s) {
 		char s2[200];
 		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f,",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
-			tmp->targetBitrate / 1000.0f, tmp->rateRtpLog / 1000.0f,
-			tmp->rateTransmittedLog / 1000.0f,
-			tmp->rateLostLog / 1000.0f, tmp->rateCeLog / 1000.0f);
+			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
+			tmp->rateTransmitted / 1000.0f,
+			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
 		strcat(s, s2);
 	}
 }
@@ -1142,14 +1142,14 @@ void ScreamV1Tx::getVeryShortLog(float time, char *s) {
 	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, ",
 		logTag, queueDelay, sRtt,
-		cwnd, bytesInFlightLog, rateTransmittedLog / 1000.0f);
+		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < 1; n++) {
 		Stream *tmp = streams[n];
 		char s2[200];
 		sprintf(s2, "%5.0f, %5.0f, ",
-			tmp->rateLostLog / 1000.0f, tmp->rateCeLog / 1000.0f);
+			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
 		strcat(s, s2);
 	}
 }
@@ -1382,7 +1382,7 @@ void ScreamV1Tx::updateCwnd(uint32_t time_ntp) {
 			 * Update the SRTT histogram and compute an upper percentile SRTT
 			 *  that is in turn used to compute a more stable bitrate
 			 *  when L4S is inactive (new congestion control algorithm)
-			 * Updated is allowed when sRtt has stabilized 
+			 * Updated is allowed when sRtt has stabilized
 			 */
 			for (int n = 0; n < kSrttHistBins; n++) {
 				sRttHist[n] *= (1.0 - kSrttHistDecay);
@@ -1428,7 +1428,7 @@ void ScreamV1Tx::updateCwnd(uint32_t time_ntp) {
 			cwndRatio * kSrttVirtual / sRttLow - kCwndRatioThLow) / (kCwndRatioThHigh - kCwndRatioThLow));
 
 		/*
-		* l4sAlpha min can actually be calculated from the assumption that 2 packets are marked per RTT 
+		* l4sAlpha min can actually be calculated from the assumption that 2 packets are marked per RTT
 		*  at steady state
 		* This speeds up the rate reduction somewhat when throughput drops dramatically
 		*  as l4sAlpha does not need to average up from nearly zero
@@ -1478,8 +1478,8 @@ void ScreamV1Tx::updateCwnd(uint32_t time_ntp) {
 				if (time_ntp - lastCongestionDetectedT_ntp > 5 * 65536) {
 					/*
 					* First congestion event for a long while. It is likely that the congestion window
-					*  has inflated. The latter is to cope with video encoders that can lock to 
-					*  low bitrates. 
+					*  has inflated. The latter is to cope with video encoders that can lock to
+					*  low bitrates.
 					* Reduce the congestion window to a more sensible level (twice the bytes in flight history)
 					*  to make congestion reaction faster.
 					*/
@@ -1548,7 +1548,7 @@ void ScreamV1Tx::updateCwnd(uint32_t time_ntp) {
 				float bytesInFlightMargin = 1.5f;
 				if (isL4s && isNewCc) {
 					/*
-					* Allow the congestion window to inflate. This makes it possible to handle 
+					* Allow the congestion window to inflate. This makes it possible to handle
 					*  cases when the video encoders lock to low bitrates
 					*/
 					bytesInFlightMargin = 3.0f;
@@ -1910,7 +1910,7 @@ void ScreamV1Tx::adjustPriorities(uint32_t time_ntp) {
 		return;
 	}
 
-	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536 || 
+	if (nStreams == 1 || time_ntp - lastAdjustPrioritiesT_ntp < 65536 ||
 		queueDelayTrend < 0.2 && !isL4sActive) {
 		/*
 		* Skip if not only one stream or less than 1 second since last adjustment or
@@ -2192,7 +2192,7 @@ ScreamV1Tx::Stream* ScreamV1Tx::getStream(uint32_t ssrc, int &streamId) {
 			return streams[n];
 		}
 	}
-	streamId = -1; 
+	streamId = -1;
 	return NULL;
 }
 
@@ -2226,7 +2226,7 @@ void ScreamV1Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 
 		if (frameSizeAvg == 0.0f)
 			frameSizeAvg = frameSizeAcc;
-		else 
+		else
 			frameSizeAvg = frameSizeAcc * kFrameSizeAvgAlpha + frameSizeAvg * (1.0 - kFrameSizeAvgAlpha);
 		frameSize = std::max(rtpQueue->bytesInQueue(),frameSizeAcc);
 		/*
@@ -2355,8 +2355,8 @@ void ScreamV1Tx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	}
 
 
-	/* 
-	* Rate is computed based CWND and RTT with some extra bells and whistles for the 
+	/*
+	* Rate is computed based CWND and RTT with some extra bells and whistles for the
 	* case that L4S is either not enabled or that the network does not mark packets
 	*/
 
@@ -2397,7 +2397,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	float tmp = 1.0;
 	if (parent->isInFastStart()) {
 		/*
-		* Variable scale down in fast start 
+		* Variable scale down in fast start
 		*/
 		tmp /= 1.0 + (1.0f - scl) * (kMaxBytesInFlightHeadRoom - 1.0f);
 	}
@@ -2510,7 +2510,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 				 *  rare but there is for instance a possibility that the L4S marking lags behind and
 				 *  implements some filtering
 				 */
-				float backOff = parent->l4sAlpha / 2.0f;				
+				float backOff = parent->l4sAlpha / 2.0f;
 
 				targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate*(1.0f - backOff)+targetBitrate*cwndRatio));
 			}

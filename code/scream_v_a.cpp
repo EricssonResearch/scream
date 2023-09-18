@@ -3,7 +3,7 @@
 
 #include "stdafx.h"
 //#define NO_LOG_TAG
-//#define IS_V2
+//#define V2
 
 
 #include "VideoEnc.h"
@@ -44,7 +44,7 @@ const float RTT = 0.025f;
 
 #include "ScreamTx.h"
 
-#ifdef IS_V2
+#ifdef V2
 int main(int argc, char* argv[])
 {
 

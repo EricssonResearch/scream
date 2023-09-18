@@ -33,7 +33,9 @@ MAX_TOTAL_RATE=60000
 # Select type of camera here
 #SOURCE="e-CAM50_CUNX"
 SOURCE="Raspberry-Pi-HQ_Camera_12MP"
-SOURCE="Movie" 
+SOURCE="Movie"
+#SCREAM_VERSION="V1"
+SCREAM_VERSION="V2"
 
 
 if [ "$SOURCE" == "e-CAM50_CUNX" ]; then
@@ -68,7 +70,7 @@ if [ "$SOURCE" == "Raspberry-Pi-HQ_Camera_12MP" ]; then
 fi
 
 if [ "$SOURCE" == "Movie" ]; then
-  # Download the big buck bunny 1080p60fps movie 
+  # Download the big buck bunny 1080p60fps movie
   #  from http://ftp.vim.org/ftp/ftp/pub/graphics/blender/demo/movies/BBB/
   MEDIA=~/bbb_sunflower_1080p_60fps_normal.mp4
   gst-launch-1.0 rtpbin name=rtpbin multifilesrc location=$MEDIA location=$MEDIA loop=true stop-index=-1 ! qtdemux name=demux ! queue ! h264parse ! omxh264dec ! queue ! nvv4l2h264enc name=video iframeinterval=500 control-rate=1 bitrate=1000000 insert-sps-pps=true preset-level=1 profile=2 maxperf-enable=true EnableTwopassCBR=true vbv-size=500000 poc-type=2 ! queue max-size-buffers=2 ! rtph264pay  mtu=1300 ! codecctrl media-src=4 port=30001 ! udpsink host=127.0.0.1 port=30000 &
@@ -84,4 +86,9 @@ sleep 1
 #  ./screamTx/bin/scream_sender -ect 1
 
 echo "Video streaming started"
-./scream/bin/scream_sender -log default.scream -ect 1 -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 30000:30000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -cwvmem 60 -maxtotalrate  $MAX_TOTAL_RATE -pacingheadroom 1.2 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+if [ "$SCREAM_VERSION" == "V1" ]; then
+./scream/bin/scream_sender -ect 1 -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 25000:25000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -cwvmem 60 -maxtotalrate  $MAX_TOTAL_RATE -pacingheadroom 1.2 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+fi
+if [ "$SCREAM_VERSION" == "V2" ]; then
+./scream/bin/scream_sender -ect 1 -delaytarget $NETWORK_QUEUE_DELAY_TARGET -priority 1.0:0.5 -ratemax 25000:25000 -ratemin 2000:2000 -rateinit 5000:5000 -ratescale 1.0:1.0 -maxtotalrate  $MAX_TOTAL_RATE -pacingheadroom 1.5 2 $RECEIVER_IP $UDP_PORT_VIDEO &
+fi

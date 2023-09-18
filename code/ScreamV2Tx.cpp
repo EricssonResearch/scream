@@ -292,7 +292,7 @@ void ScreamV2Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 		* Clear the RTP queue for 2 RTTs, this will allow the queue to drain so that we
 		*  get a good estimate for the min queue delay.
 		* This funtion is executed very seldom so it should not affect overall experience too much
-		* This function is disabled when L4S is active as congestion queue build up is then 
+		* This function is disabled when L4S is active as congestion queue build up is then
 		*  very limited
 		*/
 		int cur_cleared = stream->rtpQueue->clear();
@@ -678,7 +678,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			 *  feedback that indicates CE marking when congestion occurs
 			 * This scales down the CE mark fraction when packet pacing
 			 *  is disabled
-			 * 
+			 *
 			 */
 			if (isCeThisFeedback)
 				ceDensity += kCeDensityAlpha;
@@ -735,7 +735,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			/*
 			* There is no gain with a too frequent CWND update
 			* An update every 10ms is fast enough even at very high high bitrates
-			* Expections are loss or CE events 
+			* Expections are loss or CE events
 			*  or when a new frame arrives, in which case the packet pacing rate needs an update
 			*/
 			bytesInFlightRatio = std::min(1.0f,float(prevBytesInFlight) / cwnd);
@@ -1028,7 +1028,7 @@ void ScreamV2Tx::getShortLog(float time, char *s) {
 	int inFlightMax = bytesInFlight;
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
 		logTag, queueDelay, sRtt,
-		cwnd, bytesInFlightLog, rateTransmittedLog / 1000.0f, 0);
+		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, 0);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
@@ -1036,9 +1036,9 @@ void ScreamV2Tx::getShortLog(float time, char *s) {
 		char s2[200];
 		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f,",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
-			tmp->targetBitrate / 1000.0f, tmp->rateRtpLog / 1000.0f,
-			tmp->rateTransmittedLog / 1000.0f,
-			tmp->rateLostLog / 1000.0f, tmp->rateCeLog / 1000.0f);
+			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
+			tmp->rateTransmitted / 1000.0f,
+			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
 		strcat(s, s2);
 	}
 }
@@ -1467,7 +1467,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	if (maxTotalBitrate > 0) {
 		if (isL4sActive) {
 			/*
-			* Scale up one half pacing headroom to compensate for the same 
+			* Scale up one half pacing headroom to compensate for the same
 			*  downscaling in the stream rate control
 			*/
 			cwnd = std::min(cwnd, int(maxTotalBitrate * halfPacketPacingHeadroom * sRtt / 8));
