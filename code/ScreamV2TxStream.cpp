@@ -59,6 +59,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	numberOfUpdateRate = 0;
 	cleared = 0;
 	packetLost = 0;
+    packetsCe  = 0;
 	packetsCe = 0;
 	for (int n = 0; n < kRateUpDateSize; n++) {
 		rateRtpHist[n] = 0.0f;
