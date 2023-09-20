@@ -142,7 +142,7 @@ extern "C" {
 		void setLogTag(char* logTag_) {
 			logTag = logTag_;
 		};
-		char* logTag = "";
+		const char* logTag = "";
 	};
 
 	class RtpQueueIface;
