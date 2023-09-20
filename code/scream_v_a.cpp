@@ -3,7 +3,7 @@
 
 #include "stdafx.h"
 //#define NO_LOG_TAG
-//#define V2
+#define V2
 
 
 #include "VideoEnc.h"
@@ -20,11 +20,11 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 50;
+const float Tmax = 100;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = true;
-const bool isL4s = ecnCapable;
+const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
 const bool isNewCc = true;
@@ -32,8 +32,8 @@ const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-//#define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_flat.txt"
+#define TRACEFILE "../traces/trace_no_key.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2 
@@ -51,24 +51,24 @@ int main(int argc, char* argv[])
     int tick = (int)(65536.0f / FR);
     ScreamV2Tx* screamTx = new ScreamV2Tx(0.7f, 0.8f, 0.04f, 10000, 1.5f, 1.5f, 2.0f, 0.05f, isL4s, false, false, false);
 
-    screamTx->setCwndMinLow(15000);
+    screamTx->setCwndMinLow(1500);
     screamTx->setPostCongestionDelay(4.0);
     screamTx->enablePacketPacing(enablePacing);
     //screamTx->autoTuneMinCwnd(true);
-    screamTx->setMaxTotalBitrate(20e6);
+    //screamTx->setMaxTotalBitrate(20e6);
     screamTx->setLogTag((char*)log_tag);
 
     ScreamRx* screamRx = new ScreamRx(0, 1, 1);
     RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
     VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
     NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-    NetQueue* netQueueRate = new NetQueue(0.0f,10e6, 0.0f, true && isL4s);
+    NetQueue* netQueueRate = new NetQueue(0.0f,50e6, 0.0f, true && isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
     videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR / FR_DIV, (char*)TRACEFILE, 100);
     videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
     if (mode & 0x01)
-        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.5e6f, 5e6f, 100e6f, 0.1f, false, 0.05f);
+        screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.5e6f, 5e6f, 200e6f, 0.1f, false, 0.05f);
     if (mode & 0x02)
         screamTx->registerNewStream(rtpQueue[1], 11, 0.3f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
     if (mode & 0x04)
@@ -217,8 +217,8 @@ int main(int argc, char* argv[])
         }
 
         if (isChRate) {
-            if ((time > 20.0 && time < 30) && isChRate) {
-                netQueueRate->rate = 5000e3;
+            if ((time > 50.0 && time < 70) && isChRate) {
+                netQueueRate->rate = 25000e3;
             }
             else {
                 netQueueRate->rate = 50000e3;
@@ -243,7 +243,7 @@ int main(int argc, char* argv[])
     int tick = (int)(65536.0f / FR);
     ScreamV1Tx *screamTx = new ScreamV1Tx(0.8f, 0.9f, 0.06f, false, 1.0f, 5.0f, 10000, 1.2f, 20, isL4s, false, false, 4.0f, isNewCc);
 
-	screamTx->setCwndMinLow(10000);
+	screamTx->setCwndMinLow(1500);
 	screamTx->setPostCongestionDelay(0.1);
     screamTx->setFastIncreaseFactor(10.0);
     screamTx->enablePacketPacing(enablePacing);
@@ -255,13 +255,13 @@ int main(int argc, char* argv[])
     RtpQueue *rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
     VideoEnc *videoEnc[4] = { 0, 0, 0, 0};
     NetQueue *netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-    NetQueue *netQueueRate = new NetQueue(0.0f, 10e6, 0.0f, isL4s);
+    NetQueue *netQueueRate = new NetQueue(0.0f, 1000e6, 0.0f, isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR/FR_DIV, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR/FR_DIV, (char*)TRACEFILE, 100);
     videoEnc[3] = new VideoEnc(rtpQueue[3], FR/FR_DIV, (char*)TRACEFILE, 150);
     if (mode & 0x01)
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1.5e6f, 3e6f, 50e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1.5e6f, 3e6f, 200e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
     if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.3f, 1.0e6f, 1e6f, 5e6f, 10e6f, 1.0f, 0.1f, 0.2f, 0.1f, 0.9f, 0.95f, false, 0.1f);
     if (mode & 0x04)

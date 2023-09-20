@@ -1295,9 +1295,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	 */
 	float cwndScaleFactor;
 	if (lastCongestionDetectedT_ntp == 0)
-		cwndScaleFactor = (kLowCwndScaleFactor + (10*multiplicativeIncreaseScalefactor * cwnd) / mss);
+		cwndScaleFactor = (kLowCwndScaleFactor + (10 * multiplicativeIncreaseScalefactor * cwnd) / mss);
 	else
-		cwndScaleFactor = (kLowCwndScaleFactor + (multiplicativeIncreaseScalefactor * cwnd) / mss);
+		cwndScaleFactor = 1.0f;// (kLowCwndScaleFactor + (multiplicativeIncreaseScalefactor * cwnd) / mss);
 
 	if (lossEvent) {
 		/*
@@ -1333,10 +1333,25 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		if (isL4s) {
 			float backOff = l4sAlpha / 2.0f;
 			/*
+			* Additional compensation is needed to compensate for 
+			* small CWND as well as the packet pacing headroom
+			* The drawback is that reaction to congestion can become 
+			*  reduced, especially at very low bitrates
+			*/
+
+			/*
 			 * Compensate for very small cwndRatios
 			 * i.e CWND is almost as small as MSS
 			 */
 			backOff *= std::min(1.0f, cwndScaleFactor);
+
+			/*
+			* Hmm.. Yes.. This is a bit of voodoo magic.. and
+			*  actually on top of previous scaling 
+			* This extra compensation is to make sure that bitrate does not 
+			*  become too low at high CE rates == low CWND/MSS
+			*/
+			backOff *= std::max(0.8f,1.0f-cwndRatio*2.0f);
 
 			/*
 			 * Scale down back off to so that the bitrate follows the

@@ -8,7 +8,7 @@
 
 using namespace std;
 
-static const int kMaxRtpSize = 1200;
+static const int kMaxRtpSize = 1360;
 static const int kRtpOverHead = 12;
 
 uint32_t SSRC = 1;
