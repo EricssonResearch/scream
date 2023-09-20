@@ -100,25 +100,6 @@ SCReAM is also implemented in a remote controlled car prototype. The two videos 
 
 SCReAM has been successfully be used on more recent experiments, examples will be added later.
 
-# References
-[1] https://tools.ietf.org/html/rfc8298
-
-[2] Sigcomm paper http://dl.acm.org/citation.cfm?id=2631976
-
-[3] Sigcomm presentation http://conferences.sigcomm.org/sigcomm/2014/doc/slides/150.pdf
-
-[4] https://tools.ietf.org/html/rfc9331
-
-[5] IETF RMCAT presentation, comparison against Google Congestion Control (GCC) http://www.ietf.org/proceedings/90/slides/slides-90-rmcat-3.pdf
-
-[6] IETF RMCAT presentation (final for WGLC) : https://www.ietf.org/proceedings/96/slides/slides-96-rmcat-0.pdf
-
-[7] IETF RMCAT presention , SCReAM for remote controlled vehicles over 4G/5G : https://datatracker.ietf.org/meeting/100/materials/slides-100-rmcat-scream-experiments
-
-[8] Adaptive Video with SCReAM over LTE for Remote-Operated Working Machines : https://www.hindawi.com/journals/wcmc/2018/3142496/
-
-[9] https://tools.ietf.org/html/rfc8888
-
 ## Build
 The SCReAM code comes in two (three) applications
 
@@ -161,3 +142,23 @@ make
 You need git, cmake, make and g++ installed
 
 To enable SCReAM V2, change SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread") to SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread -V2") in CMakeLists.txt
+
+
+# References
+[1] https://tools.ietf.org/html/rfc8298
+
+[2] Sigcomm paper http://dl.acm.org/citation.cfm?id=2631976
+
+[3] Sigcomm presentation http://conferences.sigcomm.org/sigcomm/2014/doc/slides/150.pdf
+
+[4] https://tools.ietf.org/html/rfc9331
+
+[5] IETF RMCAT presentation, comparison against Google Congestion Control (GCC) http://www.ietf.org/proceedings/90/slides/slides-90-rmcat-3.pdf
+
+[6] IETF RMCAT presentation (final for WGLC) : https://www.ietf.org/proceedings/96/slides/slides-96-rmcat-0.pdf
+
+[7] IETF RMCAT presention , SCReAM for remote controlled vehicles over 4G/5G : https://datatracker.ietf.org/meeting/100/materials/slides-100-rmcat-scream-experiments
+
+[8] Adaptive Video with SCReAM over LTE for Remote-Operated Working Machines : https://www.hindawi.com/journals/wcmc/2018/3142496/
+
+[9] https://tools.ietf.org/html/rfc8888
