@@ -2,7 +2,7 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
-- 2023-09-18 : SCReAM V2. Version 2 is a major rewrite of the complete algorithm with the goal to make the algorithm more stable especially when used with L4S. Support for V2 is in the BW test algorithm application and the multicam code. Due to hardware malfunction in test device it has however not been possible to verify the function of the multicam algorithm. SCReAM V2 is enabled by adding -V2 in the CMAKE_CXX_FLAGS in CMakeLists.txt  <br> The main changes are:
+- 2023-09-20 : SCReAM V2. Version 2 is a major rewrite of the complete algorithm with the goal to make the algorithm more stable especially when used with L4S. Support for V2 is in the BW test algorithm application and the multicam code. Due to hardware malfunction in test device it has however not been possible to verify the function of the multicam algorithm. SCReAM V2 is enabled by adding -V2 in the CMAKE_CXX_FLAGS in CMakeLists.txt  <br> The main changes are:
   - The congestion window serves mainly as a hand brake to avoid that excessive amounts of data is injected to the network when link thorughput drops dramatically. The congestion window is otherwise seldom a limiting factor in more normal working conditions
   - The packet pacing headroom is made large, as a default, the pacing rate is 50% larger than the nominal target rate. The congestion down-scale is adapted to this to still achieve high link ultilization
   - The rate control algorith is greatly simplified, with a minimal amount of voodoo magic that is difficult to explain
