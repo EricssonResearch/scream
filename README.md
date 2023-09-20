@@ -27,6 +27,7 @@ A sender that is L4S capable sets the ECT(1) code point on outgoing packets. If 
 
 In steady state, 2 packets per RTT should be marked. The expected rate then becomes <br> rate = (2.0/pMark) * MSS * 8/RTT [bps]    
 How SCReAM (V2) manages this is illustrated in the figure below ![SCReAM V2 mark probability vs bitrate, RTT=25ms, 1360byte packets](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-V2-RTT-25ms-1360B.png)  
+Figure 1 : SCReAM V2 bitrate as function of packet marking probability. RTT = 25ms, MSS=1360B. Dotted is theoretical, blue is actual
 
 
 ### The more nitty gritty details
@@ -54,10 +55,10 @@ Below is shown two simulation examples with a simple 50Mbps bottleneck that chan
 L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, considering the varying output rate of the video encoder. This is self-adjusting by inherent design because the larger frames hit the L4S enabled queue more and thus causes more marking. The average bitrate would increase if the frame size variations are smaller.
 
 ![Simple bottleneck simulation SCReAM no L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-V2-noL4S.png)
-Figure 1 : SCReAM V2 without L4S support
+Figure 2 : SCReAM V2 without L4S support
 
 ![Simple bottleneck simulation SCReAM with L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-V2-L4S.png)
-Figure 2 : SCReAM with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
+Figure 3 : SCReAM with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
 
 ----------
 
