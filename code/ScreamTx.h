@@ -106,6 +106,9 @@ extern "C" {
 	static const int kSrttHistBins = 200;
 	static const int kRelFrameSizeHistBins = 20;
 
+	static const int kMaxBytesInFlightHistSize = 10;
+
+
 	class ScreamTx {
 	public:
 		ScreamTx();
@@ -715,6 +718,7 @@ extern "C" {
 		*/
 		float getQueueDelayTrend();
 
+
 		/*
 		* Variables for network congestion control
 		*/
@@ -1315,6 +1319,11 @@ extern "C" {
 		float getTotalTargetBitrate();
 
 		/*
+		* Get total max bitrate for all streams
+		*/
+		float getTotalMaxBitrate();
+
+		/*
 		* Update CWND
 		*/
 		void updateCwnd(uint32_t time_ntp);
@@ -1471,6 +1480,10 @@ extern "C" {
 		int prevBytesInFlight;
 		int maxBytesInFlight;
 		int maxBytesInFlightPrev;
+
+		int maxBytesInFlightHist[kMaxBytesInFlightHistSize];
+		int maxBytesInFlightHistIx = 0;
+
 		int cwndI; // congestion window inflexion point
 		uint32_t lastCwndIUpdateT_ntp;
 

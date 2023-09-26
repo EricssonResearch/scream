@@ -213,6 +213,10 @@ queueDelaySbdSkew(0)
 	for (int n = 0; n < kMaxStreams; n++)
 		streams[n] = NULL;
 
+	for (int n = 0; n < kMaxBytesInFlightHistSize; n++)
+		maxBytesInFlightHist[n] = NULL;
+	maxBytesInFlightHistIx = 0;
+
 	queueDelayMax = 0.0f;
 	queueDelayMinAvg = 0.0f;
 	queueDelayMin = 1000.0;
@@ -755,7 +759,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		}
 
 	}
-	isL4sActive = isL4s && (time_ntp - lastCeEventT_ntp < (10 * 65535)); // L4S enabled and at least one CE event the last 10 seconds
+	isL4sActive = true ||  isL4s && (time_ntp - lastCeEventT_ntp < (10 * 65535)); // L4S enabled and at least one CE event the last 10 seconds
 
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		if (fp_log && completeLogItem) {
@@ -1105,6 +1109,15 @@ float ScreamV2Tx::getTotalTargetBitrate() {
 	return totalTargetBitrate;
 }
 
+float ScreamV2Tx::getTotalMaxBitrate() {
+	float totalMaxBitrate = 0.0f;
+	for (int n = 0; n < nStreams; n++) {
+		totalMaxBitrate += streams[n]->maxBitrate;
+	}
+	return totalMaxBitrate;
+}
+
+
 /*
 * Update the  congestion window
 */
@@ -1257,6 +1270,25 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			}
 		}
 
+		maxBytesInFlightHist[maxBytesInFlightHistIx] = maxBytesInFlight;
+		maxBytesInFlightHistIx++;
+		if (maxBytesInFlightHistIx == kMaxBytesInFlightHistSize)
+			maxBytesInFlightHistIx = 0;
+
+		if (getTotalTargetBitrate() > getTotalMaxBitrate() * 0.95f) {
+			/*
+			 * CWND is allowed to grow considerably larger than bytes in flight
+			 *  at ramp-up, this to avoid that the ramp-up locks to low rates
+			 * However, when bitrate is almost max, it is better to constrain CWND
+			 *  to avoid large queue build up when congestion occurs
+			 */
+			int tmp = maxBytesInFlight;
+			for (int n = 0; n < kMaxBytesInFlightHistSize; n++) {
+				tmp = std::max(tmp, maxBytesInFlightHist[n]);
+			}
+			cwnd = std::min(cwnd, tmp);
+		}
+
 
 		if (time_ntp - initTime_ntp > 2 * 65536) {
 			/*
@@ -1280,6 +1312,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 		lastAddToQueueDelayFractionHistT_ntp = time_ntp;
 	}
+
 	/*
 	* offTarget is a normalized deviation from the queue delay target
 	*/
@@ -1293,11 +1326,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	 * Reducing the MSS when bitrate is low is the best option if fast reaction to congestion
 	 * is desired.
 	 */
-	float cwndScaleFactor;
-	if (lastCongestionDetectedT_ntp == 0)
-		cwndScaleFactor = (kLowCwndScaleFactor + (10 * multiplicativeIncreaseScalefactor * cwnd) / mss);
-	else
-		cwndScaleFactor = 1.0f;// (kLowCwndScaleFactor + (multiplicativeIncreaseScalefactor * cwnd) / mss);
+	float cwndScaleFactor = (kLowCwndScaleFactor + (multiplicativeIncreaseScalefactor * cwnd) / mss);
 
 	if (lossEvent) {
 		/*
@@ -1448,13 +1477,14 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		increment *= tmp2;
 		/*
 		* Increase CWND only if bytes in flight is large enough
+		* Quite a lot of slack is allowed here to avoid that bitrate locks to 
+		*  low values.
 		*/
 		double maxAllowed = mss + std::max(maxBytesInFlight, maxBytesInFlightPrev) * bytesInFlightHeadRoom;
 		int cwndTmp = cwnd + (int)(increment + 0.5f);
 		if (cwndTmp <= maxAllowed)
 			cwnd = cwndTmp;
-	}
-	else {
+	} else {
 		/*
 		* Update inflexion point
 		*/
