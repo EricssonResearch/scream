@@ -116,7 +116,7 @@ pub fn run_time_bitrate_set(
                         let rate = rate * ratemultiply;
                         let prev_br:u32 = video_cloned.property::<u32>("bitrate");
                         video_cloned
-                            .set_property("bitrate", &rate);
+                            .set_property("bitrate", rate);
                         let n = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
                         let mut rate_info_prev = RATE_INFO_PREV.lock().unwrap();
