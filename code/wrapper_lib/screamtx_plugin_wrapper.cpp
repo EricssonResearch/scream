@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
-extern const char *log_tag;
+const char* log_tag = "scream_lib";
 
 typedef void (* ScreamSenderPushCallBack)(uint8_t *, uint8_t *, uint8_t);
 
@@ -192,7 +192,9 @@ void *transmitRtpThread(void *arg) {
            pthread_mutex_lock(&stream->lock_rtp_queue);
            stream->rtpQueue->pop(&buf, size, ssrc, seqNr, isMark);
            pthread_mutex_unlock(&stream->lock_rtp_queue);
-           stream->cb(stream->cb_data, (uint8_t *)buf, 1);
+           if (buf) {
+               stream->cb(stream->cb_data, (uint8_t *)buf, 1);
+           }
            if ((cur_n_streams > 1) && (sleeps++ < 120)) {
                usleep(500);
            }
@@ -601,7 +603,9 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
 void packet_free(void *buf, uint32_t ssrc)
 {
     stream_t *stream = getStream(ssrc);
-    stream->cb(stream->cb_data, (uint8_t *)buf, 0);
+    if (buf) {
+        stream->cb(stream->cb_data, (uint8_t *)buf, 0);
+    }
 }
 int nn=0;
 

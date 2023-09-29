@@ -150,10 +150,10 @@ int RtpQueue::clear() {
         pop(&buf, size, ssrc, seqNr, isMark);
         if (buf != NULL) {
             freed++;
-        }
 #ifndef IGNORE_PACKET
-		packet_free(buf, ssrc);
+            packet_free(buf, ssrc);
 #endif
+        }
 	}
     return (freed);
 }
