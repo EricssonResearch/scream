@@ -55,7 +55,7 @@ The SCReAM sender side is built with the instructions
 `$ cmake .`
 `$ make`
 
-To enable SCReAM V2, change SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread") to SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread -V2") in CMakeLists.txt
+To enable SCReAM V2, change SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread") to SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread -DV2") in CMakeLists.txt
 Note also then that SCREAM_VERSION="V2" is needed in startsender.sh
 
 
