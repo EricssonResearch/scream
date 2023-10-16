@@ -62,7 +62,7 @@ static const float kSrttVirtual = 0.025f; // Virtual SRTT, similar to Prague CC
 
 static const float kCeDensityAlpha = 1.0f / 16;
 
-static const float kCwndOverheadL4s = 2.0f;
+static const float kCwndOverheadL4s = 1.5f;
 static const float kCwndOverheadNoL4s = 1.0f;
 
 static const float kLowCwndScaleFactor = 0.1f;
@@ -1362,9 +1362,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		if (isL4s) {
 			float backOff = l4sAlpha / 2.0f;
 			/*
-			* Additional compensation is needed to compensate for 
+			* Additional compensation is needed to compensate for
 			* small CWND as well as the packet pacing headroom
-			* The drawback is that reaction to congestion can become 
+			* The drawback is that reaction to congestion can become
 			*  reduced, especially at very low bitrates
 			*/
 
@@ -1376,8 +1376,8 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 			/*
 			* Hmm.. Yes.. This is a bit of voodoo magic.. and
-			*  actually on top of previous scaling 
-			* This extra compensation is to make sure that bitrate does not 
+			*  actually on top of previous scaling
+			* This extra compensation is to make sure that bitrate does not
 			*  become too low at high CE rates == low CWND/MSS
 			*/
 			backOff *= std::max(0.8f,1.0f-cwndRatio*2.0f);
@@ -1477,7 +1477,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		increment *= tmp2;
 		/*
 		* Increase CWND only if bytes in flight is large enough
-		* Quite a lot of slack is allowed here to avoid that bitrate locks to 
+		* Quite a lot of slack is allowed here to avoid that bitrate locks to
 		*  low values.
 		*/
 		double maxAllowed = mss + std::max(maxBytesInFlight, maxBytesInFlightPrev) * bytesInFlightHeadRoom;
