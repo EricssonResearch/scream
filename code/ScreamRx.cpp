@@ -235,11 +235,7 @@ void ScreamRx::receive(uint32_t time_ntp,
 		*/
 		float rate = 0.02f*averageReceivedRate / (100.0f * 8.0f); // RTCP overhead
 		rate = std::min(100.0f, std::max(10.0f, rate));
-		/*
-		* More than one stream ?, increase the feedback rate as
-		*  we currently don't bundle feedback packets
-		*/
-		//rate *= streams.size();
+
 		rtcpFbInterval_ntp = uint32_t(65536.0f / rate); // Convert to NTP domain (Q16)
 		rtcpFbInterval_ntp = std::min(uint32_t(0.005f * 65536.0f), rtcpFbInterval_ntp);
 	}

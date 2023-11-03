@@ -120,7 +120,7 @@ extern "C" {
 		  */
 		class Statistics {
 		public:
-			Statistics(ScreamTx *parent);
+			Statistics(ScreamTx* parent);
 			void getSummary(float time, char s[]);
 			void add(float rateTx, float rateLost, float rtt, float queueDelay);
 		private:
@@ -133,7 +133,7 @@ extern "C" {
 			float avgQueueDelay;
 			float sumRateTx;
 			float sumRateLost;
-			ScreamTx *parent;
+			ScreamTx* parent;
 		};
 		Statistics* statistics;
 
@@ -162,18 +162,18 @@ extern "C" {
 		* cwnd > 0 sets a different initial congestion window, for example it can be set to
 		*  initialrate/8*rtt
 		* packetPacingHeadroom sets how much faster the video frames are transmitted, relative to the target bitrate
-		* bytesInFlightHistSize can be set to a larger value than 5(s) for enhanced robustness to media coders that 
+		* bytesInFlightHistSize can be set to a larger value than 5(s) for enhanced robustness to media coders that
 		*  are idle for long periods
 		* isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
 		* openWindow = true removes the congestion window limitation, this feature may be useful in combination with L4S
-		* enableClockDriftCompensation = true compensates for the case where the endpoints clocks drift relative to one 
+		* enableClockDriftCompensation = true compensates for the case where the endpoints clocks drift relative to one
 		*  another. Note though that clock drift is not always montonous IRL
-		* maxAdaptivePacingRateScale > 1.0 enables adaptive scaling of the pacing rate to transmit large frames faster. 
-		*  This feature is mostly relevant with L4S and has the potential to reduce unecessary queue build-up in the 
-		*  RTP queue, but can also potentially increase network queue build-up 
-		* isNewCc == true enables a new algorithm that is more stable when subject to competing L4S flows 
+		* maxAdaptivePacingRateScale > 1.0 enables adaptive scaling of the pacing rate to transmit large frames faster.
+		*  This feature is mostly relevant with L4S and has the potential to reduce unecessary queue build-up in the
+		*  RTP queue, but can also potentially increase network queue build-up
+		* isNewCc == true enables a new algorithm that is more stable when subject to competing L4S flows
 		*  in the same boottleneck queue
-		* 
+		*
 		*/
 		ScreamV1Tx(float lossBeta = kLossBeta,
 			float ecnCeBeta = kEcnCeBeta,
@@ -188,7 +188,7 @@ extern "C" {
 			bool openWindow = false,
 			bool enableClockDriftCompensation = false,
 			float maxAdaptivePacingRateScale = 1.0,
-			bool isNewCc = false); 
+			bool isNewCc = false);
 
 		~ScreamV1Tx();
 
@@ -201,16 +201,16 @@ extern "C" {
 		* rampUpSpeed sets how fast the bitrate can be increased [bps/s]
 		* rampUpScale sets how fast the bitrate can be increased relative to the current target bitrate
 		* maxRtpQueueDelay sets how long RTP packets can be held in buffer before entire buffer is cleared
-		* txQueueSizeFactor and queueDelayGuard sets the sensitivity to delay related congestion 
+		* txQueueSizeFactor and queueDelayGuard sets the sensitivity to delay related congestion
 		* lossEventRateScale sets how the congestion window should be scaled when packet loss is detected
 		* ecnCeEventRateScale sets how the congestion window should be scaled when ECN CE is detected
 		*  this applies only to classic ECN
 		* isAdaptiveTargetRateScale compensates for deviations from target bitrates
-		* hysteresis sets how much the target rate should change for the getTargetBitrate() function to 
-		*  return a changed value. hysteresis = 0.1 sets a +10%/-5% hysteresis. 
+		* hysteresis sets how much the target rate should change for the getTargetBitrate() function to
+		*  return a changed value. hysteresis = 0.1 sets a +10%/-5% hysteresis.
 		*  This can benefit video encoders that become confused by too frequent rate updates
 		*/
-		void registerNewStream(RtpQueueIface *rtpQueue,
+		void registerNewStream(RtpQueueIface* rtpQueue,
 			uint32_t ssrc,
 			float priority,     // priority in range ]0.0 .. 1.0], 1.0 is highest
 			float minBitrate,   // Min target bitrate
@@ -224,7 +224,7 @@ extern "C" {
 			float lossEventRateScale = kLossEventRateScale,
 			float ecnCeEventRateScale = kEcnCeEventRateScale,
 			bool isAdaptiveTargetRateScale = true,
-		    float hysteresis = 0.0);
+			float hysteresis = 0.0);
 
 		/*
 		 * Updates the min and max bitrates for an existing stream
@@ -236,7 +236,7 @@ extern "C" {
 		/*
 		 * Access the configured RtpQueue of an existing stream
 		 */
-		RtpQueueIface * getStreamQueue(uint32_t ssrc);
+		RtpQueueIface* getStreamQueue(uint32_t ssrc);
 
 		/*
 		* Call this function for each new video frame
@@ -255,7 +255,7 @@ extern "C" {
 		*    cause an immediate call to isOkToTransmit
 		* -1.0 : No RTP packet available to transmit or send window is not large enough
 		*/
-		float isOkToTransmit(uint32_t time_ntp, uint32_t &ssrc);
+		float isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc);
 
 		/*
 		* Add packet to list of transmitted packets
@@ -328,45 +328,45 @@ extern "C" {
 		/*
 		* Get verbose log information
 		*/
-		void getLog(float time, char *s, uint32_t ssrc, bool clear);
+		void getLog(float time, char* s, uint32_t ssrc, bool clear);
 
-        /*
+		/*
 		* Get verbose log header
 		*/
-		void getLogHeader(char *s);
+		void getLogHeader(char* s);
 
 		/*
 		* Get verbose log information
 		*/
-		void getShortLog(float time, char *s);
+		void getShortLog(float time, char* s);
 
 		/*
 		* Get verbose log information
 		*/
-		void getVeryShortLog(float time, char *s);
+		void getVeryShortLog(float time, char* s);
 
 		/*
 		* Set file pointer for detailed per-ACK log
 		*/
-		void setDetailedLogFp(FILE *fp) {
+		void setDetailedLogFp(FILE* fp) {
 			fp_log = fp;
 		}
 
-		void setTimeString(char *s) {
+		void setTimeString(char* s) {
 			strcpy(timeString, s);
 		}
 
 		/*
 		* extra data to be appended to detailed log
 		*/
-		void setDetailedLogExtraData(char *s) {
+		void setDetailedLogExtraData(char* s) {
 			strcpy(detailedLogExtraData, s);
 		}
 
 		/*
 		* Get the list of log items
 		*/
-		const char *getDetailedLogItemList() {
+		const char* getDetailedLogItemList() {
 			return "\"Time [s]\",\"Estimated queue delay [s]\",\"RTT [s]\",\"Congestion window [byte]\",\"Bytes in flight [byte]\",\"Fast increase mode\",\"Total transmit bitrate [bps]\",\"Stream ID\",\"RTP SN\",\"Bytes newly ACKed\",\"Bytes newly ACKed and CE marked\",\"Media coder bitrate [bps]\",\"Transmitted bitrate [bps]\",\"ACKed bitrate [bps]\",\"Lost bitrate [bps]\",\"CE Marked bitrate [bps]\",\"Marker bit set\"";
 		}
 
@@ -414,9 +414,9 @@ extern "C" {
 		}
 
 		/*
-		* The fastIncreaseFactor replaces rampUpSpeed and rampUpScale when 
+		* The fastIncreaseFactor replaces rampUpSpeed and rampUpScale when
 		*  isNewCc = true
-		* 1.0 is typicall OK but can be set lower if a more cautios ramp up 
+		* 1.0 is typicall OK but can be set lower if a more cautios ramp up
 		*  is desired.
 		*/
 		void setFastIncreaseFactor(float a) {
@@ -431,7 +431,7 @@ extern "C" {
 		}
 
 		/*
-		* Autotune min CWND, if true, the min CWND will be autotuned according to the 
+		* Autotune min CWND, if true, the min CWND will be autotuned according to the
 		*  equation minCwnd = sum(min bitrates)/8*sRttLow
 		* Use this with care because it can potentially starve out parallel traffic
 		*/
@@ -465,10 +465,10 @@ extern "C" {
 		 * Note, a large hysteresis can cause a deadlock in the rate uopdate,
 		 *  hysteresis = 0.1 or less appears to work however
 		 */
-    class Stream {
+		class Stream {
 		public:
-			Stream(ScreamV1Tx *parent,
-				RtpQueueIface *rtpQueue,
+			Stream(ScreamV1Tx* parent,
+				RtpQueueIface* rtpQueue,
 				uint32_t ssrc,
 				float priority,
 				float minBitrate,
@@ -482,7 +482,7 @@ extern "C" {
 				float lossEventRateScale,
 				float ecnCeEventRateScale,
 				bool isAdaptiveTargetRateScale,
-			  float hysteresis);
+				float hysteresis);
 
 			float getMaxRate();
 
@@ -509,8 +509,8 @@ extern "C" {
 			}
 
 
-			ScreamV1Tx *parent;
-			RtpQueueIface *rtpQueue;      // RTP Packet queue
+			ScreamV1Tx* parent;
+			RtpQueueIface* rtpQueue;      // RTP Packet queue
 			uint32_t ssrc;            // SSRC of stream
 			float rampUpSpeed;
 			float rampUpScale;
@@ -532,16 +532,16 @@ extern "C" {
 			int bytesAcked;         // Number of ACKed bytes
 			int bytesLost;          // Number of lost bytes
 			uint64_t packetLost;    // Number of lost packets
-            uint64_t packetsCe;     // Number of Ce marked packets
+			uint64_t packetsCe;     // Number of Ce marked packets
 			int bytesCe;            // Number of Ce marked bytes
 			float rateTransmitted;  // Transmitted rate
 			float rateAcked;        // ACKed rate
 			float rateLost;         // Lost packets (bit)rate
 			float rateCe;           // Ce marked packets (bit)rate
-			float rateTransmittedLog;  
-			float rateAckedLog;        
-			float rateLostLog;         
-			float rateCeLog;           
+			float rateTransmittedLog;
+			float rateAckedLog;
+			float rateLostLog;
+			float rateCeLog;
 			uint16_t hiSeqAck;      // Highest sequence number ACKed
 			uint16_t hiSeqTx;       // Highest sequence number transmitted
 			float minBitrate;       // Min bitrate
@@ -561,7 +561,7 @@ extern "C" {
 			uint32_t lastTransmitT_ntp;
 
 			int bytesRtp;           // Number of RTP bytes from media coder
-            uint64_t packetsRtp;
+			uint64_t packetsRtp;
 			float rateRtp;          // Media bitrate
 			float rateRtpLog;
 			float rateRtpHist[kRateUpDateSize];
@@ -588,7 +588,7 @@ extern "C" {
 			Transmitted txPackets[kMaxTxPackets];
 			int txPacketsPtr;
 			bool lossEpoch;
-            uint64_t cleared;
+			uint64_t cleared;
 
 			int frameSize;
 			int frameSizeAcc;
@@ -615,14 +615,14 @@ extern "C" {
 		* Return true if CE
 		*/
 		bool markAcked(uint32_t time_ntp,
-			struct Transmitted *txPackets,
+			struct Transmitted* txPackets,
 			uint16_t seqNr,
 			uint32_t timestamp,
-			Stream *stream,
+			Stream* stream,
 			uint8_t ceBits,
-			int &encCeMarkedBytes,
+			int& encCeMarkedBytes,
 			bool isLast,
-			bool &isMark);
+			bool& isMark);
 
 		/*
 		* Get total target bitrate for all streams
@@ -637,7 +637,7 @@ extern "C" {
 		/*
 		* Detect lost RTP packets
 		*/
-		void detectLoss(uint32_t time_ntp, struct Transmitted *txPackets, uint16_t highestSeqNr, Stream *stream);
+		void detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, uint16_t highestSeqNr, Stream* stream);
 
 		/*
 		* Call this function at regular intervals to determine active streams
@@ -675,7 +675,7 @@ extern "C" {
 		/*
 		* Get stream with corresponding SSRC
 		*/
-		Stream* getStream(uint32_t ssrc, int &streamId);
+		Stream* getStream(uint32_t ssrc, int& streamId);
 
 		/*
 		* Adjust stream bitrates to reflect priorities
@@ -876,7 +876,7 @@ extern "C" {
 		/*
 		* Variables for multiple steams handling
 		*/
-		Stream *streams[kMaxStreams];
+		Stream* streams[kMaxStreams];
 		int nStreams;
 		bool isNewFrame; // True if new frame received
 
@@ -888,14 +888,14 @@ extern "C" {
 		/*
 		*
 		*/
-		FILE *fp_log;
+		FILE* fp_log;
 		bool completeLogItem;
 		char timeString[100];
 		bool isUseExtraDetailedLog;
 		int bytesNewlyAckedLog;
 		int ecnCeMarkedBytesLog;
 	};
-	class ScreamV2Tx : public ScreamTx{
+	class ScreamV2Tx : public ScreamTx {
 	public:
 		/*
 		* Constructor
@@ -910,7 +910,7 @@ extern "C" {
 		* maxAdaptivePacingRateScale > 1.0 enables adaptive scaling of the pacing rate to transmit large frames faster.
 		*  This feature is mostly relevant with L4S and has the potential to reduce unecessary queue build-up in the
 		*  RTP queue, but can also potentially increase network queue build-up
-		* multiplicativeIncreaseScaleFactor, indicates how fast CWND can increase when link capacity 
+		* multiplicativeIncreaseScaleFactor, indicates how fast CWND can increase when link capacity
 		*  increases. E.g 0.05 increases up tp 5% of the CWND per RTT.
 		* isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
 		* openWindow = true removes the congestion window limitation, this feature may be useful in combination with L4S
@@ -1239,10 +1239,6 @@ extern "C" {
 			float rateAcked;        // ACKed rate
 			float rateLost;         // Lost packets (bit)rate
 			float rateCe;           // Ce marked packets (bit)rate
-			float rateTransmittedLog;
-			float rateAckedLog;
-			float rateLostLog;
-			float rateCeLog;
 			uint16_t hiSeqAck;      // Highest sequence number ACKed
 			uint16_t hiSeqTx;       // Highest sequence number transmitted
 			float minBitrate;       // Min bitrate
@@ -1259,12 +1255,8 @@ extern "C" {
 			int bytesRtp;           // Number of RTP bytes from media coder
 			uint64_t packetsRtp;
 			float rateRtp;          // Media bitrate
-			float rateRtpLog;
+			float rateRtpAvg;
 			float rateRtpHist[kRateUpDateSize];
-			float rateAckedHist[kRateUpDateSize];
-			float rateLostHist[kRateUpDateSize];
-			float rateCeHist[kRateUpDateSize];
-			float rateTransmittedHist[kRateUpDateSize];
 			int rateUpdateHistPtr;
 			float targetRateScale;
 			uint32_t numberOfUpdateRate;
@@ -1286,12 +1278,9 @@ extern "C" {
 			int frameSize;
 			int frameSizeAcc;
 			float frameSizeAvg;
-			float adaptivePacingRateScale;
 			float framePeriod;
-			float relFrameSizeHist[kRelFrameSizeHistBins];
-			float relFrameSizeHigh;
-			uint32_t nFrames;
 
+			float adaptivePacingRateScale;
 		};
 
 		/*
@@ -1337,13 +1326,6 @@ extern "C" {
 		* Call this function at regular intervals to determine active streams
 		*/
 		void determineActiveStreams(uint32_t time_ntp);
-
-		/*
-		* Compute 1st order prediction coefficient of queue delay multiplied by the queue delay fraction
-		* A value [0.0..1.0] indicates if queue delay is increasing
-		* This gives a rough estimate of how the queuing delay delay evolves
-		*/
-		void computeQueueDelayTrend();
 
 		/*
 		* Estimate one way delay [jiffy] and updated base delay
@@ -1398,11 +1380,6 @@ extern "C" {
 		float getQueueDelayFraction();
 
 		/*
-		* Get the queuing delay trend
-		*/
-		float getQueueDelayTrend();
-
-		/*
 		* Variables for network congestion control
 		*/
 
@@ -1432,9 +1409,6 @@ extern "C" {
 
 		float queueDelay;
 		float queueDelayFractionAvg;
-		float queueDelayFractionHist[kQueueDelayFractionHistSize];
-		int queueDelayFractionHistPtr;
-		float queueDelayTrend;
 		float queueDelayTarget;
 		float queueDelayNormHist[kQueueDelayNormHistSize];
 		int queueDelayNormHistPtr;
@@ -1443,6 +1417,7 @@ extern "C" {
 		float queueDelaySbdSkew;
 		float queueDelaySbdMeanSh;
 		float queueDelayMax;
+		float queueDelayAvg;
 
 		/*
 		* CWND management
@@ -1457,16 +1432,12 @@ extern "C" {
 		int bytesInFlight;
 		int bytesInFlightLog;
 		float rateTransmitted;
-		float rateAcked;
-		float rateRtp;
-		float rateTransmittedLog;
-		float rateAckedLog;
-		float rateRtpLog;
-		float queueDelayTrendMem;
+		float rateRtpAvg;
 		float maxRate;
 		uint32_t lastCwndUpdateT_ntp;
 		bool isL4s;
 		float l4sAlpha;
+		float virtualL4sAlpha;
 		int bytesMarkedThisRtt;
 		int bytesDeliveredThisRtt;
 		int packetsMarkedThisRtt;
@@ -1498,6 +1469,7 @@ extern "C" {
 		* ECN-CE
 		*/
 		bool ecnCeEvent;
+		bool virtualCeEvent;
 		bool isCeThisFeedback;
 		bool isL4sActive;
 		uint32_t lastCeEventT_ntp;
@@ -1521,7 +1493,7 @@ extern "C" {
 		uint32_t lastSRttUpdateT_ntp;
 		uint32_t lastBaseOwdAddT_ntp;
 		uint32_t baseOwdResetT_ntp;
-		uint32_t lastAddToQueueDelayFractionHistT_ntp;
+		uint32_t lastSlowUpdateT_ntp;
 		uint32_t lastMssUpdateT_ntp;
 		uint32_t lastCongestionDetectedT_ntp;
 		uint32_t lastLossEventT_ntp;
@@ -1531,6 +1503,7 @@ extern "C" {
 		uint32_t lastRttT_ntp;
 		uint32_t lastBaseDelayRefreshT_ntp;
 		uint32_t initTime_ntp;
+		uint32_t lastQueueDelayAvgUpdateT_ntp;
 		float queueDelayMin;
 		float queueDelayMinAvg;
 		bool enableRateUpdate;

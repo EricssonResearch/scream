@@ -1,13 +1,6 @@
 #include "RtpQueue.h"
 #include "ScreamTx.h"
 
-
-static const float kRelFrameSizeHistDecay = 1.0f / 1024;
-static const float kRelFrameSizeHighPercentile = 0.50f;
-
-// For computation of adaptivePacingRate
-static const float kFrameSizeAvgAlpha = 1.0f / 32;
-
 static const uint32_t kMinRtpQueueDiscardInterval_ntp = 16384; // 0.25s in NTP doain
 
 ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
@@ -43,11 +36,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	rateAcked = 0.0f;
 	rateLost = 0.0f;
 	rateCe = 0.0f;
-	rateTransmittedLog = 0.0f;
-	rateAckedLog = 0.0f;
-	rateLostLog = 0.0f;
-	rateCeLog = 0.0f;
-	rateRtpLog = 0.0f;
+	rateRtpAvg = 0.0f;
 	lastRateUpdateT_ntp = 0;
 	lastBitrateAdjustT_ntp = 0;
 	lastTargetBitrateIUpdateT_ntp = 0;
@@ -59,14 +48,10 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	numberOfUpdateRate = 0;
 	cleared = 0;
 	packetLost = 0;
-    packetsCe  = 0;
+	packetsCe = 0;
 	packetsCe = 0;
 	for (int n = 0; n < kRateUpDateSize; n++) {
 		rateRtpHist[n] = 0.0f;
-		rateAckedHist[n] = 0.0f;
-		rateLostHist[n] = 0.0f;
-		rateCeHist[n] = 0.0f;
-		rateTransmittedHist[n] = 0.0f;
 	}
 	rateUpdateHistPtr = 0;
 	targetRateScale = 1.0;
@@ -89,13 +74,6 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	frameSizeAvg = 0.0f;
 	adaptivePacingRateScale = 1.0f;
 	framePeriod = 0.02f;
-
-	relFrameSizeHist[0] = 1.0f;
-	for (int n = 1; n < kRelFrameSizeHistBins; n++) {
-		relFrameSizeHist[n] = 0.0f;
-	}
-	relFrameSizeHigh = 1.0f;
-	nFrames = 0;
 }
 
 /*
@@ -105,44 +83,28 @@ void ScreamV2Tx::Stream::updateRate(uint32_t time_ntp) {
 	if (lastRateUpdateT_ntp != 0 && parent->enableRateUpdate) {
 		numberOfUpdateRate++;
 		float tDelta = (time_ntp - lastRateUpdateT_ntp) * ntp2SecScaleFactor;
-		rateTransmittedHist[rateUpdateHistPtr] = bytesTransmitted * 8.0f / tDelta;
-		rateAckedHist[rateUpdateHistPtr] = bytesAcked * 8.0f / tDelta;
-		rateLostHist[rateUpdateHistPtr] = bytesLost * 8.0f / tDelta;
-		rateCeHist[rateUpdateHistPtr] = bytesCe * 8.0f / tDelta;
+		rateTransmitted = bytesTransmitted * 8.0f / tDelta;
+		rateAcked = bytesAcked * 8.0f / tDelta;
+		rateLost = bytesLost * 8.0f / tDelta;
+		rateCe = bytesCe * 8.0f / tDelta;
 		rateRtpHist[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
 
-		rateTransmittedLog = rateTransmittedHist[rateUpdateHistPtr];
-		rateAckedLog = rateAckedHist[rateUpdateHistPtr];
-		rateLostLog = rateLostHist[rateUpdateHistPtr];
-		rateCeLog = rateCeHist[rateUpdateHistPtr];
-		rateRtpLog = rateRtpHist[rateUpdateHistPtr];
+		rateRtp = rateRtpHist[rateUpdateHistPtr];
 
 		rateUpdateHistPtr = (rateUpdateHistPtr + 1) % kRateUpDateSize;
 
-		rateTransmitted = 0.0f;
-		rateAcked = 0.0f;
-		rateLost = 0.0f;
-		rateCe = 0.0f;
-		rateRtp = 0.0f;
+		rateRtpAvg = 0.0f;
 		for (int n = 0; n < kRateUpDateSize; n++) {
-			rateTransmitted += rateTransmittedHist[n];
-			rateAcked += rateAckedHist[n];
-			rateLost += rateLostHist[n];
-			rateCe += rateCeHist[n];
-			rateRtp += rateRtpHist[n];
+			rateRtpAvg += rateRtpHist[n];
 		}
-		rateTransmitted /= kRateUpDateSize;
-		rateAcked /= kRateUpDateSize;
-		rateLost /= kRateUpDateSize;
-		rateCe /= kRateUpDateSize;
-		rateRtp /= kRateUpDateSize;
-		if (rateRtp > 0 && isAdaptiveTargetRateScale && numberOfUpdateRate > kRateUpDateSize) {
+		rateRtpAvg /= kRateUpDateSize;
+		if (rateRtpAvg > 0 && isAdaptiveTargetRateScale && numberOfUpdateRate > kRateUpDateSize) {
 			/*
 			* Video coders are strange animals.. In certain cases the average bitrate is
 			* consistently lower or higher than the target bitare. This additonal scaling compensates
 			* for this anomaly.
 			*/
-			const float diff = targetBitrate * targetRateScale / rateRtp;
+			const float diff = targetBitrate * targetRateScale / rateRtpAvg;
 			float alpha = 0.02f;
 			targetRateScale *= (1.0f - alpha);
 			targetRateScale += alpha * diff;
@@ -201,39 +163,14 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 		}
 		lastFrameT_ntp = time_ntp;
 
-		if (frameSizeAvg == 0.0f)
-			frameSizeAvg = frameSizeAcc;
-		else
-			frameSizeAvg = frameSizeAcc * kFrameSizeAvgAlpha + frameSizeAvg * (1.0f - kFrameSizeAvgAlpha);
 
+
+		frameSizeAvg = targetBitrate * framePeriod / 8.0f;
 
 		frameSize = std::max(rtpQueue->bytesInQueue(), frameSizeAcc);
-		/*
-		 * Calculate a histogram over how much the frame sizes exceeds the average. This helps to avoid that
-		 *  the RTP queue builds up when the video encoder generates frames with very varying sizes.
-		 */
-		if (frameSizeAcc > frameSizeAvg * 0.9f && nFrames >= 100) {
-			int ix = std::max(0, std::min(kRelFrameSizeHistBins - 1, (int)((frameSizeAcc - frameSizeAvg) / frameSizeAvg * kRelFrameSizeHistBins)));
-			relFrameSizeHist[ix]++;
-			for (int n = 0; n < kRelFrameSizeHistBins; n++) {
-				relFrameSizeHist[n] *= (1.0f - kRelFrameSizeHistDecay);
-			}
-			float sum = 0.0f;
-			for (int n = 0; n < kRelFrameSizeHistBins; n++) {
-				sum += relFrameSizeHist[n];
-			}
-			float relFrameSizeHighMark = sum * kRelFrameSizeHighPercentile;
-			ix = 1;
-			sum = relFrameSizeHist[0];
-			while (sum < relFrameSizeHighMark && ix < kRelFrameSizeHistBins) {
-				sum += relFrameSizeHist[ix];ix++;
-			}
-			ix--;
-			relFrameSizeHigh = 1.0f + ((float)ix) / kRelFrameSizeHistBins;
-		}
 
 		frameSizeAcc = 0;
-		nFrames++;
+
 
 		if (frameSizeAvg > 500.0f) {
 			adaptivePacingRateScale = std::min(parent->maxAdaptivePacingRateScale, std::max(1.0f, frameSize / frameSizeAvg));
@@ -264,14 +201,7 @@ float ScreamV2Tx::Stream::getTargetBitrate() {
 }
 
 /*
-* Update target bitrate, most of the time spent on developing SCReAM has been here.
-* Video coders can behave very odd. The actual bitrate naturally varies around the target
-*  bitrate by some +/-20% or even more, I frames can be real large all this is manageable
-*  to at least some degree.
-* What is more problematic is a systematic error where the video codec rate is consistently higher
-*  or lower than the target rate.
-* Various fixes in the code below (as well as the isAdaptiveTargetRateScale) seek to make
-*  rate adaptive streaming with SCReAM work despite these anomalies.
+* Update target bitrate
 */
 void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 
@@ -315,8 +245,7 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 
 
 	/*
-	* Rate is computed based CWND and RTT with some extra bells and whistles for the
-	* case that L4S is either not enabled or that the network does not mark packets
+	* Rate is computed based CWND and RTT
 	*/
 
 	/*
@@ -337,43 +266,19 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		cwndShare *= priorityShare;
 	}
 
+	float tmp = 1.0f;
 
 	/*
-	 * Compensate for the case where the video coder produce wildly varying frame sizes
-	 * This can make SCReAM starve when there are competing scalable flows over the same
-	 *  bottleneck, but as the key goal is to ensure low latency there is not much of a choice.
+	 * Scale down rate slighty when the congestion window is very small compared to mss
+	 * Note that at very low bitrates it is necessary to reduce the MTU also
 	 */
-	float tmp = 1.0f / relFrameSizeHigh;
-
-	float halfPacketPacingHeadroom = 1.0f + (parent->packetPacingHeadroom - 1) / 2;
-	if (parent->isEnablePacketPacing) {
-		/*
-		 * Scale down with the packet pacing headroom, this is needed because we scale down the congestion backoff
-		 * in proportion with packet pacing overhead
-		 */
-		tmp /= halfPacketPacingHeadroom;
-	}
-	else {
-		/*
-		 * A reasonable down scaling to ensure that the RTP queue
-		 *  does not build up when esp. when virtual queue is used in network
-		 */
-		tmp /= 1.25f;
-	}
+	tmp *= 1.0f - std::min(0.8f, std::max(0.0f, parent->cwndRatio - 0.1f));
 
 	float sRtt = parent->sRtt;
 
-	if (!parent->isL4sActive) {
-		/*
-		* Scale down additionally if L4S does not work, to avoid that the 
-		*  RTP queue blows up
-		*/
-		tmp /= halfPacketPacingHeadroom;
-	}
-
-	 /*
-	 * Compute target bitrate.
-	 */
+	/*
+	* Compute target bitrate.
+	*/
 	tmp *= 8 * cwndShare / std::max(0.001f, std::min(0.2f, sRtt));
 	targetBitrate = tmp;
 

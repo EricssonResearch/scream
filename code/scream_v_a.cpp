@@ -20,7 +20,7 @@ const char* log_tag = "";
 #endif
 
 const float Tmax = 30;
-const bool isChRate = false;
+const bool isChRate = true;
 const bool printLog = true;
 const bool ecnCapable = true;
 const bool isL4s = true && ecnCapable;
@@ -30,7 +30,7 @@ const bool isNewCc = true;
 const bool enablePacing = true;
 
 int swprio = -1;
-#define TRACEFILE "../traces/trace_key.txt"
+//#define TRACEFILE "../traces/trace_key.txt"
 #define TRACEFILE "../traces/trace_no_key.txt"
 #define TRACEFILE "../traces/trace_flat.txt"
 /*
@@ -56,14 +56,14 @@ int main(int argc, char* argv[])
     screamTx->setPostCongestionDelay(4.0);
     screamTx->enablePacketPacing(enablePacing);
     //screamTx->autoTuneMinCwnd(true);
-    //screamTx->setMaxTotalBitrate(20e6);
+    //screamTx->setMaxTotalBitrate(40e6);
     screamTx->setLogTag((char*)log_tag);
 
     ScreamRx* screamRx = new ScreamRx(0, 1, 1);
     RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
     VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
     NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-    NetQueue* netQueueRate = new NetQueue(0.0f,100e6, 0.0f, true && isL4s);
+    NetQueue* netQueueRate = new NetQueue(0.0f,20e6, 0.0f, true && isL4s);
     videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
     videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
     videoEnc[2] = new VideoEnc(rtpQueue[2], FR / FR_DIV, (char*)TRACEFILE, 100);
@@ -219,10 +219,10 @@ int main(int argc, char* argv[])
 
         if (isChRate) {
             if ((time > 10.0 && time < 20) && isChRate) {
-                netQueueRate->rate = 25000e3;
+                netQueueRate->rate = 10000e3;
             }
             else {
-                netQueueRate->rate = 100000e3;
+                netQueueRate->rate = 20000e3;
             }
         }
 
@@ -412,11 +412,11 @@ int main(int argc, char* argv[])
         }
 
         if (isChRate) {
-            if ((time > 20.0 && time < 30) && isChRate) {
+            if ((time > 10.0 && time < 20) && isChRate) {
                 netQueueRate->rate = 10000e3;
             }
             else {
-                netQueueRate->rate = 40000e3;
+                netQueueRate->rate = 20000e3;
             }
         }
 
