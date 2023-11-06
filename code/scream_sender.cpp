@@ -751,7 +751,7 @@ int main(int argc, char* argv[]) {
 	*/
 	if (argc <= 1) {
 #ifdef V2
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-11-03" << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-11-03 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;
