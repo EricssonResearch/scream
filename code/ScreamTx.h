@@ -33,7 +33,7 @@ extern "C" {
 	// ==== Default parameters (if tuning necessary) ====
 	// Connection related default parameters
 	// CWND scale factor upon loss event
-	static const float kLossBeta = 0.8f;
+	static const float kLossBeta = 0.7f;
 	// CWND scale factor upon ECN-CE event
 	static const float kEcnCeBeta = 0.9f;
 	// Min and max queue delay target
@@ -895,6 +895,7 @@ extern "C" {
 		int bytesNewlyAckedLog;
 		int ecnCeMarkedBytesLog;
 	};
+	
 	class ScreamV2Tx : public ScreamTx {
 	public:
 		/*

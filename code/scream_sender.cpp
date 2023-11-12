@@ -31,7 +31,7 @@ using namespace std;
 #define BUFSIZE 2048
 
 float minPaceInterval = 0.001f;
-int minPaceIntervalUs = 900;
+int minPaceIntervalUs = 1000;
 
 #define ECN_CAPABLE
 /*
@@ -72,7 +72,7 @@ int rateIncrease = 10000;
 float rateScale = 0.5f;
 float dscale = 10.0f;
 float packetPacingHeadroom = 1.25f;
-float scaleFactor = 0.9f;
+float scaleFactor = 0.7f;
 ScreamV1Tx *screamTx = 0;
 float bytesInFlightHeadroom = 1.25f;
 float txQueueSizeFactor = 0.1f;
@@ -220,73 +220,64 @@ void *transmitRtpThread(void *arg) {
     bool isMark;
 	char buf[2000];
 	uint32_t time_ntp = getTimeInNtp();
-	int sleepTime_us = 10;
 	float retVal = 0.0f;
-	int sizeOfQueue;
 	struct timeval start, end;
 	useconds_t diff = 0;
-	float paceIntervalFixedRate = 0.0f;
-	if (fixedRate > 0 && !disablePacing) {
-		paceIntervalFixedRate = (mtu + 40)*8.0f / (fixedRate * 1000)*0.9;
-	}
+
+        accumulatedPaceTime = 0.0;
+        int nTx = 0;
+
 	for (;;) {
 		if (stopThread) {
 			return NULL;
 		}
+		retVal = -1.0f;	
 
-		sleepTime_us = 1;
-		retVal = 0.0f;
+		while (retVal == -1.0f) {
+			pthread_mutex_lock(&lock_scream);
+			time_ntp = getTimeInNtp();
+			retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
+			pthread_mutex_unlock(&lock_scream);
+			if (retVal == -1.0f) {
+				usleep(10);
+				nTx = 0;
+			} 
+			
+		} 
+		if (accumulatedPaceTime > minPaceIntervalUs*1e-6) {	
+			diff = 100;
+			if (accumulatedPaceTime > 1.5*minPaceIntervalUs*1e-6)
+				usleep(std::max(10,(int)(accumulatedPaceTime*1e6-diff)));
+			else	
+				usleep(std::max(10u,minPaceIntervalUs-diff));
+			gettimeofday(&end, 0);
+			diff = end.tv_usec - start.tv_usec;
+			accumulatedPaceTime = 0.0f;
+			nTx = 0;
+		}
+	
+
+		time_ntp = getTimeInNtp();
+		void *buf;
+                uint32_t ssrc_unused;
+
+		pthread_mutex_lock(&lock_rtp_queue);
+		rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
+		sendPacket(buf, size);
+		nTx++;
+		pthread_mutex_unlock(&lock_rtp_queue);
+
+                packet_free(buf, SSRC);
+                buf = NULL;
+
 		pthread_mutex_lock(&lock_scream);
 		time_ntp = getTimeInNtp();
-		retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
-		pthread_mutex_unlock(&lock_scream);
+		retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, isMark);
+		pthread_mutex_unlock(&lock_scream);	
 
-		if (retVal != -1.0f) {
-			pthread_mutex_lock(&lock_rtp_queue);
-			sizeOfQueue = rtpQueue->sizeOfQueue();
-			pthread_mutex_unlock(&lock_rtp_queue);
-			do {
-				gettimeofday(&start, 0);
-				time_ntp = getTimeInNtp();
-
-				retVal = screamTx->isOkToTransmit(time_ntp, SSRC);
-				if (fixedRate > 0 && retVal >= 0.0f && sizeOfQueue > 0)
-					retVal = paceIntervalFixedRate;
-				if (disablePacing && sizeOfQueue > 0 && retVal > 0.0f)
-					retVal = 0.0f;
-				if (retVal > 0.0f)
-					accumulatedPaceTime += retVal;
-				if (retVal != -1.0) {
-                    void *buf;
-                    uint32_t ssrc_unused;
-					pthread_mutex_lock(&lock_rtp_queue);
-					rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
-					sendPacket(buf, size);
-					pthread_mutex_unlock(&lock_rtp_queue);
-                    packet_free(buf, SSRC);
-                    buf = NULL;
-					pthread_mutex_lock(&lock_scream);
-					time_ntp = getTimeInNtp();
-					retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, isMark);
-					pthread_mutex_unlock(&lock_scream);
-				}
-
-				pthread_mutex_lock(&lock_rtp_queue);
-				sizeOfQueue = rtpQueue->sizeOfQueue();
-				pthread_mutex_unlock(&lock_rtp_queue);
-				gettimeofday(&end, 0);
-				diff = end.tv_usec - start.tv_usec;
-				accumulatedPaceTime = std::max(0.0f, accumulatedPaceTime - diff * 1e-6f);
-			} while (accumulatedPaceTime <= minPaceInterval &&
-				retVal != -1.0f &&
-				sizeOfQueue > 0);
-			if (accumulatedPaceTime > 0) {
-				sleepTime_us = std::min((int)(accumulatedPaceTime*1e6f), minPaceIntervalUs);
-				accumulatedPaceTime = 0.0f;
-			}
+		if (!disablePacing && retVal > 0.0){
+			accumulatedPaceTime += retVal;
 		}
-		usleep(sleepTime_us);
-		sleepTime_us = 0;
 	}
 	return NULL;
 }
@@ -751,7 +742,7 @@ int main(int argc, char* argv[]) {
 	*/
 	if (argc <= 1) {
 #ifdef V2
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-11-03 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-11-12 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -time value              run for time seconds (default infinite)" << endl;
@@ -792,18 +783,17 @@ int main(int argc, char* argv[]) {
 		cerr << "     -itemlist                add item list in beginning of log file" << endl;
 		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
 		cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
-		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
+		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 1ms)" << endl;
 		cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
 #else
-	cerr << "SCReAM V1 BW test tool, sender. Ericsson AB. Version 2023-02-10" << endl;
+	cerr << "SCReAM V1 BW test tool, sender. Ericsson AB. Version 2023-02-12" << endl;
 	cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 	cerr << "     -newcc                   use new congestion control algorithm (dec 2022) " << endl;
 	cerr << "     -if name                 bind to specific interface" << endl;
 	cerr << "     -time value              run for time seconds (default infinite)" << endl;
 	cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
 	cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
-	cerr << "     -mulincrease val         multiplicative increase factor for v2 (default 0.05)" << endl;
 	cerr << "     -fincrease val           fast increase factor for newcc (default 1.0)" << endl;
 	cerr << "     -nopace                  disable packet pacing" << endl;
 	cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
@@ -845,7 +835,7 @@ int main(int argc, char* argv[]) {
 	cerr << "     -itemlist                add item list in beginning of log file" << endl;
 	cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
 	cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
-	cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 2ms)" << endl;
+	cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 1ms)" << endl;
 	cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
 	cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
 #endif
@@ -888,7 +878,7 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		if (strstr(argv[ix], "-adativepaceheadroom")) {
+		if (strstr(argv[ix], "-adaptivepaceheadroom")) {
 			adaptivePaceHeadroom = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
@@ -1023,8 +1013,8 @@ int main(int argc, char* argv[]) {
 			minPaceInterval = 0.001*(atof(argv[ix + 1]));
 			minPaceIntervalUs = (int)(minPaceInterval*1e6f);
 			ix += 2;
-			if (minPaceInterval < 0.002f || minPaceInterval > 0.020f) {
-				cerr << "microburstinterval must be in range 2..20ms" << endl;
+			if (minPaceInterval < 0.0002f || minPaceInterval > 0.020f) {
+				cerr << "microburstinterval must be in range 0.2..20ms" << endl;
 				exit(0);
 			}
 			continue;

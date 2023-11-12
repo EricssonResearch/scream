@@ -1150,7 +1150,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	*/
 	paceInterval = kMinPaceInterval;
 	adaptivePacingRateScale = 1.0;
-	if ((queueDelayFractionAvg > 0.02f || isL4sActive || maxTotalBitrate > 0) && isEnablePacketPacing) {
+	if (isEnablePacketPacing) {
 		/*
 		* Compute adaptivePacingRateScale across all streams, the goal is to compute
 		*  a best guess of the appropriate adaptivePacingRateScale given the individual streams
