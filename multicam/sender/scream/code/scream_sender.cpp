@@ -577,6 +577,75 @@ void parseRtp(unsigned char *buf, uint16_t* seqNr, uint32_t* timeStamp, unsigned
     *timeStamp = ntohl(rawTs);
 }
 
+
+//#define USE_NEW_PACING_ALGORITHM
+#ifdef USE_NEW_PACING_ALGORITHM
+/*
+ * Transmit a packet if possible.
+ * If not allowed due to packet pacing restrictions,
+ * then sleep
+ */
+void *txRtpThread(void *arg) {
+    int size;
+    uint16_t seqNr;
+    void *buf;
+    uint32_t time_ntp = getTimeInNtp();
+    float retVal = 0.0f;
+    uint32_t ssrc;
+    useconds_t diff = 100;
+
+    accumulatedPaceTime = 0.0;
+    int nTx = 0;
+
+    for (;;) {
+        if (stopThread) {
+            return NULL;
+        }
+        retVal = -1.0f;
+    		while (retVal == -1.0f) {
+    			pthread_mutex_lock(&lock_scream);
+    			time_ntp = getTimeInNtp();
+    			retVal = screamTx->isOkToTransmit(time_ntp, ssrc);
+    			pthread_mutex_unlock(&lock_scream);
+    			if (retVal == -1.0f) {
+    				usleep(10);
+    				nTx = 0;
+    			}
+    		}
+        if (accumulatedPaceTime > minPaceInterval) {
+    			diff = 100;
+    			if (accumulatedPaceTime > 1.5*minPaceInterval)
+    				usleep(std::max(10,(int)(accumulatedPaceTime*1e6-diff)));
+    			else
+    				usleep(std::max(10,(int)(minPaceInterval*1e6f-diff)));
+    			accumulatedPaceTime = 0.0f;
+    			nTx = 0;
+    		}
+
+        time_ntp = getTimeInNtp();
+        uint32_t ssrc_unused;
+        bool isMark;
+
+        RtpQueue *rtpQueue = (RtpQueue*)screamTx->getStreamQueue(ssrc);
+
+        pthread_mutex_lock(&lock_rtp_queue);
+    		rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
+    		sendPacket((char*)buf, size);
+    		nTx++;
+    		pthread_mutex_unlock(&lock_rtp_queue);
+
+        pthread_mutex_lock(&lock_scream);
+    		time_ntp = getTimeInNtp();
+    		retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark);
+    		pthread_mutex_unlock(&lock_scream);
+
+    		if (retVal > 0.0){
+    			accumulatedPaceTime += retVal;
+    		}
+    }
+    return NULL;
+}
+#else
 /*
  * Transmit a packet if possible.
  * If not allowed due to packet pacing restrictions,
@@ -586,7 +655,7 @@ void *txRtpThread(void *arg) {
     int size;
     uint16_t seqNr;
     //char buf[2000];
-    char *buf;
+    void *buf;
     uint32_t time_ntp = getTimeInNtp();
     int sleepTime_us = 10;
     float retVal = 0.0f;
@@ -640,7 +709,7 @@ void *txRtpThread(void *arg) {
                         /*
                         * Transmit RTP packet
                         */
-                        sendPacket(buf, size);
+                        sendPacket((char *)buf, size);
 
                         /*
                         * Register transmitted RTP packet
@@ -690,7 +759,7 @@ void *txRtpThread(void *arg) {
     }
     return NULL;
 }
-
+#endif
 
 int recvRtp(unsigned char *buf_rtp, int ix) {
     /*
