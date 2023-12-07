@@ -3,6 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2023-12-07 :
+  - General : Added CE marking percentage to statistics, added function to get statistics items. RTCP format error fixed.
+  - SCReAM V2 : Delay based CC modified for more stable bitrate. Frame size histogram added to handle large frame size variation better
 - 2023-11-12 : SCReAM V2 update. Conditional packet pacing is changed to always pacing when packet pacing is enabled. This removes an odd on/off effect in the packet pacing. Packet pacing implementation is updated to allow for micro burst intervals down to 0.2ms
 - 2023-11-03 : SCReAM V2 update. The delay based part of SCReAM V2 is modified such that a virtual L4S alpha is computed when L4S is either disabled or inactive. The virtal L4S alpha is calculated based on the estimated queue delay. The resulting algorithm now abandoned most the LEDBAT style approach that was outlined in RFC8298. Some additional previous voodoo magic is removed in the process.
 - 2023-09-20 : SCReAM V2. Version 2 is a major rewrite of the complete algorithm with the goal to make the algorithm more stable, especially when used with L4S. Support for V2 is in the BW test algorithm application and the multicam code. SCReAM V2 is enabled by adding -DV2 in the CMAKE_CXX_FLAGS in CMakeLists.txt  <br> The main changes are:
