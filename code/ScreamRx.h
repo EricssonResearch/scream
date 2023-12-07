@@ -30,125 +30,125 @@ const int kRxHistorySize = 128;
 
 class ScreamRx {
 public:
-  ScreamRx(uint32_t ssrc, int ackDiff = -1, int nReportedRtpPackets = kReportedRtpPackets); // SSRC of this RTCP session
-  ~ScreamRx();
+	ScreamRx(uint32_t ssrc, int ackDiff = -1, int nReportedRtpPackets = kReportedRtpPackets); // SSRC of this RTCP session
+	~ScreamRx();
 
-  /*
-  * One instance is created for each source SSRC
-  */
-  class Stream {
-  public:
-    Stream(uint32_t ssrc);
+	/*
+	* One instance is created for each source SSRC
+	*/
+	class Stream {
+	public:
+		Stream(uint32_t ssrc);
 
-    bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
+		bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 
-    bool checkIfFlushAck(int ackDiff);
+		bool checkIfFlushAck(int ackDiff);
 
-    /*
-    * Receive RTP packet
-    */
-    void receive(uint32_t time_ntp,
-      void *rtpPacket,
-      int size,
-      uint16_t seqNr,
-      bool isEcnCe,
-      uint8_t ceBits,
-      bool isMarker);
+		/*
+		* Receive RTP packet
+		*/
+		void receive(uint32_t time_ntp,
+			void* rtpPacket,
+			int size,
+			uint16_t seqNr,
+			bool isEcnCe,
+			uint8_t ceBits,
+			bool isMarker);
 
-      /*
-      * Get SCReAM standardized RTCP feedback
-      * return FALSE if no pending feedback available
-      */
-      bool getStandardizedFeedback(uint32_t time_ntp,
-        unsigned char *buf,
-        int &size);
+		/*
+		* Get SCReAM standardized RTCP feedback
+		* return FALSE if no pending feedback available
+		*/
+		bool getStandardizedFeedback(uint32_t time_ntp,
+			unsigned char* buf,
+			int& size);
 
 
-        uint32_t ssrc;                       // SSRC of stream (source SSRC)
-        uint16_t highestSeqNr;               // Highest received sequence number
-        uint16_t highestSeqNrTx;             // Highest fed back sequence number
-        uint32_t receiveTimestamp;           // Wall clock time
-        uint8_t  ceBitsHist[kRxHistorySize]; // Vector of CE bits for last <kRxHistorySize>
-        //  received RTP packets
-        uint32_t rxTimeHist[kRxHistorySize]; // Receive time for last <kRxHistorySize>
-        //  received RTP packets
-        uint16_t seqNrHist[kRxHistorySize];  // Seq Nr of last received <kRxHistorySize>
-        //  packets
-        uint32_t lastFeedbackT_ntp;          // Last time feedback transmitted for
-        //  this SSRC
-        int nRtpSinceLastRtcp;               // Number of RTP packets since last transmitted RTCP
+		uint32_t ssrc;                       // SSRC of stream (source SSRC)
+		uint16_t highestSeqNr;               // Highest received sequence number
+		uint16_t highestSeqNrTx;             // Highest fed back sequence number
+		uint32_t receiveTimestamp;           // Wall clock time
+		uint8_t  ceBitsHist[kRxHistorySize]; // Vector of CE bits for last <kRxHistorySize>
+		//  received RTP packets
+		uint32_t rxTimeHist[kRxHistorySize]; // Receive time for last <kRxHistorySize>
+		//  received RTP packets
+		uint16_t seqNrHist[kRxHistorySize];  // Seq Nr of last received <kRxHistorySize>
+		//  packets
+		uint32_t lastFeedbackT_ntp;          // Last time feedback transmitted for
+		//  this SSRC
+		int nRtpSinceLastRtcp;               // Number of RTP packets since last transmitted RTCP
 
-        bool firstReceived;
+		bool firstReceived;
 
-        float timeStampConversionFactor;
+		float timeStampConversionFactor;
 
-        int ix;
+		int ix;
 
-        int nReportedRtpPackets;
+		int nReportedRtpPackets;
 
-        bool doFlush;
-      };
+		bool doFlush;
+	};
 
-      /*
-      * Check to ensure that ACKs can cover also large holes in
-      *  in the received sequence number space. These cases can frequently occur when
-      *  SCReAM is used in frame discard mode i.e. when real video rate control is
-      *  not possible
-      */
-      bool checkIfFlushAck();
+	/*
+	* Check to ensure that ACKs can cover also large holes in
+	*  in the received sequence number space. These cases can frequently occur when
+	*  SCReAM is used in frame discard mode i.e. when real video rate control is
+	*  not possible
+	*/
+	bool checkIfFlushAck();
 
-      /*
-      * Function is called each time an RTP packet is received
-      */
-      void receive(uint32_t time_ntp,
-        void* rtpPacket,
-        uint32_t ssrc,
-        int size,
-        uint16_t seqNr,
-        uint8_t ceBits,
-        bool isMarker);
+	/*
+	* Function is called each time an RTP packet is received
+	*/
+	void receive(uint32_t time_ntp,
+		void* rtpPacket,
+		uint32_t ssrc,
+		int size,
+		uint16_t seqNr,
+		uint8_t ceBits,
+		bool isMarker);
 
-        /*
-        * Return TRUE if an RTP packet has been received and there is
-        * pending feedback
-        */
-        bool isFeedback(uint32_t time_ntp);
+	/*
+	* Return TRUE if an RTP packet has been received and there is
+	* pending feedback
+	*/
+	bool isFeedback(uint32_t time_ntp);
 
-        /*
-        * Return RTCP feedback interval (Q16)
-        */
-        uint32_t getRtcpFbInterval();
+	/*
+	* Return RTCP feedback interval (Q16)
+	*/
+	uint32_t getRtcpFbInterval();
 
-        /*
-        * Create standardized feedback according to
-        * https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
-        * Current implementation implements -02 version
-        * It is up to the wrapper application to prepend this RTCP
-        *  with SR or RR when needed
-        */
-        bool createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsigned char *buf, int &size);
+	/*
+	* Create standardized feedback according to
+	* https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
+	* Current implementation implements -02 version
+	* It is up to the wrapper application to prepend this RTCP
+	*  with SR or RR when needed
+	*/
+	bool createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsigned char* buf, int& size);
 
-        /*
-        * Get last feedback transmission time in NTP domain (Q16)
-        */
-        uint32_t getLastFeedbackT() { return lastFeedbackT_ntp; };
+	/*
+	* Get last feedback transmission time in NTP domain (Q16)
+	*/
+	uint32_t getLastFeedbackT() { return lastFeedbackT_ntp; };
 
-        uint32_t lastFeedbackT_ntp;
-        int bytesReceived;
-        uint32_t lastRateComputeT_ntp;
-        float averageReceivedRate;
-        uint32_t rtcpFbInterval_ntp;
-        uint32_t ssrc;
+	uint32_t lastFeedbackT_ntp;
+	int bytesReceived;
+	uint32_t lastRateComputeT_ntp;
+	float averageReceivedRate;
+	uint32_t rtcpFbInterval_ntp;
+	uint32_t ssrc;
 
-        int getIx(uint32_t ssrc);
-        int ix;
-        int ackDiff;
+	int getIx(uint32_t ssrc);
+	int ix;
+	int ackDiff;
 
-        int nReportedRtpPackets;
-        /*
-        * Variables for multiple steams handling
-        */
-        std::list<Stream*> streams;
-      };
+	int nReportedRtpPackets;
+	/*
+	* Variables for multiple steams handling
+	*/
+	std::list<Stream*> streams;
+};
 
-      #endif
+#endif
