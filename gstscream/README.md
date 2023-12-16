@@ -46,6 +46,7 @@ Based on patch [https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_reque
 cd scream/..
 git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git
 cd gstreamer
+# to build x264, you might want to add   -Dgst-plugins-ugly:x264=enabled to meson setup
 meson setup --prefix=/path/to/install/prefix builddir
 meson compile -C builddir
 patch -p1 < <2717.patch

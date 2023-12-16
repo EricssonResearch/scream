@@ -17,6 +17,7 @@ typedef struct  stream_s {
     ScreamSenderPushCallBack cb;
     uint8_t *cb_data;
     uint64_t rtpqueue_full;
+    uint64_t force_idr;
     uint32_t encoder_rate;
     float lastLossEpochT;
 
@@ -626,7 +627,6 @@ int parseCommandLine(
         }
         // printf("%s %d, %d %s \n", __FUNCTION__, __LINE__, i, argv[i]);
     }
-    printf("%s %d, %d \n", __FUNCTION__, __LINE__, i);
     *argc = i;
     return i;
 }
@@ -658,6 +658,44 @@ ScreamSenderPluginInit (uint32_t ssrc, const char *arg_string, uint8_t *cb_data_
     char *n_argv[25];
     parseCommandLine(s, &n_argc, n_argv, 24);
     tx_plugin_main(n_argc, n_argv, ssrc);
+}
+
+void
+ScreamSenderPluginUpdate (uint32_t ssrc, const char *arg_string)
+{
+    stream_t *stream = getStream(ssrc);
+    if (stream == NULL) {
+        printf("%s %u can't get scream ssrc %u\n", __FUNCTION__, __LINE__, ssrc);
+        return;
+    }
+
+    char *s = strdup(arg_string);
+    int argc;
+    char *argv[25];
+    parseCommandLine(s, &argc, argv, 24);
+    int ix = 1;
+    /* First find options */
+    while (ix < argc) {
+        if (!strstr(argv[ix],"-")) {
+            cerr << "wrong arg " << argv[ix] << " index " <<  ix  << endl;
+            exit(0);
+        }
+        if (strstr(argv[ix],"-minrate")) {
+            minRate = atoi(argv[ix+1]);
+            ix+=2;
+			continue;
+        }
+        if (strstr(argv[ix],"-maxrate")) {
+            maxRate = atoi(argv[ix+1]);
+            ix+=2;
+			continue;
+        }
+        printf("\nunsupported params %s\n", argv[ix]);
+        exit (255);
+    }
+    pthread_mutex_lock(&lock_scream);
+    screamTx->updateBitrateStream(ssrc, minRate * 1000, maxRate * 1000);
+    pthread_mutex_unlock(&lock_scream);
 }
 
 void
@@ -766,6 +804,7 @@ void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force
              * new IDR
              */
             *force_idr_p = 1;
+            stream->force_idr++;
             stream->lastLossEpochT = -1;
         } else {
         }
@@ -784,17 +823,18 @@ void ScreamSenderStats(char     *s,
         return;
     }
     screamTx->getLog(time_s, s, ssrc, clear != 0);
-    snprintf(buffer, 50, ",%lu", stream->rtpqueue_full);
+    snprintf(buffer, 50, ",%lu,%lu", stream->rtpqueue_full,stream->force_idr);
     strcat(s, buffer);
     *len = strlen(s);
     if (clear) {
         stream->rtpqueue_full = 0;
+        stream->force_idr = 0;
     }
 }
 void ScreamSenderStatsHeader(char     *s,
                              uint32_t *len)
 {
-    const char *extra = ",rtpqueue_full";
+    const char *extra = ",rtpqueue_full,force_idr";
     screamTx->getLogHeader(s);
     strcat(s, extra);
     *len = strlen(s);

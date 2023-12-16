@@ -54,7 +54,13 @@ impl Screamrx {
         _element: &super::Screamrx,
         buffer: gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
-        let rtp_buffer = RTPBuffer::from_buffer_readable(&buffer).unwrap();
+        let Ok(rtp_buffer) = RTPBuffer::from_buffer_readable(&buffer) else {
+            trace!(
+                CAT,
+                obj: pad,
+                "gstscream receiving not rtp packet");
+            return self.srcpad.push(buffer);
+        };
         let seq = rtp_buffer.seq();
         let payload_type = rtp_buffer.payload_type();
         let timestamp = rtp_buffer.timestamp();

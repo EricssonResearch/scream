@@ -28,6 +28,7 @@ const DEFAULT_CURRENT_MAX_BITRATE: u32 = 0;
 #[derive(Debug, Clone)]
 struct Settings {
     params: Option<String>,
+    params_update: Option<String>,
     ssrc: u32,
     current_max_bitrate: u32,
 }
@@ -36,6 +37,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             params: None,
+            params_update: None,
             ssrc: 0,
             current_max_bitrate: DEFAULT_CURRENT_MAX_BITRATE,
         }
@@ -384,6 +386,8 @@ extern "C" {
         cb: extern "C" fn(stx: *const Screamtx, buf: gst::Buffer, is_push: u8),
     );
     #[allow(improper_ctypes)]
+    fn ScreamSenderPluginUpdate(ssrc: u32, s: *const c_char);
+    #[allow(improper_ctypes)]
     fn ScreamSenderGlobalPluginInit(
         ssrc: u32,
         s: *const c_char,
@@ -570,16 +574,32 @@ impl ObjectImpl for Screamtx {
             "params" => {
                 let mut settings = self.settings.lock().unwrap();
                 // self.state.lock().unwrap().is_none()
-                settings.params = match value.get::<String>() {
+                let params = match value.get::<String>() {
                     Ok(params) => Some(params),
                     _ => unreachable!("type checked upstream"),
                 };
-                info!(
-                    CAT,
-                    imp: self,
-                    "Changing params  to {}",
-                    settings.params.as_ref().unwrap()
-                );
+                if settings.params.is_none() {
+                    settings.params = params;
+                    info!(
+                        CAT,
+                        imp: self,
+                        "Setting params  to {}",
+                        settings.params.as_ref().unwrap()
+                    );
+                } else {
+                    settings.params_update = params;
+                    info!(
+                        CAT,
+                        imp: self,
+                        "Update params  to {}",
+                        settings.params_update.as_ref().unwrap()
+                    );
+                    let s0 = settings.params_update.as_ref().unwrap().as_str().to_owned();
+                    let s = CString::new(s0).expect("CString::new failed");
+                    unsafe {
+                        ScreamSenderPluginUpdate(settings.ssrc, s.as_ptr());
+                    }
+                }
             }
             "current-max-bitrate" => {
                 let mut settings = self.settings.lock().unwrap();
@@ -602,8 +622,10 @@ impl ObjectImpl for Screamtx {
     fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
         match pspec.name() {
             "params" => {
-                let settings = self.settings.lock().unwrap();
-                settings.params.to_value()
+                let settings = self.settings.lock().unwrap().clone();
+                let params = settings.params.unwrap_or_default();
+                let params_update = settings.params_update.unwrap_or_default();
+                format!("{} {}", params, params_update).to_value()
             }
             "stats" => {
                 let res = unsafe {
