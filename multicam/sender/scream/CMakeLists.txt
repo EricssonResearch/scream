@@ -37,11 +37,11 @@ ENDIF(WIN32)
 if( CMAKE_SIZEOF_VOID_P EQUAL 8 )
 # 64bit
   message("Detected 64-bit build - compiling with -fPIC")
-  SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread")
+  SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread -DV2")
 else( CMAKE_SIZEOF_VOID_P EQUAL 8 )
 # 32 bit
 message("Detected 32-bit build")
-SET(CMAKE_CXX_FLAGS "-fpermissive -pthread")
+SET(CMAKE_CXX_FLAGS "-fpermissive -pthread -DV2")
 endif( CMAKE_SIZEOF_VOID_P EQUAL 8 )
 
 #SET(LDFLAGS "-lrt -pthread -lpthread")

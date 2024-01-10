@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2023-01-10 :
+  - SCReAM V2 is made default for BW test and multicam application. 
 - 2023-12-07 :
   - General : Added CE marking percentage to statistics, added function to get statistics items. RTCP format error fixed.
   - SCReAM V2 : Delay based CC modified for more stable bitrate. Frame size histogram added to handle large frame size variation better
