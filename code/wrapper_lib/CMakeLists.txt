@@ -22,12 +22,12 @@ screamtx_plugin_wrapper.cpp
 set(CMAKE_BUILD_TYPE Debug)
 
 if(BUILD_SHARED_LIBS)
-  set(CMAKE_CXX_FLAGS                " -I.. ${CMAKE_CXX_FLAGS_INIT} ")
+  set(CMAKE_CXX_FLAGS                " -DV2 -I.. ${CMAKE_CXX_FLAGS_INIT} ")
   add_library(scream SHARED ${SRCS})
 
 else()
 
-  set(CMAKE_CXX_FLAGS                " -I .. ${CMAKE_CXX_FLAGS_INIT} -fPIC")
+  set(CMAKE_CXX_FLAGS                " -DV2 -I .. ${CMAKE_CXX_FLAGS_INIT} -fPIC")
   add_library(scream STATIC ${SRCS})
 endif()
 

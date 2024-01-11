@@ -7,7 +7,6 @@
 #include <unistd.h>
 
 const char* log_tag = "scream_lib";
-
 typedef void (* ScreamSenderPushCallBack)(uint8_t *, uint8_t *, uint8_t);
 
 typedef struct  stream_s {
@@ -76,12 +75,23 @@ bool disablePacing = false;
 int initRate = 1000;
 int minRate = 1000;
 int maxRate = 200000;
-int rateIncrease = 10000;
-float priority = 1.0;
-float rateScale = 0.5f;
 float rateMultiply = 1.0;
-float dscale = 10.0f;
 bool enableClockDriftCompensation = false;
+float priority = 1.0;
+#ifdef V2
+const char *scream_version = "V2";
+float packetPacingHeadroom = 1.5f;
+float scaleFactor = 0.7f;
+ScreamV2Tx *screamTx = 0;
+float bytesInFlightHeadroom = 2.0f;
+float multiplicativeIncreaseFactor = 0.05f;
+#else
+const char *scream_version = "V1";
+ScreamV1Tx *screamTx = 0;
+float bytesInFlightHeadroom = 1.25f;
+int rateIncrease = 10000;
+float rateScale = 0.5f;
+float dscale = 10.0f;
 static bool newCc = false;
 bool isBurst = false;
 float burstStartTime = -1.0;
@@ -89,7 +99,13 @@ float burstSleepTime = -1.0;
 float packetPacingHeadroom=1.25f;
 float txQueueSizeFactor = 0.1f;
 float queueDelayGuard = 0.05f;
-float hysteresis = 0.0;
+float scaleFactor = 0.9f;
+bool isNewCc = false;
+#endif
+
+float hysteresis = 0.0f;
+float postCongestionDelay = 4.0f;
+float adaptivePaceHeadroom = 1.5f;
 
 uint32_t lastKeyFrameT_ntp = 0;
 float runTime = -1.0;
@@ -99,15 +115,12 @@ bool sierraLog;
 
 pthread_t stats_print_thread = 0;
 
-float scaleFactor = 0.9f;
 float delayTarget = 0.06f;
 float maxRtpQueueDelayArg = 0.2f;
 bool forceidr = false;
 bool printSummary = true;
 
 static uint32_t first_ntp = 0;
-ScreamV1Tx *screamTx = 0;
-
 uint32_t lastLogT_ntp = 0;
 uint32_t lastLogTv_ntp = 0;
 uint32_t tD_ntp = 0;//(INT64_C(1) << 32)*1000 - 5000000;
@@ -152,7 +165,6 @@ void *transmitRtpThread(void *arg) {
   uint32_t ssrc = 0;
   struct timeval start, end;
   useconds_t diff = 0;
-  static bool first = false;
   stream_t *stream = NULL;
   printf("%s %u \n", __FUNCTION__, __LINE__);
   for (;;) {
@@ -321,6 +333,52 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
   * Parse command line
   */
   if (argc <= 1) {
+                    #ifdef V2
+                    cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-12-07 " << endl;
+                    cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
+                    cerr << "     -if name                 bind to specific interface" << endl;
+                    cerr << "     -time value              run for time seconds (default infinite)" << endl;
+                    cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
+                    cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
+                    cerr << "     -nopace                  disable packet pacing" << endl;
+                    cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
+                    cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
+                    cerr << "                                must be used with -fixedrate option" << endl;
+                    cerr << "     -key val1 val2           set a given key frame interval [s] and size multiplier " << endl;
+                    cerr << "                               example -key 2.0 5.0 " << endl;
+                    cerr << "     -rand value              framesizes vary randomly around the nominal " << endl;
+                    cerr << "                               example -rand 10 framesize vary +/- 10% " << endl;
+                    cerr << "     -initrate value          set a start bitrate [kbps]" << endl;
+                    cerr << "                               example -initrate 2000 " << endl;
+                    cerr << "     -minrate  value          set a min bitrate [kbps], default 1000kbps" << endl;
+                    cerr << "                               example -minrate 1000 " << endl;
+                    cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << endl;
+                    cerr << "                               example -maxrate 10000 " << endl;
+                    cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
+                    cerr << "                               -1 for not-ECT (default)" << endl;
+                    cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << endl;
+                    cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
+                    cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << endl;
+                    cerr << "     -adaptivepaceheadroom value set adaptive packet pacing headroom (default = 1.5) " << endl;
+                    cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << endl;
+                    cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << endl;
+                    cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << endl;
+                    cerr << "     -mtu value               set the max RTP payload size (default 1200 byte)" << endl;
+                    cerr << "     -fps value               set the frame rate (default 50)" << endl;
+                    cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
+                    cerr << "                               receiver end clock is faster" << endl;
+                    cerr << "     -verbose                 print a more extensive log" << endl;
+                    cerr << "     -nosummary               don't print summary" << endl;
+                    cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
+                    cerr << "     -ntp                     use NTP timestamp in logfile" << endl;
+                    cerr << "     -append                  append logfile" << endl;
+                    cerr << "     -itemlist                add item list in beginning of log file" << endl;
+                    cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
+                    cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
+                    cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 1ms)" << endl;
+                    cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
+                    cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+#else
     cerr << "SCReAM sender. Ericsson AB. Version 2020-12-17" << endl;
     cerr << "Usage : " << endl << " > scream_tx <options>  " << endl;
     cerr << "     -initrate value       set a start bitrate [kbps]" << endl;
@@ -358,7 +416,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << endl;
     cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
     cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
-
+#endif
     //cerr << "     -sierralog          get logs from python script that logs a sierra modem" << endl;
     exit(-1);
   }
@@ -390,11 +448,6 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       ix+=2;
 			continue;
     }
-    if (strstr(argv[ix],"-dscale")) {
-      dscale = atof(argv[ix+1]);
-      ix+=2;
-			continue;
-    }
     if (strstr(argv[ix],"-delaytarget")) {
       delayTarget = atof(argv[ix+1]);
       ix+=2;
@@ -412,6 +465,36 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       ix+=2;
 			continue;
     }
+    if (strstr(argv[ix], "-adaptivepaceheadroom")) {
+        adaptivePaceHeadroom = atof(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+
+    if (strstr(argv[ix], "-postcongestiondelay")) {
+        postCongestionDelay = atof(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+
+    if (strstr(argv[ix], "-infligtheadroom")) {
+        bytesInFlightHeadroom = atof(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+
+#ifdef V2
+    if (strstr(argv[ix], "-mulincrease")) {
+        multiplicativeIncreaseFactor = atof(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+#else
+    if (strstr(argv[ix],"-dscale")) {
+      dscale = atof(argv[ix+1]);
+      ix+=2;
+			continue;
+    }
     if (strstr(argv[ix], "-txqueuesizefactor")) {
         txQueueSizeFactor = atoi(argv[ix + 1]);
         ix += 2;
@@ -422,7 +505,52 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
         ix += 2;
         continue;
     }
-
+    if (strstr(argv[ix], "-newcc")) {
+        isNewCc = true;
+        ix++;
+        continue;
+    }
+    if (strstr(argv[ix], "-dscale")) {
+        dscale = atof(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+    if (strstr(argv[ix], "-rateincrease")) {
+        rateIncrease = atoi(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+    if (strstr(argv[ix], "-ratescale")) {
+        rateScale = atof(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+    if (strstr(argv[ix], "-queuedelayguard")) {
+        queueDelayGuard = atoi(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
+    if (strstr(argv[ix],"-rateincrease")) {
+      rateIncrease = atoi(argv[ix+1]);
+      ix+=2;
+			continue;
+    }
+    if (strstr(argv[ix],"-ratescale")) {
+      rateScale = atof(argv[ix+1]);
+      ix+=2;
+			continue;
+    }
+    if (strstr(argv[ix],"-newcc")) {
+      newCc = true;
+      ix++;
+			continue;
+    }
+#endif
+    if (strstr(argv[ix],"-priority")) {
+      priority = atof(argv[ix+1]);
+      ix+=2;
+			continue;
+    }
     if (strstr(argv[ix],"-nopace")) {
       disablePacing = true;
       ix++;
@@ -440,21 +568,6 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     }
     if (strstr(argv[ix],"-maxrate")) {
       maxRate = atoi(argv[ix+1]);
-      ix+=2;
-			continue;
-    }
-    if (strstr(argv[ix],"-rateincrease")) {
-      rateIncrease = atoi(argv[ix+1]);
-      ix+=2;
-			continue;
-    }
-    if (strstr(argv[ix],"-priority")) {
-      priority = atof(argv[ix+1]);
-      ix+=2;
-			continue;
-    }
-    if (strstr(argv[ix],"-ratescale")) {
-      rateScale = atof(argv[ix+1]);
       ix+=2;
 			continue;
     }
@@ -509,11 +622,6 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       ix++;
 			continue;
     }
-    if (strstr(argv[ix],"-newcc")) {
-      newCc = true;
-      ix++;
-			continue;
-    }
    if (strstr(argv[ix],"-forceidr")) {
       forceidr = true;
       ix++;
@@ -547,18 +655,34 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     initRate = minRate;
 
   if (screamTx == NULL) {
-            screamTx = new ScreamV1Tx(scaleFactor, scaleFactor,
-                              delayTarget,
+#ifdef V2
+      screamTx = new ScreamV2Tx(
+          scaleFactor,
+          scaleFactor,
+          delayTarget,
+          (initRate * 100) / 8,
+          packetPacingHeadroom,
+          adaptivePaceHeadroom,
+          bytesInFlightHeadroom,
+          multiplicativeIncreaseFactor,
+          ect == 1,
+          false,
+          false,
+          enableClockDriftCompensation);
+          #else
+      screamTx = new ScreamV1Tx(scaleFactor, scaleFactor,
+                                delayTarget,
+                                false,
+                                1.0f,dscale,
+                                (initRate*100)/8,
+                                packetPacingHeadroom,
+                                20,
+                                ect==1,
                               false,
-                              1.0f,dscale,
-                              (initRate*100)/8,
-                              packetPacingHeadroom,
-                              20,
-                              ect==1,
-                              false,
-                              enableClockDriftCompensation,
-			      1.0,
-			      newCc);
+                                enableClockDriftCompensation,
+                                1.0,
+                                newCc);
+#endif
       screamTx->setCwndMinLow(5000);
       if (logFile) {
           if (append)
@@ -577,24 +701,34 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       pthread_mutex_init(&stream->lock_rtp_queue, NULL);
   }
     stream->rtpQueue = new RtpQueue();
-
-  screamTx->registerNewStream(stream->rtpQueue,
-                              ssrc,
-                              priority,
-                              minRate * 1000,
-                              initRate * 1000,
-                              maxRate * 1000,
-                              rateIncrease * 1000,
-                              rateScale,
-                              maxRtpQueueDelayArg,
-                              txQueueSizeFactor,
-                              queueDelayGuard,
-                              scaleFactor,
-                              scaleFactor,
-                              false,
-                              hysteresis);
-
-  cerr << "Scream sender started! ssrc "<< ssrc <<endl;
+#ifdef V2
+    screamTx->registerNewStream(stream->rtpQueue,
+                                ssrc,
+                                priority,
+                                minRate * 1000,
+                                initRate * 1000,
+                                maxRate * 1000,
+                                0.2f,
+                                false,
+                                hysteresis);
+#else
+    screamTx->registerNewStream(stream->rtpQueue,
+                                ssrc,
+                                priority,
+                                minRate * 1000,
+                                initRate * 1000,
+                                maxRate * 1000,
+                                rateIncrease * 1000,
+                                rateScale,
+                                maxRtpQueueDelayArg,
+                                txQueueSizeFactor,
+                                queueDelayGuard,
+                                scaleFactor,
+                                scaleFactor,
+                                false,
+                                hysteresis);
+#endif
+    cerr << "Scream sender " << scream_version << " started! ssrc "<< ssrc <<endl;
   if (stats_print_thread == 0) {
       pthread_create(&stats_print_thread,NULL,statsPrintThread, NULL);
   }
@@ -763,7 +897,6 @@ uint8_t ScreamSenderRtcpPush(uint8_t*buf_rtcp, uint32_t recvlen) {
 }
 
 void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force_idr_p) {
-    int n = 0;
     *rate_p = 0;
     *force_idr_p = 0;
     stream_t *stream = NULL;
