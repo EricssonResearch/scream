@@ -88,6 +88,9 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	relFrameSizeHigh = 1.0f;
 	nFrames = 0;
 
+	rateShare = minBitrate;
+	isMaxrate = false;
+
 }
 
 /*
@@ -285,27 +288,10 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 
 
 	/*
-	* Rate is computed based CWND and RTT
+	* Rate is computed based CWND and RTT, this is done in ScreamV2Tx::updateCwnd
+	* The rest that follows below is to compensate for very small congestion windows
+	* and large variations in frame size
 	*/
-
-	/*
-	* In the multistream solution, the CWND is split between the streams according to the
-	* priorities
-	*  cwndShare = cwnd * priority[stream] /sum(priority[0]..priority[N-1])
-	*/
-	float cwndShare = parent->cwnd;
-	float prioritySum = 0.0f;
-	float priorityShare = 1.0;
-	for (int n = 0; n < parent->nStreams; n++) {
-		Stream* stream = parent->streams[n];
-		if (stream->isActive)
-			prioritySum += stream->targetPriority;
-	}
-	if (prioritySum > 0) {
-		priorityShare = targetPriority / prioritySum;
-		cwndShare *= priorityShare;
-	}
-
 	float tmp = 1.0f;
 
 	/*
@@ -322,17 +308,12 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	*/
 	tmp *= 1.0f - std::min(0.8f, std::max(0.0f, parent->cwndRatio - 0.1f));
 
-	/*
-	* Scale down rate based on frame size histogram
-	*/
-	tmp /= relFrameSizeHigh;
-
 	float sRtt = parent->sRtt;
 
 	/*
 	* Compute target bitrate.
 	*/
-	tmp *= 8 * cwndShare / std::max(0.001f, std::min(0.2f, sRtt));
+	tmp *= rateShare;//8 * cwndShare / std::max(0.001f, std::min(0.2f, sRtt));
 	targetBitrate = tmp;
 
 	targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate));

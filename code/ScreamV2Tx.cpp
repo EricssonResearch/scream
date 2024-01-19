@@ -983,10 +983,6 @@ float ScreamV2Tx::getTargetBitrate(uint32_t ssrc) {
 void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
 	int id;
 	Stream* stream = getStream(ssrc, id);
-	if (queueDelayFractionAvg > 0.1) {
-		stream->targetBitrate *= priority / stream->targetPriority;
-		stream->targetBitrate = std::min(std::max(stream->targetBitrate, stream->minBitrate), stream->maxBitrate);
-	}
 	stream->targetPriority = priority;
 	stream->targetPriorityInv = 1.0f / priority;
 }
@@ -1303,10 +1299,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* Updated relFrameSizeHigh based on individual streams' histogram
 		*/
-		relFrameSizeHigh = 1.0f;
+		relFrameSizeHigh = 0.0f;
+		float sumPrio = 0.0f;
 		for (int n = 0; n < nStreams; n++) {
-			relFrameSizeHigh = std::max(relFrameSizeHigh, streams[n]->getRelFrameSizeHigh());
+			relFrameSizeHigh += streams[n]->getRelFrameSizeHigh()*streams[n]->targetPriority;
+			sumPrio += streams[n]->targetPriority;
 		}
+		relFrameSizeHigh /= sumPrio;
 
 		lastSlowUpdateT_ntp = time_ntp;
 	}
@@ -1490,6 +1489,62 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 	bytesNewlyAcked = 0;
 	bytesNewlyAckedCe = 0;
+
+	/*
+	* Compute rate share among streams, take into account that some streams reach the
+	* max bitrate, and therefore more is shared among the other streams that 
+	* have not reached the max bitrate
+	*/
+	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt));
+
+	/*
+	* Scale down based on weigthed average high percentile of frame sizes
+	*/
+	rateLeft /= relFrameSizeHigh;
+
+	float prioritySum = 0.0f;
+	/*
+	* Calculate sum of priorities
+	*/
+	for (int n = 0; n < nStreams; n++) {
+		Stream* stream = streams[n];
+		stream->isMaxrate = false;
+		stream->rateShare = 0.0f;
+		if (stream->isActive)
+			prioritySum += stream->targetPriority;
+	}
+
+	/*
+	* Walk through and allocate rates until nothing left
+	*/
+	while (rateLeft > 1.0f && prioritySum > 0.01f) {
+		/*
+		* Allocate rates
+		*/
+		for (int n = 0; n < nStreams; n++) {
+			Stream* stream = streams[n];
+			if (stream->isActive && !stream->isMaxrate) {
+				float tmp = rateLeft * stream->targetPriority / prioritySum;
+				stream->rateShare += tmp;
+			}
+		}
+		/*
+		* Walk through again to see if some rate shares are higher than max bitrate
+		* and allocate surplus for next iteration
+		*/
+		rateLeft = 0.0f;
+		for (int n = 0; n < nStreams; n++) {
+			Stream* stream = streams[n];
+			if (stream->rateShare > stream->maxBitrate && !stream->isMaxrate) {
+				float tmp = stream->rateShare - stream->maxBitrate;
+				rateLeft += tmp;
+				stream->rateShare = stream->maxBitrate;
+				prioritySum -= stream->targetPriority;
+				stream->isMaxrate = true;
+			}
+		}
+	}
+
 }
 
 /*

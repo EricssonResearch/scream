@@ -1313,6 +1313,9 @@ extern "C" {
 			float relFrameSizeHigh;
 			int nFrames;
 
+			float rateShare;
+			bool isMaxrate;
+
 		};
 
 		/*

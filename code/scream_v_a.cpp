@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
 		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.5e6f, 5e6f, 50e6f, 0.1f, false, 0.05f);
 	if (mode & 0x02)
-		screamTx->registerNewStream(rtpQueue[1], 11, 0.3f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
+		screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
 		screamTx->registerNewStream(rtpQueue[2], 12, 0.3f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x08)
@@ -221,13 +221,25 @@ int main(int argc, char* argv[])
 		}
 
 		if (isChRate) {
-			if ((time > 10.0 && time < 20) && isChRate) {
+			if ((time > 20.0 && time < 30) && isChRate) {
 				netQueueRate->rate = 10000e3;
 			}
 			else {
-				netQueueRate->rate = 20000e3;
+				netQueueRate->rate = 40000e3;
 			}
 		}
+
+		if (time > 20 && swprio == 0) {
+			swprio = 1;
+			screamTx->setTargetPriority(10, 0.2);
+			screamTx->setTargetPriority(11, 1.0);
+		}
+		if (time > 25 && swprio == 1) {
+			swprio = 2;
+			screamTx->setTargetPriority(10, 1.0);
+			screamTx->setTargetPriority(11, 0.2);
+		}
+
 
 		n++;
 #ifdef _WIN32
