@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2023-01-24 :
+  - Robustness to sudden jumps in sender or receiver clocks improved.
 - 2023-01-19 :
   - Stream prioritization refined.
   - SCReAM RFC8298 update. First draft available [RFC8298-bis](https://github.com/IngJohEricsson/draft-johansson-ccwg-scream-bis "RFC8298-bin")

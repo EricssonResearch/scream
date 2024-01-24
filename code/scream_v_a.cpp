@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
 {
 
 	int tick = (int)(65536.0f / FR);
-	ScreamV2Tx* screamTx = new ScreamV2Tx(0.7f, 0.8f, 0.04f, 10000, 1.5f, 1.5f, 2.0f, 0.05f, isL4s, false, false, false);
+	ScreamV2Tx* screamTx = new ScreamV2Tx(0.7f, 0.8f, 0.06f, 10000, 1.5f, 1.5f, 2.0f, 0.05f, isL4s, false, false, false);
 
 	screamTx->setCwndMinLow(1500);
 	screamTx->setPostCongestionDelay(4.0);
@@ -63,14 +63,14 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 40e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 50e6, 0.0f, true && isL4s);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
 	videoEnc[2] = new VideoEnc(rtpQueue[2], FR / FR_DIV, (char*)TRACEFILE, 100);
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.5e6f, 5e6f, 50e6f, 0.1f, false, 0.05f);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.5e6f, 5e6f, 100e6f, 0.1f, false, 0.05f);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.2f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
@@ -81,6 +81,7 @@ int main(int argc, char* argv[])
 	float time = 0.0f;
 	uint32_t time_ntp = 0;
 	uint32_t time_ntp_rx = 0;
+	uint32_t time_ntp_rx_plus = 0;
 	int n = 0;
 	uint32_t ssrc;
 	char rtpPacket[2000];
@@ -92,9 +93,12 @@ int main(int argc, char* argv[])
 	time = 0;
 	while (time <= Tmax) {
 		time_ntp = n + 0;
-		time_ntp_rx = n + 0;
+		time_ntp_rx = n + time_ntp_rx_plus;
 		float retVal = -1.0;
 		time = n / 65536.0f;
+		if (time > 20.0) {
+			//time_ntp_rx_plus = 0.03 * 65536;
+		}
 
 		netQueueRate->updateRate(time);
 		bool isEvent = false;

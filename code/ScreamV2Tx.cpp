@@ -1200,8 +1200,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		kSlowUpdateInterval_ntp) {
 
 		determineActiveStreams(time_ntp);
-
-		if (queueDelayMinAvg > 0.75f * queueDelayTarget && time_ntp - baseOwdResetT_ntp > 1310720) { // 20s in NTP domain
+		if ((queueDelayMinAvg > 0.5f * queueDelayTarget || queueDelayMinAvg > 0.9f*sRtt) && time_ntp - baseOwdResetT_ntp > 655360) {
 			/*
 			* The base OWD is likely wrong, for instance due to
 			* a channel change or clock drift, reset base OWD history
@@ -1217,10 +1216,14 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			baseOwdResetT_ntp = time_ntp;
 		}
 
+		/*
+		* Calculate queueDelayMinAvg as a ~10s average. 
+		* A slow attack, fast decay filter is used
+		*/
 		if (queueDelayMin < queueDelayMinAvg)
 			queueDelayMinAvg = queueDelayMin;
 		else
-			queueDelayMinAvg = 0.001f * queueDelayMin + 0.999f * queueDelayMinAvg;
+			queueDelayMinAvg = 0.005f * queueDelayMin + 0.995f * queueDelayMinAvg;
 		queueDelayMin = 1000.0f;
 
 		if (enableSbd) {
