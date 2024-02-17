@@ -1,8 +1,4 @@
-extern crate glib;
-#[macro_use]
-extern crate gstreamer as gst;
-extern crate gstreamer_base as gst_base;
-// extern crate gstreamer_video as gst_video;
+use gst::glib;
 
 mod screamrx;
 #[cfg(not(feature = "screamrx-only"))]
@@ -26,7 +22,7 @@ fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
 // Plugin name, plugin description, plugin entry point function, version number of this plugin,
 // license of the plugin, source package name, binary package name, origin where it comes from
 // and the date/time of release.
-plugin_define!(
+gst::plugin_define!(
     scream,
     env!("CARGO_PKG_DESCRIPTION"),
     plugin_init,

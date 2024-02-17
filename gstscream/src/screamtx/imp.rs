@@ -1,21 +1,14 @@
 #![allow(clippy::uninlined_format_args)]
-use crate::glib::translate::IntoGlibPtr;
-use glib::prelude::*;
-use glib::subclass::prelude::*;
-
+use gst::glib;
+use gst::glib::translate::*;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
 
+use core::result::Result;
 use std::convert::TryInto;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::Mutex;
-
-pub use gstreamer_rtp::rtp_buffer::compare_seqnum;
-pub use gstreamer_rtp::rtp_buffer::RTPBuffer;
-pub use gstreamer_rtp::rtp_buffer::RTPBufferExt;
-
-extern crate gstreamer_video as gstv;
 
 use once_cell::sync::Lazy;
 use std::sync::Once;
@@ -78,14 +71,14 @@ impl Screamtx {
         buffer: gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
         // trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
-        let rtp_buffer = RTPBuffer::from_buffer_readable(&buffer).unwrap();
+        let rtp_buffer = gst_rtp::RTPBuffer::from_buffer_readable(&buffer).unwrap();
         let seq = rtp_buffer.seq();
         let payload_type = rtp_buffer.payload_type();
         let timestamp = rtp_buffer.timestamp();
         let ssrc = rtp_buffer.ssrc();
         let marker = rtp_buffer.is_marker() as u8;
 
-        trace!(
+        gst::trace!(
             CAT,
             obj: pad,
             "gstscream Handling rtp buffer seq {} payload_type {} timestamp {} ",
@@ -144,14 +137,14 @@ impl Screamtx {
             // println!("imp.rs rate 0");
         }
         if force_idr != 0 {
-            let event = gstv::UpstreamForceKeyUnitEvent::builder()
+            let event = gst_video::UpstreamForceKeyUnitEvent::builder()
                 .all_headers(true)
                 .build();
             let rc = self.sinkpad.push_event(event);
             println!("imp.rs: force_idr rc {} enabled 1 ", rc);
         }
         // println!("imp.rs push rtp cont");
-        glib::bitflags::_core::result::Result::Ok(gst::FlowSuccess::Ok)
+        Result::Ok(gst::FlowSuccess::Ok)
     }
 
     // Called whenever an event arrives on the sink pad. It has to be handled accordingly and in
@@ -162,7 +155,7 @@ impl Screamtx {
     // See the documentation of gst::Event and gst::EventRef to see what can be done with
     // events, and especially the gst::EventView type for inspecting events.
     fn sink_event(&self, pad: &gst::Pad, _element: &super::Screamtx, event: gst::Event) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream Handling event {:?} {:?}",
@@ -188,7 +181,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
+        gst::log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
         self.srcpad.peer_query(query)
     }
 
@@ -203,7 +196,7 @@ impl Screamtx {
         let bmrsl = bmr.as_slice();
         let bmrslprt = bmrsl.as_ptr();
         let buffer_size: u32 = buffer.size().try_into().unwrap();
-        trace!(
+        gst::trace!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp buffer size {} ",
@@ -214,7 +207,7 @@ impl Screamtx {
         if res == 0 {
             self.rtcp_srcpad.push(buffer).unwrap();
         }
-        glib::bitflags::_core::result::Result::Ok(gst::FlowSuccess::Ok)
+        Result::Ok(gst::FlowSuccess::Ok)
     }
 
     // Called whenever an event arrives on the rtcp_sink pad. It has to be handled accordingly and in
@@ -230,7 +223,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         event: gst::Event,
     ) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp_sink event {:?} {:?}",
@@ -255,7 +248,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp_sink query {:?}",
@@ -273,7 +266,7 @@ impl Screamtx {
     // See the documentation of gst::Event and gst::EventRef to see what can be done with
     // events, and especially the gst::EventView type for inspecting events.
     fn src_event(&self, pad: &gst::Pad, _element: &super::Screamtx, event: gst::Event) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream src Handling event {:?} {:?}",
@@ -289,7 +282,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         event: gst::Event,
     ) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream rtcp src Handling event {:?} {:?}",
@@ -315,7 +308,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        log!(CAT, obj: pad, "gstscream Handling src query {:?}", query);
+        gst::log!(CAT, obj: pad, "gstscream Handling src query {:?}", query);
         self.sinkpad.peer_query(query)
     }
     fn rtcp_src_query(
@@ -324,7 +317,7 @@ impl Screamtx {
         _element: &super::Screamtx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp src query {:?}",
@@ -367,7 +360,7 @@ extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
 #[link(name = "scream")]
 extern "C" {
     fn ScreamSenderPush(
-        buf: *mut gstreamer_sys::GstBuffer,
+        buf: *mut gst_sys::GstBuffer,
         size: u32,
         seq: u16,
         payload_type: u8,
@@ -580,7 +573,7 @@ impl ObjectImpl for Screamtx {
                 };
                 if settings.params.is_none() {
                     settings.params = params;
-                    info!(
+                    gst::info!(
                         CAT,
                         imp: self,
                         "Setting params  to {}",
@@ -588,7 +581,7 @@ impl ObjectImpl for Screamtx {
                     );
                 } else {
                     settings.params_update = params;
-                    info!(
+                    gst::info!(
                         CAT,
                         imp: self,
                         "Update params  to {}",
@@ -604,7 +597,7 @@ impl ObjectImpl for Screamtx {
             "current-max-bitrate" => {
                 let mut settings = self.settings.lock().unwrap();
                 let rate = value.get().expect("type checked upstream");
-                info!(
+                gst::info!(
                     CAT,
                     imp: self,
                     "Changing current-max-bitrate from {} to {}",
@@ -756,7 +749,7 @@ impl ElementImpl for Screamtx {
         &self,
         transition: gst::StateChange,
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
-        info!(CAT, imp: self, "Changing state {:?}", transition);
+        gst::info!(CAT, imp: self, "Changing state {:?}", transition);
 
         // Call the parent class' implementation of ::change_state()
         self.parent_change_state(transition)

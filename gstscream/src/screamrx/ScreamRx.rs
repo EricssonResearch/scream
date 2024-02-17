@@ -1,6 +1,8 @@
 #![allow(clippy::uninlined_format_args)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
+use gst::prelude::*;
+
 use std::cmp;
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -11,7 +13,6 @@ use hashbrown::HashMap;
 use libc::timeval;
 use once_cell::sync::Lazy;
 
-use crate::gst::prelude::PadExt;
 use crate::screamrx::imp::CAT;
 
 const kReportedRtpPackets: usize = 64;
@@ -106,15 +107,14 @@ impl Default for ScreamRx {
     }
 }
 
-use gstreamer::DebugCategory;
 use std::io::Write;
 struct WriteToGstInfo {
-    cat: DebugCategory,
+    cat: gst::DebugCategory,
 }
 impl Write for WriteToGstInfo {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         let str_buf = String::from_utf8_lossy(buf);
-        error!(self.cat, "{}", str_buf);
+        gst::error!(self.cat, "{}", str_buf);
         let len = str_buf.len();
         Ok(len)
     }
@@ -126,7 +126,7 @@ impl Write for WriteToGstInfo {
 
 impl ScreamRx {
     pub fn ScreamReceiverPluginInit(&mut self, rtcp_srcpad: Option<Arc<Mutex<gst::Pad>>>) {
-        info!(CAT, "Init");
+        gst::info!(CAT, "Init");
         self.rtcp_srcpad = rtcp_srcpad;
     }
 
@@ -171,6 +171,7 @@ impl ScreamRx {
         if self.lastRateComputeT_ntp == 0 {
             self.lastRateComputeT_ntp = time_ntp;
         }
+
         if time_ntp > self.lastRateComputeT_ntp && time_ntp - self.lastRateComputeT_ntp > 6554 {
             // 100ms in NTP domain
             /*
@@ -199,7 +200,7 @@ impl ScreamRx {
             let ftmp: f64 = 65536.0 / rate;
             self.rtcpFbInterval_ntp = ftmp as u32;
             // Convert to NTP domain (Q16)
-            trace!(CAT, "time_ntp - lastRateComputeT_ntp {} , delta {}, averageReceivedRate {}, rate {},size {},  bytesReceived {}",
+            gst::trace!(CAT, "time_ntp - lastRateComputeT_ntp {} , delta {}, averageReceivedRate {}, rate {},size {},  bytesReceived {}",
                        time_ntp - self.lastRateComputeT_ntp, delta, self.averageReceivedRate, rate, size, self.bytesReceived);
             self.bytesReceived = 0;
         }
@@ -210,7 +211,7 @@ impl ScreamRx {
                 it.receive(time_ntp, seqNr, ceBits);
                 return;
             }
-            None => log!(CAT, "receive not found {}", ssrc),
+            None => gst::log!(CAT, "receive not found {}", ssrc),
         }
 
         /*
@@ -222,7 +223,7 @@ impl ScreamRx {
         stream.ix = self.ix + 1;
         stream.ssrc = ssrc;
         stream.receive(time_ntp, seqNr, ceBits);
-        log!(CAT, "receive insert  {}", ssrc);
+        gst::log!(CAT, "receive insert  {}", ssrc);
         self.streams.insert(ssrc, stream);
     }
     #[allow(clippy::too_many_arguments)]
@@ -245,7 +246,7 @@ impl ScreamRx {
         if self.checkIfFlushAck() || marker {
             let mut bytes = Vec::with_capacity(300);
             let isFeedback = self.createStandardizedFeedback(getTimeInNtp(), marker, &mut bytes);
-            trace!(CAT, "isFeedback {} marker  {}", isFeedback, marker);
+            gst::trace!(CAT, "isFeedback {} marker  {}", isFeedback, marker);
             if isFeedback {
                 let buffer = gst::Buffer::from_mut_slice(bytes);
                 let rtcp_srcpad = &self.rtcp_srcpad.as_ref().unwrap().lock().unwrap();
@@ -261,12 +262,12 @@ impl ScreamRx {
                 || (time_ntp > self.getLastFeedbackT()
                     && time_ntp - self.getLastFeedbackT() > rtcpFbInterval_ntp))
         {
-            trace!(CAT, "periodic_flush ssrc {} time_ntp {}, .getLastFeedbackT {},diff {} rtcpFbInterval_ntp {} averageReceivedRate {} ",
+            gst::trace!(CAT, "periodic_flush ssrc {} time_ntp {}, .getLastFeedbackT {},diff {} rtcpFbInterval_ntp {} averageReceivedRate {} ",
                      self.ssrc, time_ntp, self.getLastFeedbackT(), time_ntp - self.getLastFeedbackT(), rtcpFbInterval_ntp,  self.averageReceivedRate);
             let mut bytes = Vec::with_capacity(300);
             let isFeedback = self.createStandardizedFeedback(time_ntp, true, &mut bytes);
             if isFeedback {
-                trace!(CAT, "periodic_flush ");
+                gst::trace!(CAT, "periodic_flush ");
                 let buffer = gst::Buffer::from_mut_slice(bytes);
                 let rtcp_srcpad = &self.rtcp_srcpad.as_ref().unwrap().lock().unwrap();
                 rtcp_srcpad.push(buffer).unwrap();
@@ -365,7 +366,7 @@ impl Stream {
 
         let diff: i32 = seqNr as i32 - self.lastSn as i32;
         if diff != 1 {
-            debug!(CAT,
+            gst::debug!(CAT,
                 "Packet(s) lost or reordered time_ntp {} : {} was received, previous rcvd is {}, nRecvRtpPackets {}, ssrc {}",
                 time_ntp - self. first_recv_ntp, seqNr, self.lastSn, self.nRecvRtpPackets, self.ssrc
             );
@@ -387,7 +388,7 @@ impl Stream {
             /*
              * Normal in-order reception
              */
-            trace!(
+            gst::trace!(
                 CAT,
                 "old / new highestSeqNr {} {}  seqNrExt {} highestSeqNrExt {}",
                 self.highestSeqNr,
@@ -397,7 +398,7 @@ impl Stream {
             );
             self.highestSeqNr = seqNr;
         } else {
-            log!(
+            gst::log!(
                 CAT,
                 "old / no-new highestSeqNr {} {}  seqNrExt {} highestSeqNrExt {}",
                 self.highestSeqNr,
@@ -423,7 +424,7 @@ impl Stream {
          * Write begin_seq
          * always report nReportedRtpPackets RTP packets
          */
-        trace!(
+        gst::trace!(
             CAT,
             "getStandardizedFeedback (self.ceBitsHist[ix] & 0x03) {} {}",
             self.highestSeqNr,
@@ -449,7 +450,7 @@ impl Stream {
             .overflowing_sub((self.nReportedRtpPackets - 1) as u16)
             .0;
 
-        log!(CAT, "getStandardizedFeedback time_diff  {} begin_seq {}, num_reports {} , end_seq {} nRecvRtpPackets {} ",
+        gst::log!(CAT, "getStandardizedFeedback time_diff  {} begin_seq {}, num_reports {} , end_seq {} nRecvRtpPackets {} ",
                    time_ntp - self.lastFeedbackT_ntp, sn_lo,  self.nReportedRtpPackets,  self.highestSeqNr, self.nRecvRtpPackets);
         for k in 0..self.nReportedRtpPackets {
             let sn: u16 = ((sn_lo as u32 + k as u32) & u16::MAX as u32) as u16;
@@ -494,9 +495,9 @@ impl ScreamRx {
         /*
          * Write RTCP sender SSRC
          */
-        trace!(CAT, "isMark {}", isMark);
+        gst::trace!(CAT, "isMark {}", isMark);
         if isMark {
-            trace!(CAT, "isMark {}", isMark);
+            gst::trace!(CAT, "isMark {}", isMark);
         }
         bytes.extend_from_slice(&self.ssrc.to_be_bytes());
         let mut isFeedback = false;
@@ -521,11 +522,11 @@ impl ScreamRx {
                 {
                     minT_ntp = (it).lastFeedbackT_ntp;
 
-                    trace!(CAT, "diff_ntp {}, time_ntp {}, lastFeedbackT_ntp {}, isMark {}, nRtpSinceLastRtcp {}, ackDiff {} len {}",
+                    gst::trace!(CAT, "diff_ntp {}, time_ntp {}, lastFeedbackT_ntp {}, isMark {}, nRtpSinceLastRtcp {}, ackDiff {} len {}",
                              diffT_ntp, &time_ntp, &it.lastFeedbackT_ntp, &isMark, &(it).nRtpSinceLastRtcp, &self.ackDiff, bytes.len());
                     stream_opt = Some(it);
                 } else if nRtpSinceLastRtcp >= 0 {
-                    trace!(
+                    gst::trace!(
                         CAT,
                         "isMark {}, nRtpSinceLastRtcp {} nRecvRtpPackets {} diffT_ntp {}",
                         isMark,
@@ -546,7 +547,7 @@ impl ScreamRx {
             stream.highestSeqNrTx = stream.highestSeqNr;
         }
         if !isFeedback {
-            trace!(CAT, "createStandardizedFeedback: no feedback");
+            gst::trace!(CAT, "createStandardizedFeedback: no feedback");
             return false;
         }
         /*

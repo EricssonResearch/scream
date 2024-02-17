@@ -1,7 +1,4 @@
 #![allow(clippy::uninlined_format_args)]
-use crate::gstv::prelude::ClockExt;
-use crate::gstv::prelude::GstBinExt;
-use glib::ObjectExt;
 use std::convert::TryInto;
 use std::env;
 use std::fs::File;
@@ -9,11 +6,10 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::gstv::prelude::PipelineExt;
+use gst::glib;
+use gst::prelude::*;
 
 use glib::timeout_add;
-use glib::Continue;
-extern crate gstreamer_video as gstv;
 
 #[derive(Default)]
 struct RateInfo {
@@ -71,7 +67,7 @@ pub fn stats(bin: &gst::Pipeline, n: usize, screamtx_name_opt: &Option<String>) 
             let mut fd = out_p.lock().unwrap();
 
             writeln!(fd, "{},{}", ns, stats_str).unwrap();
-            Continue(true)
+            glib::ControlFlow::Continue
         },
     );
 }

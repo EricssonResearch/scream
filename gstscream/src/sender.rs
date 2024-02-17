@@ -5,18 +5,13 @@ use std::process::exit;
 
 extern crate argparse;
 extern crate failure;
-extern crate gstreamer_video as gstv;
 #[macro_use]
 extern crate lazy_static;
 
-use crate::gst::glib::Cast;
-
-use crate::gstv::prelude::ElementExt;
-use crate::gstv::prelude::GstObjectExt;
+use gst::glib;
+use gst::prelude::*;
 
 use argparse::{ArgumentParser, StoreOption, StoreTrue};
-
-extern crate gstreamer as gst;
 
 mod sender_util;
 
@@ -54,7 +49,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
         exit(0);
     }
 
-    let pipeline = gst::parse_launch(&pls).unwrap();
+    let pipeline = gst::parse::launch(&pls).unwrap();
     let pipeline = pipeline.downcast::<gst::Pipeline>().unwrap();
 
     pipeline
@@ -104,7 +99,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
                 }
                 _ => (),
             };
-            glib::Continue(true)
+            glib::ControlFlow::Continue
         })
         .expect("failed to add bus watch");
 

@@ -1,0 +1,832 @@
+commit fad7df570ebb40671a1fa1f15527d4ca4d2bdbab
+Date:   Wed Feb 14 22:31:07 2024 -0800
+
+    udp: Add support for ECN to udpsink and udpsrc (fix conflicts for 2717.patch)
+
+diff --git a/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.c b/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.c
+index 527beeac87..518b12b1ef 100644
+--- a/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.c
++++ b/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.c
+@@ -92,6 +92,7 @@ enum
+ #define DEFAULT_BUFFER_SIZE        0
+ #define DEFAULT_BIND_ADDRESS       NULL
+ #define DEFAULT_BIND_PORT          0
++#define DEFAULT_ECN                GST_NET_ECN_META_NO_ECN
+ 
+ enum
+ {
+@@ -114,7 +115,8 @@ enum
+   PROP_SEND_DUPLICATES,
+   PROP_BUFFER_SIZE,
+   PROP_BIND_ADDRESS,
+-  PROP_BIND_PORT
++  PROP_BIND_PORT,
++  PROP_ECN
+ };
+ 
+ static void gst_multiudpsink_finalize (GObject * object);
+@@ -139,6 +141,8 @@ static void gst_multiudpsink_add_internal (GstMultiUDPSink * sink,
+ static void gst_multiudpsink_clear_internal (GstMultiUDPSink * sink,
+     gboolean lock);
+ 
++static void gst_multiudpsink_set_ecn (GstMultiUDPSink * sink);
++
+ static guint gst_multiudpsink_signals[LAST_SIGNAL] = { 0 };
+ 
+ #define gst_multiudpsink_parent_class parent_class
+@@ -351,6 +355,24 @@ gst_multiudpsink_class_init (GstMultiUDPSinkClass * klass)
+           "Port to bind the socket to", 0, G_MAXUINT16,
+           DEFAULT_BIND_PORT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+ 
++#if defined(IP_TOS) || defined(IPV6_TCLASS)
++  /**
++   * GstMultiUDPSink::ecn:
++   *
++   * Set the value of the ECN codepoint on packets sent
++   *
++   * Since: 1.22
++   */
++  g_object_class_install_property (gobject_class, PROP_ECN,
++      g_param_spec_enum ("set-ecn",
++          "Set the ECN codepoint",
++          "Set the ECN codepoint on packets sent to indicate support for ECN"
++          " (or lack thereof)",
++          GST_NET_ECN_CP_TYPE, DEFAULT_ECN,
++          GST_PARAM_CONDITIONALLY_AVAILABLE | G_PARAM_READWRITE |
++          G_PARAM_STATIC_STRINGS));
++#endif /* IP_TOS || IPV6_TCLASS */
++
+   gst_element_class_add_static_pad_template (gstelement_class, &sink_template);
+ 
+   gst_element_class_set_static_metadata (gstelement_class, "UDP packet sender",
+@@ -1094,6 +1116,10 @@ gst_multiudpsink_set_property (GObject * object, guint prop_id,
+     case PROP_BIND_PORT:
+       udpsink->bind_port = g_value_get_int (value);
+       break;
++    case PROP_ECN:
++      udpsink->ecn = g_value_get_enum (value);
++      gst_multiudpsink_set_ecn (udpsink);
++      break;
+     default:
+       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+       break;
+@@ -1167,6 +1193,11 @@ gst_multiudpsink_get_property (GObject * object, guint prop_id, GValue * value,
+     case PROP_BIND_PORT:
+       g_value_set_int (value, udpsink->bind_port);
+       break;
++#ifdef IP_TOS
++    case PROP_ECN:
++      g_value_set_enum (value, udpsink->ecn);
++      break;
++#endif
+     default:
+       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+       break;
+@@ -1429,6 +1460,8 @@ gst_multiudpsink_start (GstBaseSink * bsink)
+   }
+ #endif
+ 
++  gst_multiudpsink_set_ecn (sink);
++
+   if (sink->used_socket)
+     g_socket_set_broadcast (sink->used_socket, TRUE);
+   if (sink->used_socket_v6)
+@@ -1794,6 +1827,44 @@ not_found:
+   }
+ }
+ 
++static void
++gst_multiudpsink_set_ecn (GstMultiUDPSink * sink)
++{
++  GError *opt_err;
++  gboolean could_set = FALSE;
++#ifdef IP_TOS
++  if (sink->used_socket) {
++    if (!g_socket_set_option (sink->used_socket, IPPROTO_IP, IP_TOS, sink->ecn,
++            &opt_err)) {
++      GST_WARNING_OBJECT (sink, "Could not set IPv4 ECN flag to %s: %s",
++          g_enum_to_string (gst_net_ecn_cp_get_type (), sink->ecn),
++          opt_err->message);
++      g_clear_error (&opt_err);
++    }
++  }
++  could_set = TRUE;
++#endif /* IP_TOS */
++#ifdef IPV6_TCLASS
++  if (sink->used_socket_v6) {
++    if (!g_socket_set_option (sink->used_socket_v6, IPPROTO_IPV6, IPV6_TCLASS,
++            sink->ecn, &opt_err)) {
++      GST_WARNING_OBJECT (sink, "Could not set IPv6 ECN flag to %s: %s",
++          g_enum_to_string (gst_net_ecn_cp_get_type (), sink->ecn),
++          opt_err->message);
++      g_clear_error (&opt_err);
++    }
++  }
++  could_set = TRUE;
++#endif /* IPV6_TCLASS */
++
++  if (!could_set) {
++    GST_WARNING_OBJECT (sink,
++        "Failed to set ECN, it may not be supported on this platform");
++    sink->ecn = GST_NET_ECN_META_NO_ECN;
++    g_object_notify (G_OBJECT (sink), "set-ecn");
++  }
++}
++
+ static gboolean
+ gst_multiudpsink_unlock (GstBaseSink * bsink)
+ {
+diff --git a/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.h b/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.h
+index 6310724ff9..229846f580 100644
+--- a/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.h
++++ b/subprojects/gst-plugins-good/gst/udp/gstmultiudpsink.h
+@@ -23,6 +23,7 @@
+ #include <gst/gst.h>
+ #include <gst/base/gstbasesink.h>
+ #include <gio/gio.h>
++#include <gst/net/gstnetecnmeta.h>
+ 
+ G_BEGIN_DECLS
+ 
+@@ -102,6 +103,8 @@ struct _GstMultiUDPSink {
+   gint           buffer_size;
+   gchar         *bind_address;
+   gint           bind_port;
++
++  GstNetEcnCp    ecn;
+ };
+ 
+ struct _GstMultiUDPSinkClass {
+diff --git a/subprojects/gst-plugins-good/gst/udp/gstudpsrc.c b/subprojects/gst-plugins-good/gst/udp/gstudpsrc.c
+index 428555d252..3a0fd42a4c 100644
+--- a/subprojects/gst-plugins-good/gst/udp/gstudpsrc.c
++++ b/subprojects/gst-plugins-good/gst/udp/gstudpsrc.c
+@@ -118,6 +118,7 @@
+ #include "gstudpsrc.h"
+ 
+ #include <gst/net/gstnetaddressmeta.h>
++#include <gst/net/gstnetecnmeta.h>
+ 
+ #include <gio/gnetworking.h>
+ 
+@@ -507,6 +508,209 @@ gst_socket_timestamp_message_class_init (GstSocketTimestampMessageClass * class)
+ }
+ #endif
+ 
++/* Control messages for Congestion Control */
++#ifdef IP_RECVTOS
++GType gst_ip_tos_message_get_type (void);
++
++#define GST_TYPE_IP_TOS_MESSAGE         (gst_ip_tos_message_get_type ())
++#define GST_IP_TOS_MESSAGE(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), GST_TYPE_IP_TOS_MESSAGE, GstIPTosMessage))
++#define GST_IP_TOS_MESSAGE_CLASS(c)     (G_TYPE_CHECK_CLASS_CAST ((c), GST_TYPE_IP_TOS_MESSAGE, GstIPTosMessageClass))
++#define GST_IS_IP_TOS_MESSAGE(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), GST_TYPE_IP_TOS_MESSAGE))
++#define GST_IS_IP_TOS_MESSAGE_CLASS(c)  (G_TYPE_CHECK_CLASS_TYPE ((c), GST_TYPE_IP_TOS_MESSAGE))
++#define GST_IP_TOS_MESSAGE_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), GST_TYPE_IP_TOS_MESSAGE, GstIPTosMessageClass))
++
++typedef struct _GstIPTosMessage GstIPTosMessage;
++typedef struct _GstIPTosMessageClass GstIPTosMessageClass;
++
++struct _GstIPTosMessageClass
++{
++  GSocketControlMessageClass parent_class;
++
++};
++
++struct _GstIPTosMessage
++{
++  GSocketControlMessage parent;
++
++  GstNetEcnCp ecn_cp;
++};
++
++G_DEFINE_TYPE (GstIPTosMessage, gst_ip_tos_message,
++    G_TYPE_SOCKET_CONTROL_MESSAGE);
++
++static gsize
++gst_ip_tos_message_get_size (GSocketControlMessage * message)
++{
++  return sizeof (struct in_pktinfo);
++}
++
++static int
++gst_ip_tos_message_get_level (GSocketControlMessage * message)
++{
++  return IPPROTO_IP;
++}
++
++static int
++gst_ip_tos_message_get_msg_type (GSocketControlMessage * message)
++{
++  return IP_TOS;
++}
++
++static GSocketControlMessage *
++gst_ip_tos_message_deserialize (gint level,
++    gint type, gsize size, gpointer data)
++{
++  GstIPTosMessage *message;
++  gint *ecnptr;
++
++  if (level != IPPROTO_IP || type != IP_TOS)
++    return NULL;
++
++  if (size != 1)
++    return NULL;
++
++  message = g_object_new (GST_TYPE_IP_TOS_MESSAGE, NULL);
++  ecnptr = (int *) data;
++  message->ecn_cp = (guint8) (*ecnptr & 0x3);
++
++  return G_SOCKET_CONTROL_MESSAGE (message);
++}
++
++static const gchar *
++gst_ip_tos_message_get_ecn_string (GstIPTosMessage * message)
++{
++  switch (message->ecn_cp) {
++    case GST_NET_ECN_META_NO_ECN:
++      return "Non-ECT";
++    case GST_NET_ECN_META_ECT_0:
++      return "ECT(0)";
++    case GST_NET_ECN_META_ECT_1:
++      return "ECT(1)";
++    case GST_NET_ECN_META_ECT_CE:
++      return "CE";
++  }
++  return "Unknown";
++}
++
++static void
++gst_ip_tos_message_init (GstIPTosMessage * message)
++{
++}
++
++static void
++gst_ip_tos_message_class_init (GstIPTosMessageClass * class)
++{
++  GSocketControlMessageClass *scm_class;
++
++  scm_class = G_SOCKET_CONTROL_MESSAGE_CLASS (class);
++  scm_class->get_size = gst_ip_tos_message_get_size;
++  scm_class->get_level = gst_ip_tos_message_get_level;
++  scm_class->get_type = gst_ip_tos_message_get_msg_type;
++  scm_class->deserialize = gst_ip_tos_message_deserialize;
++}
++#endif /* ifdef IP_TOS */
++
++#ifdef IPV6_RECVTCLASS
++GType gst_ipv6_tclass_message_get_type (void);
++
++#define GST_TYPE_IPV6_TCLASS_MESSAGE         (gst_ipv6_tclass_message_get_type ())
++#define GST_IPV6_TCLASS_MESSAGE(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), GST_TYPE_IPV6_TCLASS_MESSAGE, GstIPv6TClassMessage))
++#define GST_IPV6_TCLASS_MESSAGE_CLASS(c)     (G_TYPE_CHECK_CLASS_CAST ((c), GST_TYPE_IPV6_TCLASS_MESSAGE, GstIPv6TClassMessageClass))
++#define GST_IS_IPV6_TCLASS_MESSAGE(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), GST_TYPE_IPV6_TCLASS_MESSAGE))
++#define GST_IS_IPV6_TCLASS_MESSAGE_CLASS(c)  (G_TYPE_CHECK_CLASS_TYPE ((c), GST_TYPE_IPV6_TCLASS_MESSAGE))
++#define GST_IPV6_TCLASS_MESSAGE_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), GST_TYPE_IPV6_TCLASS_MESSAGE, GstIPv6TClassMessageClass))
++
++typedef struct _GstIPv6TClassMessage GstIPv6TClassMessage;
++typedef struct _GstIPv6TClassMessageClass GstIPv6TClassMessageClass;
++
++struct _GstIPv6TClassMessageClass
++{
++  GSocketControlMessageClass parent_class;
++
++};
++
++struct _GstIPv6TClassMessage
++{
++  GSocketControlMessage parent;
++
++  GstNetEcnCp ecn_cp;
++};
++
++G_DEFINE_TYPE (GstIPv6TClassMessage, gst_ipv6_tclass_message,
++    G_TYPE_SOCKET_CONTROL_MESSAGE);
++
++static gsize
++gst_ipv6_tclass_message_get_size (GSocketControlMessage * message)
++{
++  return sizeof (struct in6_pktinfo);
++}
++
++static int
++gst_ipv6_tclass_message_get_level (GSocketControlMessage * message)
++{
++  return IPPROTO_IPV6;
++}
++
++static int
++gst_ipv6_tclass_message_get_msg_type (GSocketControlMessage * message)
++{
++  return IPV6_TCLASS;
++}
++
++static GSocketControlMessage *
++gst_ipv6_tclass_message_deserialize (gint level,
++    gint type, gsize size, gpointer data)
++{
++  GstIPv6TClassMessage *message;
++  gint *ecnptr;
++
++  if (level != IPPROTO_IPV6 || type != IPV6_TCLASS)
++    return NULL;
++
++  if (size != sizeof (int))
++    return NULL;
++
++  message = g_object_new (GST_TYPE_IPV6_TCLASS_MESSAGE, NULL);
++  ecnptr = (int *) data;
++  message->ecn_cp = (guint8) (*ecnptr & 0x3);
++
++  return G_SOCKET_CONTROL_MESSAGE (message);
++}
++
++static const gchar *
++gst_ipv6_tclass_message_get_ecn_string (GstIPv6TClassMessage * message)
++{
++  switch (message->ecn_cp) {
++    case GST_NET_ECN_META_NO_ECN:
++      return "Non-ECT";
++    case GST_NET_ECN_META_ECT_0:
++      return "ECT(0)";
++    case GST_NET_ECN_META_ECT_1:
++      return "ECT(1)";
++    case GST_NET_ECN_META_ECT_CE:
++      return "CE";
++  }
++  return "Unknown";
++}
++
++static void
++gst_ipv6_tclass_message_init (GstIPv6TClassMessage * message)
++{
++}
++
++static void
++gst_ipv6_tclass_message_class_init (GstIPv6TClassMessageClass * class)
++{
++  GSocketControlMessageClass *scm_class;
++
++  scm_class = G_SOCKET_CONTROL_MESSAGE_CLASS (class);
++  scm_class->get_size = gst_ipv6_tclass_message_get_size;
++  scm_class->get_level = gst_ipv6_tclass_message_get_level;
++  scm_class->get_type = gst_ipv6_tclass_message_get_msg_type;
++  scm_class->deserialize = gst_ipv6_tclass_message_deserialize;
++}
++#endif /* ifdef IPV6_TCLASS */
++
+ static gboolean
+ gst_udpsrc_decide_allocation (GstBaseSrc * bsrc, GstQuery * query)
+ {
+@@ -564,6 +768,7 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
+ #define UDP_DEFAULT_BUFFER_SIZE		0
+ #define UDP_DEFAULT_TIMEOUT             0
+ #define UDP_DEFAULT_SKIP_FIRST_BYTES	0
++#define UDP_DEFAULT_ECN                FALSE
+ #define UDP_DEFAULT_CLOSE_SOCKET       TRUE
+ #define UDP_DEFAULT_USED_SOCKET        NULL
+ #define UDP_DEFAULT_AUTO_MULTICAST     TRUE
+@@ -592,6 +797,9 @@ enum
+   PROP_REUSE,
+   PROP_ADDRESS,
+   PROP_LOOP,
++#if defined(IP_RECVTOS) || defined(IPV6_RECVTCLASS)
++  PROP_ECN,
++#endif
+   PROP_RETRIEVE_SENDER_ADDRESS,
+   PROP_MTU,
+   PROP_SOCKET_TIMESTAMP,
+@@ -649,6 +857,12 @@ gst_udpsrc_class_init (GstUDPSrcClass * klass)
+ #ifdef SO_TIMESTAMPNS
+   GST_TYPE_SOCKET_TIMESTAMP_MESSAGE;
+ #endif
++#ifdef IP_TOS
++  GST_TYPE_IP_TOS_MESSAGE;
++#endif
++#ifdef IPV6_TCLASS
++  GST_TYPE_IPV6_TCLASS_MESSAGE;
++#endif
+ 
+   gobject_class->set_property = gst_udpsrc_set_property;
+   gobject_class->get_property = gst_udpsrc_get_property;
+@@ -798,6 +1012,21 @@ gst_udpsrc_class_init (GstUDPSrcClass * klass)
+           UDP_DEFAULT_MULTICAST_SOURCE,
+           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+ 
++  /**
++   * GstUDPsrc:ecn:
++   *
++   * Enable reception of ECN ancillary data on this socket.
++   *
++   * Since: 1.22
++   */
++  g_object_class_install_property (gobject_class, PROP_ECN,
++      g_param_spec_boolean ("retrieve-ecn",
++          "Enable reception of ECN ancillary data on this socket",
++          "Used for receiving ECN codepoints using IP_TOS/IPV6_TCLASS, "
++          "and add it to buffers as meta.",
++          UDP_DEFAULT_ECN, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
++          GST_PARAM_CONDITIONALLY_AVAILABLE));
++
+   gst_element_class_add_static_pad_template (gstelement_class, &src_template);
+ 
+   gst_element_class_set_static_metadata (gstelement_class,
+@@ -840,6 +1069,7 @@ gst_udpsrc_init (GstUDPSrc * udpsrc)
+   udpsrc->loop = UDP_DEFAULT_LOOP;
+   udpsrc->retrieve_sender_address = UDP_DEFAULT_RETRIEVE_SENDER_ADDRESS;
+   udpsrc->mtu = UDP_DEFAULT_MTU;
++  udpsrc->ecn = UDP_DEFAULT_ECN;
+   udpsrc->source_list =
+       g_ptr_array_new_with_free_func ((GDestroyNotify) g_free);
+ 
+@@ -970,6 +1200,10 @@ gst_udpsrc_fill (GstPushSrc * psrc, GstBuffer * outbuf)
+   if (udpsrc->socket_timestamp_mode == GST_SOCKET_TIMESTAMP_MODE_REALTIME)
+     p_msgs = &msgs;
+ #endif
++#if defined(IP_RECVTOS) || defined(IPV6_RECVTCLASS)
++  if (udpsrc->ecn)
++    p_msgs = &msgs;
++#endif /* IP_RECVTOS || IPV6_RECVTCLASS */
+ 
+   /* Retrieve sender address unless we've been configured not to do so */
+   p_saddr = (udpsrc->retrieve_sender_address) ? &saddr : NULL;
+@@ -1158,6 +1392,22 @@ retry:
+               "Failed to get element clock, not setting DTS");
+         }
+       }
++#endif
++#ifdef IP_RECVTOS
++      if (udpsrc->ecn && GST_IS_IP_TOS_MESSAGE (msgs[i])) {
++        GstIPTosMessage *msg = GST_IP_TOS_MESSAGE (msgs[i]);
++        GST_DEBUG_OBJECT (udpsrc, "Received packet with ECN %s (0x%x)",
++            gst_ip_tos_message_get_ecn_string (msg), msg->ecn_cp);
++        gst_buffer_add_net_ecn_meta (outbuf, msg->ecn_cp);
++      }
++#endif
++#ifdef IPV6_RECVTCLASS
++      if (udpsrc->ecn && GST_IS_IPV6_TCLASS_MESSAGE (msgs[i])) {
++        GstIPv6TClassMessage *msg = GST_IPV6_TCLASS_MESSAGE (msgs[i]);
++        GST_DEBUG_OBJECT (udpsrc, "Received packet with ECN %s (0x%x)",
++            gst_ipv6_tclass_message_get_ecn_string (msg), msg->ecn_cp);
++        gst_buffer_add_net_ecn_meta (outbuf, msg->ecn_cp);
++      }
+ #endif
+     }
+ 
+@@ -1441,6 +1691,9 @@ gst_udpsrc_set_property (GObject * object, guint prop_id, const GValue * value,
+       }
+       GST_OBJECT_UNLOCK (udpsrc);
+       break;
++    case PROP_ECN:
++      udpsrc->ecn = g_value_get_boolean (value);
++      break;
+     default:
+       break;
+   }
+@@ -1512,6 +1765,9 @@ gst_udpsrc_get_property (GObject * object, guint prop_id, GValue * value,
+       g_value_set_string (value, udpsrc->multicast_source);
+       GST_OBJECT_UNLOCK (udpsrc);
+       break;
++    case PROP_ECN:
++      g_value_set_boolean (value, udpsrc->ecn);
++      break;
+     default:
+       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+       break;
+@@ -1719,6 +1975,43 @@ gst_udpsrc_open (GstUDPSrc * src)
+     }
+ #endif
+ 
++    if (src->ecn) {
++      GError *opt_err = NULL;
++      GST_DEBUG_OBJECT (src, "Enabling reception of ECN");
++      gboolean could_set = FALSE;
++#ifdef IP_RECVTOS
++      if (g_inet_address_get_family (addr) == G_SOCKET_FAMILY_IPV4) {
++        if (!g_socket_set_option (src->used_socket, IPPROTO_IP, IP_RECVTOS, 1,
++                &opt_err)) {
++          GST_WARNING_OBJECT (src, "Couldn't set IP_RECVTOS to receive ECN: %s",
++              opt_err->message);
++          g_clear_error (&opt_err);
++        } else {
++          could_set = TRUE;
++        }
++      }
++#endif
++#ifdef IPV6_RECVTCLASS
++      if (g_inet_address_get_family (addr) == G_SOCKET_FAMILY_IPV6) {
++        if (!g_socket_set_option (src->used_socket, IPPROTO_IPV6,
++                IPV6_RECVTCLASS, 1, &opt_err)) {
++          GST_WARNING_OBJECT (src,
++              "Couldn't set IPV6_RECVTCLASS to receive ECN: %s",
++              opt_err->message);
++          g_clear_error (&opt_err);
++        } else {
++          could_set = TRUE;
++        }
++      }
++#endif
++      if (!could_set) {
++        GST_WARNING_OBJECT (src,
++            "Failed to set ECN, it may not be available on this platform.");
++        src->ecn = FALSE;
++        g_object_notify (G_OBJECT (src), "retrieve-ecn");
++      }
++    }
++
+     val = gst_udpsrc_get_rcvbuf (src);
+     if (val < src->buffer_size)
+       GST_WARNING_OBJECT (src,
+diff --git a/subprojects/gst-plugins-good/gst/udp/gstudpsrc.h b/subprojects/gst-plugins-good/gst/udp/gstudpsrc.h
+index af713ff95a..ff7cc3641d 100644
+--- a/subprojects/gst-plugins-good/gst/udp/gstudpsrc.h
++++ b/subprojects/gst-plugins-good/gst/udp/gstudpsrc.h
+@@ -95,6 +95,8 @@ struct _GstUDPSrc {
+   /* Initial size of buffers in the buffer pool */
+   guint mtu;
+ 
++  gboolean   ecn;
++
+   /* Extra memory for buffers with a size superior to max_packet_size */
+   GstMemory *extra_mem;
+ 
+diff --git a/subprojects/gstreamer/libs/gst/net/gstnetecnmeta.c b/subprojects/gstreamer/libs/gst/net/gstnetecnmeta.c
+new file mode 100644
+index 0000000000..4a64a6d265
+--- /dev/null
++++ b/subprojects/gstreamer/libs/gst/net/gstnetecnmeta.c
+@@ -0,0 +1,160 @@
++/* GStreamer
++ * Copyright (C) <2022> British Broadcasting Corporation
++ *   Author: Sam Hurst <sam.hurst@bbc.co.uk>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Library General Public
++ * License as published by the Free Software Foundation; either
++ * version 2 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Library General Public License for more details.
++ *
++ * You should have received a copy of the GNU Library General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
++ * Boston, MA 02110-1301, USA.
++ */
++
++/**
++ * SECTION:gstnetecnmeta
++ * @title: GstNetEcnMeta
++ * @short_description: Explicit Congestion Notification metadata
++ *
++ * #GstNetEcnMeta can be used to specify whether congestion was encountered
++ * by a network element when trying to deliver this buffer.
++ */
++#ifdef HAVE_CONFIG_H
++#include "config.h"
++#endif
++
++#include "gstnetecnmeta.h"
++
++GType
++gst_net_ecn_cp_get_type (void)
++{
++  static gsize g_type = 0;
++  static const GEnumValue net_ecn_cp_types[] = {
++    {GST_NET_ECN_META_NO_ECN, "Non ECN-Capable Transport", "Non-ECT"},
++    {GST_NET_ECN_META_ECT_0, "ECN Capable Transport (0)", "ECT-0"},
++    {GST_NET_ECN_META_ECT_1, "ECN Capable Transport (1)", "ECT-1"},
++    {GST_NET_ECN_META_ECT_CE, "Congestion Encountered", "CE"},
++    {0, NULL, NULL}
++  };
++
++  if (g_once_init_enter (&g_type)) {
++    const GType type = g_enum_register_static ("GstNetEcnCp", net_ecn_cp_types);
++    g_once_init_leave (&g_type, type);
++  }
++
++  return g_type;
++}
++
++static gboolean
++net_ecn_meta_init (GstMeta * meta, gpointer params, GstBuffer * buffer)
++{
++  GstNetEcnMeta *ecnmeta = (GstNetEcnMeta *) meta;
++
++  ecnmeta->cp = GST_NET_ECN_META_NO_ECN;
++
++  return TRUE;
++}
++
++static gboolean
++net_ecn_meta_transform (GstBuffer * transbuf, GstMeta * meta,
++    GstBuffer * buffer, GQuark type, gpointer data)
++{
++  GstNetEcnMeta *smeta, *dmeta;
++  smeta = (GstNetEcnMeta *) meta;
++
++  /* Always copy */
++  dmeta = gst_buffer_add_net_ecn_meta (transbuf, smeta->cp);
++  if (!dmeta)
++    return FALSE;
++
++  return TRUE;
++}
++
++static void
++net_ecn_meta_free (GstMeta * meta, GstBuffer * buffer)
++{
++  /* Nothing to free */
++}
++
++GType
++gst_net_ecn_meta_api_get_type (void)
++{
++  static GType type;
++  static const gchar *tags[] = { NULL };
++
++  if (g_once_init_enter (&type)) {
++    GType _type = gst_meta_api_type_register ("GstNetEcnMetaAPI", tags);
++    g_once_init_leave (&type, _type);
++  }
++  return type;
++}
++
++const GstMetaInfo *
++gst_net_ecn_meta_get_info (void)
++{
++  static const GstMetaInfo *meta_info = NULL;
++
++  if (g_once_init_enter ((GstMetaInfo **) & meta_info)) {
++    const GstMetaInfo *mi = gst_meta_register (GST_NET_ECN_META_API_TYPE,
++        "GstNetEcnMeta",
++        sizeof (GstNetEcnMeta),
++        net_ecn_meta_init,
++        net_ecn_meta_free,
++        net_ecn_meta_transform);
++    g_once_init_leave ((GstMetaInfo **) & meta_info, (GstMetaInfo *) mi);
++  }
++  return meta_info;
++}
++
++/**
++ * gst_buffer_add_net_ecn_meta:
++ * @buffer a #GstBuffer
++ * @cp: a @GstNetEcnCp ECN codepoint to connect to @buffer
++ *
++ * Attaches @cp as metadata in a #GstNetEcnMeta to @buffer.
++ *
++ * Returns: (transfer none): a #GstNetEcnMeta connected to @buffer
++ *
++ * Since: 1.22
++ */
++GstNetEcnMeta *
++gst_buffer_add_net_ecn_meta (GstBuffer * buffer, GstNetEcnCp cp)
++{
++  GstNetEcnMeta *meta;
++
++  g_return_val_if_fail (GST_IS_BUFFER (buffer), NULL);
++  g_return_val_if_fail (cp >= GST_NET_ECN_META_NO_ECN, NULL);
++  g_return_val_if_fail (cp <= GST_NET_ECN_META_ECT_CE, NULL);
++
++  meta = (GstNetEcnMeta *) gst_buffer_add_meta (buffer,
++      GST_NET_ECN_META_INFO, NULL);
++
++  meta->cp = cp;
++
++  return meta;
++}
++
++/**
++ * gst_buffer_get_net_ecn_meta:
++ * @buffer: a #GstBuffer
++ *
++ * Find the #GstNetEcnMeta on @buffer.
++ *
++ * Returns: (transfer none): the #GstNetEcnMeta or %NULL when there
++ * is no such metadata on @buffer.
++ *
++ * Since: 1.22
++ */
++GstNetEcnMeta *
++gst_buffer_get_net_ecn_meta (GstBuffer * buffer)
++{
++  return (GstNetEcnMeta *) gst_buffer_get_meta (buffer,
++      GST_NET_ECN_META_API_TYPE);
++}
+diff --git a/subprojects/gstreamer/libs/gst/net/gstnetecnmeta.h b/subprojects/gstreamer/libs/gst/net/gstnetecnmeta.h
+new file mode 100644
+index 0000000000..8128d7d060
+--- /dev/null
++++ b/subprojects/gstreamer/libs/gst/net/gstnetecnmeta.h
+@@ -0,0 +1,87 @@
++/* GStreamer
++ * Copyright (C) <2022> British Broadcasting Corporation
++ *   Author: Sam Hurst <sam.hurst@bbc.co.uk>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Library General Public
++ * License as published by the Free Software Foundation; either
++ * version 2 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Library General Public License for more details.
++ *
++ * You should have received a copy of the GNU Library General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
++ * Boston, MA 02110-1301, USA.
++ */
++
++#ifndef __GST_NET_ECN_META_H__
++#define __GST_NET_ECN_META_H__
++
++#include <gst/gst.h>
++#include <gst/net/net-prelude.h>
++
++G_BEGIN_DECLS
++
++typedef struct _GstNetEcnMeta GstNetEcnMeta;
++
++/**
++ * GstNetEcnCp:
++ * @GST_NET_ECN_META_NO_ECN: Non ECN-capable transport
++ * @GST_NET_ECN_META_ECT_1: ECN Capable Transport, ECT(1)
++ * @GST_NET_ECN_META_ECT_0: ECN Capable Transport, ECT(0)
++ * @GST_NET_ECN_META_ECT_CE: Congestion Encountered, CE
++ *
++ * ECN codepoints.
++ *
++ * Since: 1.22
++ */
++typedef enum _GstNetEcnCp {
++  GST_NET_ECN_META_NO_ECN = 0x0,
++  GST_NET_ECN_META_ECT_1  = 0x1,
++  GST_NET_ECN_META_ECT_0  = 0x2,
++  GST_NET_ECN_META_ECT_CE = 0x3
++} GstNetEcnCp;
++
++GST_NET_API
++GType gst_net_ecn_cp_get_type (void);
++#define GST_NET_ECN_CP_TYPE (gst_net_ecn_cp_get_type())
++
++/**
++ * GstNetEcnMeta:
++ * @meta: the parent type
++ * @cp: The ECN CP for the received buffer
++ *
++ * Buffer metadata for Explicit Congestion Notification on received buffers
++ *
++ * Since: 1.22
++ */
++struct _GstNetEcnMeta {
++  GstMeta meta;
++
++  GstNetEcnCp cp;
++};
++
++GST_NET_API
++GType gst_net_ecn_meta_api_get_type (void);
++#define GST_NET_ECN_META_API_TYPE (gst_net_ecn_meta_api_get_type())
++
++/* implementation */
++
++GST_NET_API
++const GstMetaInfo *gst_net_ecn_meta_get_info (void);
++#define GST_NET_ECN_META_INFO (gst_net_ecn_meta_get_info())
++
++GST_NET_API
++GstNetEcnMeta * gst_buffer_add_net_ecn_meta (GstBuffer   *buffer,
++                                             GstNetEcnCp cp);
++
++GST_NET_API
++GstNetEcnMeta * gst_buffer_get_net_ecn_meta (GstBuffer   *buffer);
++
++G_END_DECLS
++
++#endif /* __GST_NET_ECN_META_H__ */
+diff --git a/subprojects/gstreamer/libs/gst/net/meson.build b/subprojects/gstreamer/libs/gst/net/meson.build
+index 17c63c8e1a..df061a2aab 100644
+--- a/subprojects/gstreamer/libs/gst/net/meson.build
++++ b/subprojects/gstreamer/libs/gst/net/meson.build
+@@ -2,6 +2,7 @@ gst_net_sources = files(
+   'gstnetaddressmeta.c',
+   'gstnetclientclock.c',
+   'gstnetcontrolmessagemeta.c',
++  'gstnetecnmeta.c',
+   'gstnettimepacket.c',
+   'gstnettimeprovider.c',
+   'gstptpclock.c',
+@@ -14,6 +15,7 @@ gst_net_headers = files(
+  'gstnetaddressmeta.h',
+  'gstnetclientclock.h',
+  'gstnetcontrolmessagemeta.h',
++ 'gstnetecnmeta.h',
+  'gstnettimepacket.h',
+  'gstnettimeprovider.h',
+  'gstnetutils.h',

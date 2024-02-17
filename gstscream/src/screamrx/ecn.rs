@@ -1,8 +1,8 @@
 #![cfg(feature = "ecn-enabled")]
-use gstreamer_sys::GstMeta;
+use gst_sys::GstMeta;
 use libc::c_int;
 // use glib::{gboolean, gconstpointer, gpointer, Type};
-use glib_sys::GType;
+use gtypes::GType;
 // Enums
 pub type GstNetEcnCp = c_int;
 

@@ -6,18 +6,11 @@ use std::env;
 
 extern crate gtypes;
 
-use crate::gst::glib::Cast;
-use glib::ObjectExt;
-
-extern crate gstreamer_video as gstv;
-use crate::gst::prelude::ElementExt;
-use crate::gstv::prelude::GstBinExt;
-use crate::gstv::prelude::GstObjectExt;
+use gst::glib;
+use gst::glib::prelude::*;
+use gst::prelude::*;
 
 extern crate chrono;
-
-// #[macro_use]
-extern crate gstreamer as gst;
 
 fn main() {
     gst::init().expect("Failed to initialize");
@@ -30,7 +23,7 @@ fn main() {
 pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
     let pls: String = env::var("RECVPIPELINE").unwrap();
     println!("RECVPIPELINE={}", pls);
-    let pipeline = gst::parse_launch(&pls).unwrap();
+    let pipeline = gst::parse::launch(&pls).unwrap();
 
     let pipeline = pipeline.downcast::<gst::Pipeline>().unwrap();
     let pipeline_clone = pipeline.clone();
@@ -67,8 +60,7 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
                 }
                 _ => (),
             };
-
-            glib::Continue(true)
+            glib::ControlFlow::Continue
         })
         .expect("failed to add bus watch");
 

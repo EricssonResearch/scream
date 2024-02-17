@@ -1,4 +1,5 @@
-use glib::prelude::*;
+use gst::glib;
+use gst::glib::prelude::*;
 
 mod imp;
 
@@ -19,7 +20,7 @@ pub fn register(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     gst::Element::register(
         Some(plugin),
         "screamtx",
-        gst::Rank::None,
+        gst::Rank::NONE,
         Screamtx::static_type(),
     )
 }

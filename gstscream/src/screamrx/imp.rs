@@ -1,17 +1,11 @@
 #![allow(clippy::uninlined_format_args)]
-use glib::subclass::prelude::*;
+use gst::glib;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
-
-use crate::gst::prelude::PadExtManual;
 
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
-
-pub use gstreamer_rtp::rtp_buffer::compare_seqnum;
-pub use gstreamer_rtp::rtp_buffer::RTPBuffer;
-pub use gstreamer_rtp::rtp_buffer::RTPBufferExt;
 
 use once_cell::sync::Lazy;
 
@@ -41,6 +35,34 @@ pub static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
     )
 });
 
+/*
+pub unsafe fn get_qdata<QD: 'static>(buffer: gst::Buffer, key: glib::Quark) -> Option<&QD> {
+    struct GstQuark(glib::ffi::GQuark);
+    let key: GstQuark = std::mem::transmute(key);
+    let ptr =
+        glib::ffi::gst_mini_object_get_qdata(buffer.as_ptr() as *mut glib::ffi::GstMiniObject, key.0);
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&*(ptr as *const QD))
+    }
+}
+*/
+
+#[cfg(not(feature = "ecn-enabled"))]
+pub unsafe fn get_tos(buffer: &gst::Buffer) -> u32 {
+    struct GstQuark(glib::ffi::GQuark);
+    let quark = glib::Quark::from_str("TOS");
+    let key: GstQuark = std::mem::transmute(quark);
+    let ptr =
+        gst_sys::gst_mini_object_get_qdata(buffer.as_ptr() as *mut gst_sys::GstMiniObject, key.0);
+    if ptr.is_null() {
+        0
+    } else {
+        ptr as *const _ as u32
+    }
+}
+
 impl Screamrx {
     // Called whenever a new buffer is passed to our sink pad. Here buffers should be processed and
     // whenever some output buffer is available have to push it out of the source pad.
@@ -54,8 +76,10 @@ impl Screamrx {
         _element: &super::Screamrx,
         buffer: gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
-        let Ok(rtp_buffer) = RTPBuffer::from_buffer_readable(&buffer) else {
-            trace!(
+        let ecn_ce: u8;
+        // gstreamer::trace!(CAT, obj: pad, "gstscream Handling buffer {:?}", buffer);
+        let Ok(rtp_buffer) = gst_rtp::RTPBuffer::from_buffer_readable(&buffer) else {
+            gst::trace!(
                 CAT,
                 obj: pad,
                 "gstscream receiving not rtp packet");
@@ -67,21 +91,17 @@ impl Screamrx {
         let ssrc = rtp_buffer.ssrc();
         let marker = rtp_buffer.is_marker();
         drop(rtp_buffer);
-        #[cfg(not(feature = "ecn-enabled"))]
-        let ecn_ce: u8 = 0;
-        #[cfg(feature = "ecn-enabled")]
-        let ecn_ce: u8;
         #[cfg(feature = "ecn-enabled")]
         {
             let ecn_meta: *mut ecn::GstNetEcnMeta;
             unsafe {
-                ecn_meta = gstreamer_sys::gst_buffer_get_meta(
+                ecn_meta = gst_sys::gst_buffer_get_meta(
                     buffer.as_mut_ptr(),
                     ecn::gst_net_ecn_meta_api_get_type(),
                 ) as *mut ecn::GstNetEcnMeta;
             }
             if ecn_meta.is_null() {
-                gstreamer::debug!(CAT, obj: pad, "Buffer did not contain an ECN meta");
+                gst::debug!(CAT, obj: pad, "Buffer did not contain an ECN meta");
                 ecn_ce = 0_u8;
             } else {
                 unsafe {
@@ -89,9 +109,15 @@ impl Screamrx {
                 }
             }
         }
+        #[cfg(not(feature = "ecn-enabled"))]
+        #[cfg(not(feature = "ecn-enabled"))]
+        {
+            let tos = unsafe { get_tos(&buffer) };
+            ecn_ce = (tos & 0x3).try_into().unwrap();
+        }
 
         let size: u32 = buffer.size().try_into().unwrap();
-        trace!(
+        gst::trace!(
             CAT,
             obj: pad,
             "gstscream Handling rtp buffer seq {} ssrc {}, payload_type {} timestamp {} marker {} ecn_ce {} ",
@@ -118,7 +144,7 @@ impl Screamrx {
     // See the documentation of gst::Event and gst::EventRef to see what can be done with
     // events, and especially the gst::EventView type for inspecting events.
     fn sink_event(&self, pad: &gst::Pad, _element: &super::Screamrx, event: gst::Event) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream Handling event {:?} {:?}",
@@ -163,7 +189,7 @@ impl Screamrx {
         _element: &super::Screamrx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
+        gst::log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
         self.srcpad.peer_query(query)
     }
 
@@ -176,7 +202,7 @@ impl Screamrx {
     // See the documentation of gst::Event and gst::EventRef to see what can be done with
     // events, and especially the gst::EventView type for inspecting events.
     fn src_event(&self, pad: &gst::Pad, _element: &super::Screamrx, event: gst::Event) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream src Handling event {:?} {:?}",
@@ -192,7 +218,7 @@ impl Screamrx {
         _element: &super::Screamrx,
         event: gst::Event,
     ) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream rtcp_src Handling event {:?} {:?}",
@@ -208,7 +234,7 @@ impl Screamrx {
         _element: &super::Screamrx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        log!(
+        gst::log!(
             CAT,
             obj: pad,
             "gstscream Handling rtcp src_query {:?}",
@@ -232,7 +258,7 @@ impl Screamrx {
         _element: &super::Screamrx,
         query: &mut gst::QueryRef,
     ) -> bool {
-        log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
+        gst::log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
         self.sinkpad.peer_query(query)
     }
 }
@@ -460,11 +486,11 @@ impl ElementImpl for Screamrx {
             gst::StateChange::NullToReady => {
                 {
                     let mut screamrx = self.lib_data.lock().unwrap();
-                    log!(CAT, "screamrx.ScreamReceiverPluginInit()");
+                    gst::log!(CAT, "screamrx.ScreamReceiverPluginInit()");
                     screamrx.ScreamReceiverPluginInit(self.rtcp_srcpad.clone());
                 }
                 let element = self.obj();
-                debug!(CAT, imp: self, "Waiting for 1s before retrying");
+                gst::debug!(CAT, imp: self, "Waiting for 1s before retrying");
                 let clock = gst::SystemClock::obtain();
                 let wait_time = clock.time().unwrap() + gst::ClockTime::SECOND;
                 let mut clock_wait = self.clock_wait.lock().unwrap();
@@ -493,7 +519,7 @@ impl ElementImpl for Screamrx {
             _ => (),
         }
 
-        trace!(CAT, imp: self, "Changing state {:?}", transition);
+        gst::trace!(CAT, imp: self, "Changing state {:?}", transition);
         // Call the parent class' implementation of ::change_state()
         self.parent_change_state(transition)
     }

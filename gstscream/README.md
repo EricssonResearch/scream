@@ -10,11 +10,14 @@
 ./scripts/build.sh
 ```
 
-# Environment Variables
+# Environment Variables are set in script/env.sh
 ```bash
 export SENDER_STATS_TIMER=500               # default 1000 ms
 export SENDER_STATS_FILE_NAME="xxx.csv"     # default sender_scream_stats.csv
 ```
+See script/env.sh to set  
+ECN_ENABLED, USE_SCREAM, SENDER_IP, RECEIVER_IP, ENCODER, DECODER, ENC_ID  
+
 # Tuning  Linux system 
 ```bash
 sudo ./scripts/sysctl.sh 
@@ -40,23 +43,30 @@ sudo ./scripts/sysctl.sh
 # second window
 ./scripts/sender_bw.sh
 ```
+# __Be aware of legal implications of using software build with gpl=enabled__
+
 # Modifying gstreamer to use L4S
 Based on patch [https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/2717]  
 ```bash
 cd scream/..
 git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git
 cd gstreamer
-# to build x264, you might want to add   -Dgst-plugins-ugly:x264=enabled to meson setup
-meson setup --prefix=/path/to/install/prefix builddir
-meson compile -C builddir
-patch -p1 < <2717.patch
-# manually modify gstnvbaseenc.c to fix issue with  nvenc bitrate changes run time [https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189]
-meson compile -C builddir
-meson install -C builddir
+meson setup \
+   --prefix==/path/to/install/prefix build
+
+# to build x264, you might want to add to meson setup
+-Dgst-plugins-ugly:x264=enabled -Dgpl=enabled  
+
+meson compile -C build
+patch -p1 < scream/gstscream/udp_ecn_diff.txt
+# manually modify gstnvbaseenc.c to fix issue with  nvenc bitrate changes run time 
+# [https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189]
+meson compile -C build
+meson install -C build
 ```
 # Build and run with modified gstreamer
-## Modify scripts/ecn_env.sh 
-ECN_ENABLED=1
+## Modify scripts/env.sh 
+set ECN_ENABLED=1
 Make sure that MY_GST_INSTALL points to the correct install directory.
 ## Build
 ./scripts/build.sh
