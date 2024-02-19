@@ -10,7 +10,6 @@ use std::sync::Mutex;
 
 extern crate array_init;
 use hashbrown::HashMap;
-use libc::timeval;
 use once_cell::sync::Lazy;
 
 use crate::screamrx::imp::CAT;
@@ -570,27 +569,16 @@ impl ScreamRx {
         true
     }
 }
+/*
+static t0: Lazy<std::time::Instant> = Lazy::new(||
+    std::time::Instant::now()
+);
+*/
 
-static t0: Lazy<f64> = Lazy::new(|| unsafe {
-    let mut tp: timeval = timeval {
-        tv_sec: 0,
-        tv_usec: 0,
-    };
-    let raw_mut = &mut tp as *mut timeval;
-    libc::gettimeofday(raw_mut, std::ptr::null_mut());
-    ((tp.tv_sec as f64) + (tp.tv_usec as f64) * 1e-6) - 1e-3
-});
+static t0: Lazy<std::time::Instant> = Lazy::new(std::time::Instant::now);
 
 pub fn getTimeInNtp() -> u32 {
-    unsafe {
-        let mut tp: timeval = timeval {
-            tv_sec: 0,
-            tv_usec: 0,
-        };
-        let raw_mut = &mut tp as *mut timeval;
-        libc::gettimeofday(raw_mut, std::ptr::null_mut());
-        let time: f64 = (tp.tv_sec as f64 + tp.tv_usec as f64 * 1e-6) - *t0;
-        let ntp64: u64 = (time * 65536.0) as u64;
-        (0xFFFFFFFF & ntp64) as u32 // NTP in Q16
-    }
+    let time = t0.elapsed().as_secs_f64();
+    let ntp64: u64 = (time * 65536.0) as u64;
+    (0xFFFFFFFF & ntp64) as u32 // NTP in Q16
 }

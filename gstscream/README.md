@@ -5,7 +5,9 @@
 [gstreamer](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c)
 
 # Building gstscream and sample applications
-
+Should be possible to build and run on Windows (not tested)  
+However  SCReAM BW  can't be built for Windows.  
+Therefore modify build.sh to remove --features screamtxbw-enabled
 ```bash
 ./scripts/build.sh
 ```

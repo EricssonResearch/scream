@@ -3,7 +3,7 @@ use gst::glib;
 mod screamrx;
 #[cfg(not(feature = "screamrx-only"))]
 mod screamtx;
-#[cfg(not(feature = "screamrx-only"))]
+#[cfg(all(not(feature = "screamrx-only"), feature = "screamtxbw-enabled"))]
 mod screamtxbw;
 
 // Plugin entry point that should register all elements provided by this plugin,
@@ -11,7 +11,7 @@ mod screamtxbw;
 fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     #[cfg(not(feature = "screamrx-only"))]
     screamtx::register(plugin)?;
-    #[cfg(not(feature = "screamrx-only"))]
+    #[cfg(all(not(feature = "screamrx-only"), feature = "screamtxbw-enabled"))]
     screamtxbw::register(plugin)?;
     screamrx::register(plugin)?;
     Ok(())

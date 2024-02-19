@@ -43,5 +43,6 @@ gst-plugin-version-helper = { git = "https://gitlab.freedesktop.org/gstreamer/gs
 [features]
 screamrx-only = []
 ecn-enabled = []
+screamtxbw-enabled = []
 
 default = []
