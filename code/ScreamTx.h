@@ -100,7 +100,7 @@ extern "C" {
 	static const int kQueueDelayNormHistSizeSh = 50;
 	static const int kQueueDelayFractionHistSize = 20;
 	static const int kBytesInFlightHistSizeMax = 60;
-	static const int kRateUpDateSize = 8;
+	static const int kRateUpDateSize = 4;
 	static const int kTargetBitrateHistSize = 3;
 	static const int kLossRateHistSize = 10;
 	static const int kSrttHistBins = 200;
@@ -1263,6 +1263,7 @@ extern "C" {
 			uint64_t packetsCe;     // Number of Ce marked packets
 			int bytesCe;            // Number of Ce marked bytes
 			float rateTransmitted;  // Transmitted rate
+			float rateTransmittedAvg;// Transmitted rate
 			float rateAcked;        // ACKed rate
 			float rateLost;         // Lost packets (bit)rate
 			float rateCe;           // Ce marked packets (bit)rate

@@ -332,10 +332,10 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 			streams[n]->updateRate(time_ntp);
 			rateTransmitted += streams[n]->rateTransmitted;
 			rateRtpAvg += streams[n]->rateRtpAvg;
-			rateTransmittedAvg = 0.9f * rateTransmittedAvg + 0.1f * rateTransmitted;
 			if (n == 0)
 				statistics->add(streams[0]->rateTransmitted, streams[0]->rateLost, streams[0]->rateCe, sRtt, queueDelay);
 		}
+		rateTransmittedAvg = 0.8f * rateTransmittedAvg + 0.2f * rateTransmitted;
 		lastRateUpdateT_ntp = time_ntp;
 
 		/*
@@ -768,7 +768,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		if (fp_log && completeLogItem) {
 			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d",
-				cwnd, bytesInFlight, 0, rateTransmitted, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtp, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe, isMark);
+				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe, isMark);
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
 			}
@@ -996,7 +996,7 @@ void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 	int inFlightMax = bytesInFlight;
 	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
 		logTag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
-		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, 0);
+		cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f, 0);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
@@ -1009,9 +1009,9 @@ void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
 			tmp->rtpQueue->bytesInQueue(),
 			tmp->rtpQueue->sizeOfQueue(),
-			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
+			tmp->targetBitrate / 1000.0f, tmp->rateRtpAvg / 1000.0f,
 			tmp->packetsRtp,
-			tmp->rateTransmitted / 1000.0f, tmp->rateAcked / 1000.0f,
+			tmp->rateTransmittedAvg / 1000.0f, tmp->rateAcked / 1000.0f,
 			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f,
 			tmp->packetsCe,
 			tmp->hiSeqTx,
@@ -1033,7 +1033,7 @@ void ScreamV2Tx::getShortLog(float time, char* s) {
 	int inFlightMax = bytesInFlight;
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
 		logTag, queueDelay, sRtt,
-		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, 0);
+		cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f, 0);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
@@ -1041,8 +1041,8 @@ void ScreamV2Tx::getShortLog(float time, char* s) {
 		char s2[200];
 		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f,",
 			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
-			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
-			tmp->rateTransmitted / 1000.0f,
+			tmp->targetBitrate / 1000.0f, tmp->rateRtpAvg / 1000.0f,
+			tmp->rateTransmittedAvg / 1000.0f,
 			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
 		strcat(s, s2);
 	}
@@ -1052,7 +1052,7 @@ void ScreamV2Tx::getVeryShortLog(float time, char* s) {
 	int inFlightMax = bytesInFlight;
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, ",
 		logTag, queueDelay, sRtt,
-		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f);
+		cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < 1; n++) {
@@ -1072,7 +1072,7 @@ float ScreamV2Tx::getQualityIndex(float time, float thresholdRate, float rttMin)
 	*  experienced quality e.g in remote control applications.
 	* Note that this is not a MOS score!.
 	*/
-	float qualityIndex = std::max(0.0f, std::min(1.0f, (rateTransmitted - thresholdRate * 0.1f) / (thresholdRate * 0.9f)));
+	float qualityIndex = std::max(0.0f, std::min(1.0f, (rateTransmittedAvg - thresholdRate * 0.1f) / (thresholdRate * 0.9f)));
 	qualityIndex *= std::max(0.0f, (0.1f - streams[0]->rtpQueue->getDelay(time)) / 0.1f);
 	qualityIndex *= std::max(0.0f, std::min(1.0f, (4 * rttMin - (sRtt - rttMin)) / (4 * rttMin)));
 	return qualityIndex * 100.0f;

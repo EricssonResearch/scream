@@ -40,6 +40,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	hiSeqAck = 0;
 	hiSeqTx = 0;
 	rateTransmitted = 0.0f;
+	rateTransmittedAvg = 0.0f;
 	rateAcked = 0.0f;
 	rateLost = 0.0f;
 	rateCe = 0.0f;
@@ -101,6 +102,7 @@ void ScreamV2Tx::Stream::updateRate(uint32_t time_ntp) {
 		numberOfUpdateRate++;
 		float tDelta = (time_ntp - lastRateUpdateT_ntp) * ntp2SecScaleFactor;
 		rateTransmitted = bytesTransmitted * 8.0f / tDelta;
+		rateTransmittedAvg = 0.8f * rateTransmittedAvg + 0.2f * rateTransmitted;
 		rateAcked = bytesAcked * 8.0f / tDelta;
 		rateLost = bytesLost * 8.0f / tDelta;
 		rateCe = bytesCe * 8.0f / tDelta;
