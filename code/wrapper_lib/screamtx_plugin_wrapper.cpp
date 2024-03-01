@@ -53,8 +53,6 @@ stream_t *addStream(uint32_t ssrc) {
  	return NULL;
 }
 
-using namespace std;
-
 #define BUFSIZE 2048
 
 float minPaceInterval = 0.002f;
@@ -246,13 +244,13 @@ int verbose = 0;
  * Print current encoder rates
  */
 void EncoderRates(void) {
-    cout << " encoder_rate " ;
+    std::cout << " encoder_rate " ;
  	for (int n = 0; n < kMaxStreams; n++) {
  		if (streams[n].ssrc != 0) {
-            cout  << " " << (streams[n].encoder_rate /1000) << " " ;
+            std::cout  << " " << (streams[n].encoder_rate /1000) << " " ;
  		}
  	}
-    cout  << "kbbps ";
+    std::cout  << "kbbps ";
 }
 void *
 statsPrintThread(void *arg)
@@ -263,17 +261,17 @@ statsPrintThread(void *arg)
         bool isFeedback = time_ntp - rtcp_rx_time_ntp < 65536; // 1s in Q16
         if ((printSummary || !isFeedback) && time_ntp - lastLogT_ntp > 2*65536) { // 2s in Q16
             if (!isFeedback) {
-                cerr << "No RTCP feedback received" << endl;
+                std::cerr << "No RTCP feedback received" << std::endl;
             } else {
                 float time_s = time_ntp/65536.0f;
                 char s[1000];
                 screamTx->getStatistics(time_s, s);
                 if (sierraLog)
-                    cout << s << endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << endl << endl;
+                    std::cout << s << std::endl << "      CellId, RSRP, RSSI, SINR: {" << sierraLogString << "}" << std::endl << std::endl;
                 else
-                    cout << s ;
+                    std::cout << s ;
                 EncoderRates();
-                cout << endl;
+                std::cout << std::endl;
 
             }
             lastLogT_ntp = time_ntp;
@@ -287,18 +285,18 @@ statsPrintThread(void *arg)
                     screamTx->getVeryShortLog(time_s, s1);
                 } else {
                     screamTx->getLogHeader(s1);
-                    cout << s1 << endl;
+                    std::cout << s1 << std::endl;
                     screamTx->getLog(time_s, s1, 0, false);
                     sprintf(s,"%8.3f,%s ", time_s, s1);
-                    cout << s << " ";
+                    std::cout << s << " ";
                     EncoderRates();
-                    cout << endl;
+                    std::cout << std::endl;
                     screamTx->getShortLog(time_s, s1);
                 }
                 sprintf(s,"%8.3f, %s ", time_s, s1);
-                cout << s;
+                std::cout << s;
                 EncoderRates();
-                cout << endl;
+                std::cout << std::endl;
                 /*
                  * Send statistics to receiver this can be used to
                  * verify reliability of remote control
@@ -334,88 +332,88 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
   */
   if (argc <= 1) {
                     #ifdef V2
-                    cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-12-07 " << endl;
-                    cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
-                    cerr << "     -if name                 bind to specific interface" << endl;
-                    cerr << "     -time value              run for time seconds (default infinite)" << endl;
-                    cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
-                    cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
-                    cerr << "     -nopace                  disable packet pacing" << endl;
-                    cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
-                    cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
-                    cerr << "                                must be used with -fixedrate option" << endl;
-                    cerr << "     -key val1 val2           set a given key frame interval [s] and size multiplier " << endl;
-                    cerr << "                               example -key 2.0 5.0 " << endl;
-                    cerr << "     -rand value              framesizes vary randomly around the nominal " << endl;
-                    cerr << "                               example -rand 10 framesize vary +/- 10% " << endl;
-                    cerr << "     -initrate value          set a start bitrate [kbps]" << endl;
-                    cerr << "                               example -initrate 2000 " << endl;
-                    cerr << "     -minrate  value          set a min bitrate [kbps], default 1000kbps" << endl;
-                    cerr << "                               example -minrate 1000 " << endl;
-                    cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << endl;
-                    cerr << "                               example -maxrate 10000 " << endl;
-                    cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
-                    cerr << "                               -1 for not-ECT (default)" << endl;
-                    cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << endl;
-                    cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
-                    cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << endl;
-                    cerr << "     -adaptivepaceheadroom value set adaptive packet pacing headroom (default = 1.5) " << endl;
-                    cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << endl;
-                    cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << endl;
-                    cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << endl;
-                    cerr << "     -mtu value               set the max RTP payload size (default 1200 byte)" << endl;
-                    cerr << "     -fps value               set the frame rate (default 50)" << endl;
-                    cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
-                    cerr << "                               receiver end clock is faster" << endl;
-                    cerr << "     -verbose                 print a more extensive log" << endl;
-                    cerr << "     -nosummary               don't print summary" << endl;
-                    cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
-                    cerr << "     -ntp                     use NTP timestamp in logfile" << endl;
-                    cerr << "     -append                  append logfile" << endl;
-                    cerr << "     -itemlist                add item list in beginning of log file" << endl;
-                    cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
-                    cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << endl;
-                    cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 1ms)" << endl;
-                    cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
-                    cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+                    std::cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2023-12-07 " << std::endl;
+                    std::cerr << "Usage : " << std::endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << std::endl;
+                    std::cerr << "     -if name                 bind to specific interface" << std::endl;
+                    std::cerr << "     -time value              run for time seconds (default infinite)" << std::endl;
+                    std::cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << std::endl;
+                    std::cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << std::endl;
+                    std::cerr << "     -nopace                  disable packet pacing" << std::endl;
+                    std::cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << std::endl;
+                    std::cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << std::endl;
+                    std::cerr << "                                must be used with -fixedrate option" << std::endl;
+                    std::cerr << "     -key val1 val2           set a given key frame interval [s] and size multiplier " << std::endl;
+                    std::cerr << "                               example -key 2.0 5.0 " << std::endl;
+                    std::cerr << "     -rand value              framesizes vary randomly around the nominal " << std::endl;
+                    std::cerr << "                               example -rand 10 framesize vary +/- 10% " << std::endl;
+                    std::cerr << "     -initrate value          set a start bitrate [kbps]" << std::endl;
+                    std::cerr << "                               example -initrate 2000 " << std::endl;
+                    std::cerr << "     -minrate  value          set a min bitrate [kbps], default 1000kbps" << std::endl;
+                    std::cerr << "                               example -minrate 1000 " << std::endl;
+                    std::cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << std::endl;
+                    std::cerr << "                               example -maxrate 10000 " << std::endl;
+                    std::cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << std::endl;
+                    std::cerr << "                               -1 for not-ECT (default)" << std::endl;
+                    std::cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << std::endl;
+                    std::cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << std::endl;
+                    std::cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << std::endl;
+                    std::cerr << "     -adaptivepaceheadroom value set adaptive packet pacing headroom (default = 1.5) " << std::endl;
+                    std::cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << std::endl;
+                    std::cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << std::endl;
+                    std::cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << std::endl;
+                    std::cerr << "     -mtu value               set the max RTP payload size (default 1200 byte)" << std::endl;
+                    std::cerr << "     -fps value               set the frame rate (default 50)" << std::endl;
+                    std::cerr << "     -clockdrift              enable clock drift compensation for the case that the" << std::endl;
+                    std::cerr << "                               receiver end clock is faster" << std::endl;
+                    std::cerr << "     -verbose                 print a more extensive log" << std::endl;
+                    std::cerr << "     -nosummary               don't print summary" << std::endl;
+                    std::cerr << "     -log logfile             save detailed per-ACK log to file" << std::endl;
+                    std::cerr << "     -ntp                     use NTP timestamp in logfile" << std::endl;
+                    std::cerr << "     -append                  append logfile" << std::endl;
+                    std::cerr << "     -itemlist                add item list in beginning of log file" << std::endl;
+                    std::cerr << "     -detailed                detailed log, per ACKed RTP" << std::endl;
+                    std::cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << std::endl;
+                    std::cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 1ms)" << std::endl;
+                    std::cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << std::endl;
+                    std::cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << std::endl;
 #else
-    cerr << "SCReAM sender. Ericsson AB. Version 2020-12-17" << endl;
-    cerr << "Usage : " << endl << " > scream_tx <options>  " << endl;
-    cerr << "     -initrate value       set a start bitrate [kbps]" << endl;
-    cerr << "                            example -initrate 2000 " << endl;
-    cerr << "     -minrate  value       set a min bitrate [kbps], default 1000kbps" << endl;
-    cerr << "                            example -minrate 1000 " << endl;
-    cerr << "     -maxrate value        set a max bitrate [kbps], default 200000kbps" << endl;
-    cerr << "                            example -maxrate 10000 " << endl;
-    cerr << "     -rateincrease value   set a max allowed rate increase speed [kbps/s]," << endl;
-    cerr << "                            default 10000kbps/s" << endl;
-    cerr << "                            example -rateincrease 1000 " << endl;
-    cerr << "     -priority  value      set stream priorities" << endl;
-    cerr << "     -ratescale value      set a max allowed rate increase speed as a fraction of the " << endl;
-    cerr << "                            current rate, default 0.5" << endl;
-    cerr << "                            example -ratescale 1.0 " << endl;
-    cerr << "     -ect n                ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
-    cerr << "                            -1 for not-ECT (default)" << endl;
-    cerr << "     -scale value          scale factor in case of loss or ECN event (default 0.9) " << endl;
-    cerr << "     -dscale value         scale factor in case of increased delay (default 10.0) " << endl;
-    cerr << "     -delaytarget value    set a queue delay target (default = 0.06s) " << endl;
-    cerr << "     -paceheadroom value   set a packet pacing headroom (default = 1.25s) " << endl;
-    cerr << "     -txqueuesizefactor value reaction to increased RTP queue delay (default 0.1) " << endl;
-    cerr << "     -queuedelayguard value   reaction to increased network queue delay (default 0.05)" << endl;
-    cerr << "     -forceidr             enable Force-IDR in case of loss"  << endl;
-    cerr << "     -clockdrift           enable clock drift compensation for the case that the"  << endl;
-    cerr << "                            receiver end clock is faster" << endl;
-    cerr << "     -verbose value        print a more extensive log" << endl;
-    cerr << "     -nosummary            don't print summary" << endl;
-    cerr << "     -log logfile          save detailed per-ACK log to file" << endl;
-    cerr << "     -ntp                  use NTP timestamp in logfile" << endl;
-    cerr << "     -append               append logfile" << endl;
-    cerr << "     -itemlist             add item list in beginning of log file" << endl;
-    cerr << "     -detailed             detailed log, per ACKed RTP" << endl;
-    cerr << "     -periodicdropinterval interval [s] between periodic drops in rate (default 60s)" << endl;
-    cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << endl;
-    cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
-    cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
+    std::cerr << "SCReAM sender. Ericsson AB. Version 2020-12-17" << std::endl;
+    std::cerr << "Usage : " << std::endl << " > scream_tx <options>  " << std::endl;
+    std::cerr << "     -initrate value       set a start bitrate [kbps]" << std::endl;
+    std::cerr << "                            example -initrate 2000 " << std::endl;
+    std::cerr << "     -minrate  value       set a min bitrate [kbps], default 1000kbps" << std::endl;
+    std::cerr << "                            example -minrate 1000 " << std::endl;
+    std::cerr << "     -maxrate value        set a max bitrate [kbps], default 200000kbps" << std::endl;
+    std::cerr << "                            example -maxrate 10000 " << std::endl;
+    std::cerr << "     -rateincrease value   set a max allowed rate increase speed [kbps/s]," << std::endl;
+    std::cerr << "                            default 10000kbps/s" << std::endl;
+    std::cerr << "                            example -rateincrease 1000 " << std::endl;
+    std::cerr << "     -priority  value      set stream priorities" << std::endl;
+    std::cerr << "     -ratescale value      set a max allowed rate increase speed as a fraction of the " << std::endl;
+    std::cerr << "                            current rate, default 0.5" << std::endl;
+    std::cerr << "                            example -ratescale 1.0 " << std::endl;
+    std::cerr << "     -ect n                ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << std::endl;
+    std::cerr << "                            -1 for not-ECT (default)" << std::endl;
+    std::cerr << "     -scale value          scale factor in case of loss or ECN event (default 0.9) " << std::endl;
+    std::cerr << "     -dscale value         scale factor in case of increased delay (default 10.0) " << std::endl;
+    std::cerr << "     -delaytarget value    set a queue delay target (default = 0.06s) " << std::endl;
+    std::cerr << "     -paceheadroom value   set a packet pacing headroom (default = 1.25s) " << std::endl;
+    std::cerr << "     -txqueuesizefactor value reaction to increased RTP queue delay (default 0.1) " << std::endl;
+    std::cerr << "     -queuedelayguard value   reaction to increased network queue delay (default 0.05)" << std::endl;
+    std::cerr << "     -forceidr             enable Force-IDR in case of loss"  << std::endl;
+    std::cerr << "     -clockdrift           enable clock drift compensation for the case that the"  << std::endl;
+    std::cerr << "                            receiver end clock is faster" << std::endl;
+    std::cerr << "     -verbose value        print a more extensive log" << std::endl;
+    std::cerr << "     -nosummary            don't print summary" << std::endl;
+    std::cerr << "     -log logfile          save detailed per-ACK log to file" << std::endl;
+    std::cerr << "     -ntp                  use NTP timestamp in logfile" << std::endl;
+    std::cerr << "     -append               append logfile" << std::endl;
+    std::cerr << "     -itemlist             add item list in beginning of log file" << std::endl;
+    std::cerr << "     -detailed             detailed log, per ACKed RTP" << std::endl;
+    std::cerr << "     -periodicdropinterval interval [s] between periodic drops in rate (default 60s)" << std::endl;
+    std::cerr << "     -microburstinterval   microburst interval [ms] for packet pacing (default 2ms)" << std::endl;
+    std::cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << std::endl;
+    std::cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << std::endl;
 #endif
     //cerr << "     -sierralog          get logs from python script that logs a sierra modem" << endl;
     exit(-1);
@@ -425,14 +423,14 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
   /* First find options */
   while (ix < argc) {
       if (!strstr(argv[ix],"-")) {
-          cerr << "wrong arg " << argv[ix] << " index " <<  ix  << endl;
+          std::cerr << "wrong arg " << argv[ix] << " index " <<  ix  << std::endl;
         exit(0);
       }
     if (strstr(argv[ix],"-ect")) {
       ect = atoi(argv[ix+1]);
       ix+=2;
       if (!(ect == -1 || ect == 0 || ect == 1 || ect == 3)) {
-        cerr << "ect must be -1, 0, 1 or 3 " << endl;
+        std::cerr << "ect must be -1, 0, 1 or 3 " << std::endl;
         exit(0);
 
       }
@@ -632,7 +630,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
         minPaceIntervalUs = (int) (minPaceInterval*1e6f);
         ix+=2;
         if (minPaceInterval < 0.002f || minPaceInterval > 0.020f) {
-            cerr << "microburstinterval must be in range 2..20ms" << endl;
+            std::cerr << "microburstinterval must be in range 2..20ms" << std::endl;
             exit(0);
         }
         continue;
@@ -641,13 +639,13 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
         hysteresis = atof(argv[ix + 1]);
         ix += 2;
         if (hysteresis < 0.0f || hysteresis > 0.2f) {
-            cerr << "hysteresis must be in range 0.0...0.2" << endl;
+            std::cerr << "hysteresis must be in range 0.0...0.2" << std::endl;
             exit(0);
         }
         continue;
     }
 
-    cerr << "unexpected arg " << argv[ix] << endl;
+    std::cerr << "unexpected arg " << argv[ix] << std::endl;
     exit(0);
   }
 
@@ -728,7 +726,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
                                 false,
                                 hysteresis);
 #endif
-    cerr << "Scream sender " << scream_version << " started! ssrc "<< ssrc <<endl;
+    std::cerr << "Scream sender " << scream_version << " started! ssrc "<< ssrc << std::endl;
   if (stats_print_thread == 0) {
       pthread_create(&stats_print_thread,NULL,statsPrintThread, NULL);
   }
@@ -811,7 +809,7 @@ ScreamSenderPluginUpdate (uint32_t ssrc, const char *arg_string)
     /* First find options */
     while (ix < argc) {
         if (!strstr(argv[ix],"-")) {
-            cerr << "wrong arg " << argv[ix] << " index " <<  ix  << endl;
+            std::cerr << "wrong arg " << argv[ix] << " index " <<  ix  << std::endl;
             exit(0);
         }
         if (strstr(argv[ix],"-minrate")) {
@@ -858,7 +856,7 @@ void ScreamSenderPush (uint8_t *buf_rtp, uint32_t recvlen, uint16_t seq,
     if (!rc) {
         stream->rtpqueue_full++;
         stream->cb(stream->cb_data, (uint8_t *)buf_rtp, 0);
-        cerr << log_tag << " RtpQueue is full " << endl;
+        std::cerr << log_tag << " RtpQueue is full " << std::endl;
     }
     if (rc) {
         pthread_mutex_lock(&lock_scream);
@@ -912,7 +910,7 @@ void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force
     //rate = 1e6*(5+15*(nn/10 % 2));
     if (0) {
         uint32_t rate_32 = (uint32_t)(rate);
-        cerr << " videoControlThread: rate " << rate_32 << endl;
+        std::cerr << " videoControlThread: rate " << rate_32 << std::endl;
     }
     *rate_p = (uint32_t)(rate * rateMultiply);
     if (*rate_p)  {

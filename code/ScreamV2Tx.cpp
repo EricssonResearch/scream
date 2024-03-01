@@ -1,6 +1,6 @@
 #include "RtpQueue.h"
 #include "ScreamTx.h"
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define NOMINMAX
 #include <winSock2.h>
 #else
@@ -295,7 +295,7 @@ void ScreamV2Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 		*/
 		int cur_cleared = stream->rtpQueue->clear();
 		if (cur_cleared) {
-			cerr << logTag << " refresh " << time_ntp / 65536.0f << " RTP queue " << cur_cleared << " packets discarded for SSRC " << ssrc << endl;
+			std::cerr << logTag << " refresh " << time_ntp / 65536.0f << " RTP queue " << cur_cleared << " packets discarded for SSRC " << ssrc << std::endl;
 			stream->cleared += cur_cleared;
 		}
 	}
@@ -371,7 +371,7 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 		mss = kInitMss;
 		if (!openWindow)
 			cwndMin = std::max(cwndMinLow, kMinCwndMss * mss);
-		cwnd = max(cwnd, cwndMin);
+		cwnd = std::max(cwnd, cwndMin);
 
 		/*
 		* Add a small clock drift compensation
@@ -476,7 +476,7 @@ float ScreamV2Tx::addTransmitted(uint32_t time_ntp,
 	mss = std::max(mss, size);
 	if (!openWindow)
 		cwndMin = std::max(cwndMinLow, 2 * mss);
-	cwnd = max(cwnd, cwndMin);
+	cwnd = std::max(cwnd, cwndMin);
 
 	/*
 	* Determine when next RTP packet can be transmitted

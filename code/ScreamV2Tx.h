@@ -5,8 +5,6 @@
 #include <iostream>
 #include <cstdint>
 extern "C" {
-  using namespace std;
-
   /*
   * This module implements the sender side of SCReAM,
   *  see https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pdf

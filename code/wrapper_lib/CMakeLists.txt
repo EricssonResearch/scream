@@ -27,7 +27,7 @@ if(BUILD_SHARED_LIBS)
 
 else()
 
-  set(CMAKE_CXX_FLAGS                " -DV2 -I .. ${CMAKE_CXX_FLAGS_INIT} -fPIC")
+  set(CMAKE_CXX_FLAGS                " -DV2  -g  -I .. ${CMAKE_CXX_FLAGS_INIT} -fPIC")
   add_library(scream STATIC ${SRCS})
 endif()
 

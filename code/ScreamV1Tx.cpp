@@ -1,6 +1,6 @@
 #include "RtpQueue.h"
 #include "ScreamTx.h"
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define NOMINMAX
 #include <winSock2.h>
 #else
@@ -342,7 +342,7 @@ void ScreamV1Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 		*/
 		int cur_cleared = stream->rtpQueue->clear();
 		if (cur_cleared) {
-			cerr << logTag << " refresh " << time_ntp / 65536.0f << " RTP queue " << cur_cleared << " packets discarded for SSRC " << ssrc << endl;
+			std::cerr << logTag << " refresh " << time_ntp / 65536.0f << " RTP queue " << cur_cleared << " packets discarded for SSRC " << ssrc << std::endl;
 			stream->cleared += cur_cleared;
 		}
 	}
@@ -358,7 +358,7 @@ void ScreamV1Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 		mss = std::max(mss, sizeOfNextRtp);
 		if (!openWindow)
 			cwndMin = std::max(cwndMinLow, 2 * mss);
-		cwnd = max(cwnd, cwndMin);
+		cwnd = std::max(cwnd, cwndMin);
 	}
 }
 
@@ -483,7 +483,7 @@ float ScreamV1Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 		mss = kInitMss;
 		if (!openWindow)
 			cwndMin = std::max(cwndMinLow, kMinCwndMss * mss);
-		cwnd = max(cwnd, cwndMin);
+		cwnd = std::max(cwnd, cwndMin);
 
 		/*
 		* Add a small clock drift compensation
@@ -592,7 +592,7 @@ float ScreamV1Tx::addTransmitted(uint32_t time_ntp,
 	mss = std::max(mss, size);
 	if (!openWindow)
 		cwndMin = std::max(cwndMinLow, 2 * mss);
-	cwnd = max(cwnd, cwndMin);
+	cwnd = std::max(cwnd, cwndMin);
 
 	/*
 	* Determine when next RTP packet can be transmitted
@@ -2347,9 +2347,9 @@ void ScreamV1Tx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		int pak_diff = (seqNrOfLastRtp == -1) ? -1 : ((seqNrOfLastRtp >= hiSeqTx) ? (seqNrOfLastRtp - hiSeqTx) : seqNrOfLastRtp + 0xffff - hiSeqTx);
 
 		int cur_cleared = rtpQueue->clear();
-		cerr << parent->logTag << " rtpQueueDelay " << rtpQueueDelay << " too large 1 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared <<
+		std::cerr << parent->logTag << " rtpQueueDelay " << rtpQueueDelay << " too large 1 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared <<
 			" packets discarded for SSRC " << ssrc << " hiSeqTx " << hiSeqTx << " hiSeqAckendl " << hiSeqAck <<
-			" seqNrOfNextRtp " << seqNrOfNextRtp << " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << endl;
+			" seqNrOfNextRtp " << seqNrOfNextRtp << " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << std::endl;
 		cleared += cur_cleared;
 		rtpQueueDiscard = true;
 		lossEpoch = true;
@@ -2536,9 +2536,9 @@ void ScreamV1Tx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 			int pak_diff = (seqNrOfLastRtp == -1) ? -1 : ((seqNrOfLastRtp >= hiSeqTx) ? (seqNrOfLastRtp - hiSeqTx) : seqNrOfLastRtp + 0xffff - hiSeqTx);
 
 			int cur_cleared = rtpQueue->clear();
-			cerr << parent->logTag << " rtpQueueDelay " << rtpQueueDelay << " too large 1 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared <<
+			std::cerr << parent->logTag << " rtpQueueDelay " << rtpQueueDelay << " too large 1 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared <<
 				" packets discarded for SSRC " << ssrc << " hiSeqTx " << hiSeqTx << " hiSeqAckendl " << hiSeqAck <<
-				" seqNrOfNextRtp " << seqNrOfNextRtp << " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << endl;
+				" seqNrOfNextRtp " << seqNrOfNextRtp << " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << std::endl;
 			cleared += cur_cleared;
 			rtpQueueDiscard = true;
 			lossEpoch = true;
@@ -2622,9 +2622,9 @@ void ScreamV1Tx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 			int pak_diff = (seqNrOfLastRtp == -1) ? -1 : ((seqNrOfLastRtp >= hiSeqTx) ? (seqNrOfLastRtp - hiSeqTx) : seqNrOfLastRtp + 0xffff - hiSeqTx);
 
 			int cur_cleared = rtpQueue->clear();
-			cerr << parent->logTag << " rtpQueueDelay " << rtpQueueDelay << " too large 2 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared <<
+			std::cerr << parent->logTag << " rtpQueueDelay " << rtpQueueDelay << " too large 2 " << time_ntp / 65536.0f << " RTP queue " << cur_cleared <<
 				" packets discarded for SSRC " << ssrc << " hiSeqTx " << hiSeqTx << " hiSeqAckendl " << hiSeqAck <<
-				" seqNrOfNextRtp " << seqNrOfNextRtp << " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << endl;
+				" seqNrOfNextRtp " << seqNrOfNextRtp << " seqNrOfLastRtp " << seqNrOfLastRtp << " diff " << pak_diff << std::endl;
 			cleared += cur_cleared;
 			rtpQueueDiscard = true;
 			lossEpoch = true;
