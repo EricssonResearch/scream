@@ -42,7 +42,7 @@ public:
 
 		bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 
-		bool checkIfFlushAck(int ackDiff);
+		bool checkIfFlushAck(uint32_t ackDiff);
 
 		/*
 		* Receive RTP packet

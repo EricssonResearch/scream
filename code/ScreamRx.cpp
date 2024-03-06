@@ -35,7 +35,7 @@ ScreamRx::Stream::Stream(uint32_t ssrc_) {
 
 }
 
-bool ScreamRx::Stream::checkIfFlushAck(int ackDiff) {
+bool ScreamRx::Stream::checkIfFlushAck(uint32_t ackDiff) {
 	uint32_t diff = highestSeqNr - highestSeqNrTx;
 	return (diff >= ackDiff || doFlush);
 }

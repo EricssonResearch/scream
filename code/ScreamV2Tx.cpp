@@ -84,40 +84,62 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	lossBeta(lossBeta_),
 	ecnCeBeta(ecnCeBeta_),
 	queueDelayTargetMin(queueDelayTargetMin_),
-	enableSbd(enableSbd_),
+
 	packetPacingHeadroom(packetPacingHeadroom_),
+	maxAdaptivePacingRateScale(maxAdaptivePacingRateScale_),
 	bytesInFlightHeadRoom(bytesInFlightHeadRoom_),
+	multiplicativeIncreaseScalefactor(multiplicativeIncreaseScalefactor_),
 	isL4s(isL4s_),
 	openWindow(openWindow_),
+	enableSbd(enableSbd_),
 	enableClockDriftCompensation(enableClockDriftCompensation_),
-	maxAdaptivePacingRateScale(maxAdaptivePacingRateScale_),
-	multiplicativeIncreaseScalefactor(multiplicativeIncreaseScalefactor_),
+
+	isEnablePacketPacing(true),
+	isAutoTuneMinCwnd(false),
+	enableRateUpdate(true),
+	isUseExtraDetailedLog(false),
+
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
 	sRttSh_ntp(3277),
 	ackedOwd(0),
 	baseOwd(UINT32_MAX),
+
 	queueDelay(0.0),
 	queueDelayFractionAvg(0.0f),
 	queueDelayTarget(queueDelayTargetMin),
 	queueDelaySbdVar(0.0f),
 	queueDelaySbdMean(0.0f),
 	queueDelaySbdMeanSh(0.0f),
-	isEnablePacketPacing(true),
+	queueDelaySbdSkew(0),
 	queueDelayAvg(0.0f),
+	queueDelayMax(0.0f),
+	queueDelayMinAvg(0.0f),
+	queueDelayMin(1000.0),
 
 	bytesNewlyAcked(0),
 	bytesNewlyAckedCe(0),
+	bytesNewlyAckedLog(0),
+	ecnCeMarkedBytesLog(0),
+
 	mss(kInitMss),
 	cwnd(kInitMss * 2),
 	cwndMin(kInitMss * 2),
 	cwndMinLow(0),
 	cwndI(1),
-	lastMssUpdateT_ntp(0),
-	isAutoTuneMinCwnd(false),
+	cwndRatio(0.001f),
+
+	bytesInFlight(0),
+	bytesInFlightLog(0),
 	prevBytesInFlight(0),
 	maxBytesInFlight(0),
 	maxBytesInFlightPrev(0),
+	bytesInFlightRatio(0.0f),
+
+	bytesMarkedThisRtt(0),
+	bytesDeliveredThisRtt(0),
+	packetsMarkedThisRtt(0),
+	packetsDeliveredThisRtt(0),
 
 	lossEvent(false),
 	wasLossEvent(false),
@@ -125,25 +147,45 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	ecnCeEvent(false),
 	virtualCeEvent(false),
 	isCeThisFeedback(false),
-	l4sAlpha(0.1f),
-	virtualL4sAlpha(0.0f),
+	isL4sActive(false),
 	fractionMarked(0.0f),
-	bytesMarkedThisRtt(0),
-	bytesDeliveredThisRtt(0),
-	lastL4sAlphaUpdateT_ntp(0),
-	maxTotalBitrate(0.0f),
+	l4sAlpha(0.1f),
+	ceDensity(1.0f),
+	virtualL4sAlpha(0.0f),
 	postCongestionScale(1.0f),
 	postCongestionDelay(0.1f),
-	bytesInFlightRatio(0.0f),
-	isL4sActive(false),
-	ceDensity(1.0f),
+
+	rateTransmitted(0.0f),
+	rateRtpAvg(0.0f),
+	maxRate(0.0f),
+	maxTotalBitrate(0.0f),
+	rateTransmittedAvg(0.0f),
+
+	relFrameSizeHigh(1.0f),
+	isNewFrame(false),
 
 	paceInterval_ntp(0),
 	paceInterval(0.0f),
-	rateTransmittedAvg(0.0f),
 	adaptivePacingRateScale(1.0f),
 
+	baseOwdHistMin(UINT32_MAX),
+	baseOwdHistPtr(0),
+	queueDelayNormHistPtr(0),
+	maxBytesInFlightHistIx(0),
+
+	clockDriftCompensation(0),
+	clockDriftCompensationInc(0),
+
+	nStreams(0),
+
+	fp_log(0),
+	completeLogItem(false),
+
 	isInitialized(false),
+	initTime_ntp(0),
+	lastCongestionDetectedT_ntp(0),
+	lastRttT_ntp(0),
+	lastMssUpdateT_ntp(0),
 	lastSRttUpdateT_ntp(0),
 	lastBaseOwdAddT_ntp(0),
 	baseOwdResetT_ntp(0),
@@ -155,32 +197,10 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	lastRateUpdateT_ntp(0),
 	lastCwndIUpdateT_ntp(0),
 	lastQueueDelayAvgUpdateT_ntp(0),
-	rateTransmitted(0.0f),
-	rateRtpAvg(0.0f),
+	lastL4sAlphaUpdateT_ntp(0),
 	lastCwndUpdateT_ntp(0),
-	bytesInFlight(0),
-	bytesInFlightLog(0),
-	lastBaseDelayRefreshT_ntp(0),
-	maxRate(0.0f),
-	baseOwdHistMin(UINT32_MAX),
-	clockDriftCompensation(0),
-	clockDriftCompensationInc(0),
-	enableRateUpdate(true),
+	lastBaseDelayRefreshT_ntp(0)
 
-	bytesNewlyAckedLog(0),
-	ecnCeMarkedBytesLog(0),
-	isUseExtraDetailedLog(false),
-	fp_log(0),
-	completeLogItem(false),
-
-	cwndRatio(0.001f),
-	packetsMarkedThisRtt(0),
-	packetsDeliveredThisRtt(0),
-	initTime_ntp(0),
-	lastCongestionDetectedT_ntp(0),
-	lastRttT_ntp(0),
-	queueDelaySbdSkew(0),
-	relFrameSizeHigh(1.0f)
 {
 	strcpy(detailedLogExtraData, "");
 	strcpy(timeString, "");
@@ -198,22 +218,12 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 
 	for (int n = 0; n < kBaseOwdHistSize; n++)
 		baseOwdHist[n] = UINT32_MAX;
-	baseOwdHistPtr = 0;
 	for (int n = 0; n < kQueueDelayNormHistSize; n++)
 		queueDelayNormHist[n] = 0.0f;
-	queueDelayNormHistPtr = 0;
-	nStreams = 0;
-	isNewFrame = false;
 	for (int n = 0; n < kMaxStreams; n++)
 		streams[n] = NULL;
-
 	for (int n = 0; n < kMaxBytesInFlightHistSize; n++)
 		maxBytesInFlightHist[n] = 0;
-	maxBytesInFlightHistIx = 0;
-
-	queueDelayMax = 0.0f;
-	queueDelayMinAvg = 0.0f;
-	queueDelayMin = 1000.0;
 }
 
 ScreamV2Tx::~ScreamV2Tx() {
@@ -1217,7 +1227,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		}
 
 		/*
-		* Calculate queueDelayMinAvg as a ~10s average. 
+		* Calculate queueDelayMinAvg as a ~10s average.
 		* A slow attack, fast decay filter is used
 		*/
 		if (queueDelayMin < queueDelayMinAvg)
@@ -1470,8 +1480,8 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Furher limit multiplicative increase when congestion occured
 	*  recently
 	*/
-	if (tmp2 > 1.0 && postCongestionDelay > 0.2f) {
-		tmp2 = 1.0 + ((tmp2 - 1.0) * postCongestionScale);
+	if (tmp2 > 1.0f && postCongestionDelay > 0.2f) {
+		tmp2 = 1.0f + ((tmp2 - 1.0f) * postCongestionScale);
 	}
 	increment *= tmp2;
 	/*
@@ -1495,7 +1505,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 	/*
 	* Compute rate share among streams, take into account that some streams reach the
-	* max bitrate, and therefore more is shared among the other streams that 
+	* max bitrate, and therefore more is shared among the other streams that
 	* have not reached the max bitrate
 	*/
 	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt));

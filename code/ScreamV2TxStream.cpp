@@ -211,7 +211,7 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 					sum += relFrameSizeHist[ix];ix++;
 				}
 				ix--;
-				relFrameSizeHigh = 1.0f + ((float)ix) * (kRelFrameSizeHistRange - 1.0) / kRelFrameSizeHistBins;
+				relFrameSizeHigh = 1.0f + ((float)ix) * (kRelFrameSizeHistRange - 1.0f) / kRelFrameSizeHistBins;
 			}
 		}
 		frameSizeAcc = 0;
@@ -309,8 +309,6 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	* Note that at very low bitrates it is necessary to reduce the MTU also
 	*/
 	tmp *= 1.0f - std::min(0.8f, std::max(0.0f, parent->cwndRatio - 0.1f));
-
-	float sRtt = parent->sRtt;
 
 	/*
 	* Compute target bitrate.

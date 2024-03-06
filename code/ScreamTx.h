@@ -293,8 +293,8 @@ extern "C" {
 		* by the timestamp clock frequency(default 1000Hz)
 		* The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
 		*  Note : isOkToTransmit should be called after incomingFeedback
-		/*
-		/* Parse standardized feedback according to
+		*
+		*Parse standardized feedback according to
 		* https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
 		* Current implementation implements -02 version
 		* It is assumed that SR/RR or other non-CCFB feedback is stripped
@@ -1023,8 +1023,8 @@ extern "C" {
 		* by the timestamp clock frequency(default 1000Hz)
 		* The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
 		*  Note : isOkToTransmit should be called after incomingFeedback
-		/*
-		/* Parse standardized feedback according to
+		*
+		* Parse standardized feedback according to
 		* https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
 		* Current implementation implements -02 version
 		* It is assumed that SR/RR or other non-CCFB feedback is stripped
@@ -1423,150 +1423,126 @@ extern "C" {
 		float lossBeta;
 		float ecnCeBeta;
 		float queueDelayTargetMin;
-		bool enableSbd;
 		float packetPacingHeadroom;
+		float maxAdaptivePacingRateScale;
 		float bytesInFlightHeadRoom;
-		bool isEnablePacketPacing;
 		float multiplicativeIncreaseScalefactor;
+		bool isL4s;
+		bool openWindow;
+		bool enableSbd;
+		bool enableClockDriftCompensation;
 
+		bool isEnablePacketPacing;
+		bool isAutoTuneMinCwnd;
+		bool enableRateUpdate;
+		bool isUseExtraDetailedLog;
+
+		float sRtt;
 		uint32_t sRttSh_ntp;
 		uint32_t sRtt_ntp;
-		float sRtt;
 		uint32_t ackedOwd;
 		uint32_t baseOwd;
-
-		uint32_t baseOwdHist[kBaseOwdHistSize];
-		int baseOwdHistPtr;
-		uint32_t baseOwdHistMin;
-		uint32_t clockDriftCompensation;
-		uint32_t clockDriftCompensationInc;
 
 		float queueDelay;
 		float queueDelayFractionAvg;
 		float queueDelayTarget;
-		float queueDelayNormHist[kQueueDelayNormHistSize];
-		int queueDelayNormHistPtr;
 		float queueDelaySbdVar;
 		float queueDelaySbdMean;
 		float queueDelaySbdSkew;
 		float queueDelaySbdMeanSh;
-		float queueDelayMax;
 		float queueDelayAvg;
+		float queueDelayMax;
+		float queueDelayMin;
+		float queueDelayMinAvg;
 
-		/*
-		* CWND management
-		*/
 		int bytesNewlyAcked;
+		int bytesNewlyAckedCe;
+		int bytesNewlyAckedLog;
+		int ecnCeMarkedBytesLog;
 		int mss; // Maximum Segment Size
 		int cwnd; // congestion window
 		int cwndMin;
 		int cwndMinLow;
-		bool openWindow;
-		bool enableClockDriftCompensation;
+		int cwndI; // congestion window inflexion point
+		float cwndRatio;
+
 		int bytesInFlight;
 		int bytesInFlightLog;
-		float rateTransmitted;
-		float rateRtpAvg;
-		float maxRate;
-		uint32_t lastCwndUpdateT_ntp;
-		bool isL4s;
-		float l4sAlpha;
-		float virtualL4sAlpha;
+		int prevBytesInFlight;
+		int maxBytesInFlight;
+		int maxBytesInFlightPrev;
+		float bytesInFlightRatio;
+
 		int bytesMarkedThisRtt;
 		int bytesDeliveredThisRtt;
 		int packetsMarkedThisRtt;
 		int packetsDeliveredThisRtt;
-		uint32_t lastL4sAlphaUpdateT_ntp;
-		float maxTotalBitrate;
-		float postCongestionScale;
-		float postCongestionDelay;
-		float bytesInFlightRatio;
-		bool isAutoTuneMinCwnd;
-		int prevBytesInFlight;
-		int maxBytesInFlight;
-		int maxBytesInFlightPrev;
 
-		int maxBytesInFlightHist[kMaxBytesInFlightHistSize];
-		int maxBytesInFlightHistIx = 0;
-
-		int cwndI; // congestion window inflexion point
-		uint32_t lastCwndIUpdateT_ntp;
-
-		/*
-		* Loss event
-		*/
 		bool lossEvent;
 		bool wasLossEvent;
 		float lossEventRate;
-
-		/*
-		* ECN-CE
-		*/
 		bool ecnCeEvent;
 		bool virtualCeEvent;
 		bool isCeThisFeedback;
 		bool isL4sActive;
-		uint32_t lastCeEventT_ntp;
 		float fractionMarked;
+		float l4sAlpha;
 		float ceDensity;
-		int bytesNewlyAckedCe;
+		float virtualL4sAlpha;
+		float postCongestionScale;
+		float postCongestionDelay;
 
-		/*
-		* Transmission scheduling
-		*/
+		float rateTransmitted;
+		float rateRtpAvg;
+		float maxRate;
+		float maxTotalBitrate;
+		float rateTransmittedAvg;
+
+		float relFrameSizeHigh;
+		bool isNewFrame;
+
 		uint32_t paceInterval_ntp;
 		float paceInterval;
-		float rateTransmittedAvg;
-		float maxAdaptivePacingRateScale;
 		float adaptivePacingRateScale;
 
-		/*
-		* Update control variables
-		*/
+		uint32_t baseOwdHist[kBaseOwdHistSize];
+		int baseOwdHistPtr;
+		uint32_t baseOwdHistMin;
+		float queueDelayNormHist[kQueueDelayNormHistSize];
+		int queueDelayNormHistPtr;
+		int maxBytesInFlightHist[kMaxBytesInFlightHistSize];
+		int maxBytesInFlightHistIx;
+
+		uint32_t clockDriftCompensation;
+		uint32_t clockDriftCompensationInc;
+
+		Stream* streams[kMaxStreams];
+		int nStreams;
+
+		FILE* fp_log;
+		bool completeLogItem;
+		char timeString[100];
+		char detailedLogExtraData[256];
+
 		bool isInitialized;
+		uint32_t initTime_ntp;
+		uint32_t lastCongestionDetectedT_ntp;
+		uint32_t lastRttT_ntp;
+		uint32_t lastMssUpdateT_ntp;
 		uint32_t lastSRttUpdateT_ntp;
 		uint32_t lastBaseOwdAddT_ntp;
 		uint32_t baseOwdResetT_ntp;
 		uint32_t lastSlowUpdateT_ntp;
-		uint32_t lastMssUpdateT_ntp;
-		uint32_t lastCongestionDetectedT_ntp;
 		uint32_t lastLossEventT_ntp;
 		uint32_t lastTransmitT_ntp;
 		uint32_t nextTransmitT_ntp;
 		uint32_t lastRateUpdateT_ntp;
-		uint32_t lastRttT_ntp;
-		uint32_t lastBaseDelayRefreshT_ntp;
-		uint32_t initTime_ntp;
+		uint32_t lastCwndIUpdateT_ntp;
+		uint32_t lastCwndUpdateT_ntp;
 		uint32_t lastQueueDelayAvgUpdateT_ntp;
-		float queueDelayMin;
-		float queueDelayMinAvg;
-		bool enableRateUpdate;
-
-		float cwndRatio;
-
-		/*
-		* Variables for multiple steams handling
-		*/
-		Stream* streams[kMaxStreams];
-		int nStreams;
-		bool isNewFrame; // True if new frame received
-
-		/*
-		* Statistics
-		*/
-		char detailedLogExtraData[256];
-
-		/*
-		*
-		*/
-		FILE* fp_log;
-		bool completeLogItem;
-		char timeString[100];
-		bool isUseExtraDetailedLog;
-		int bytesNewlyAckedLog;
-		int ecnCeMarkedBytesLog;
-
-		float relFrameSizeHigh;
+		uint32_t lastL4sAlphaUpdateT_ntp;
+		uint32_t lastCeEventT_ntp;
+		uint32_t lastBaseDelayRefreshT_ntp;
 	};
 }
 #endif

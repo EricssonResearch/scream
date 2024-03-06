@@ -66,7 +66,7 @@ static const float kCwndRatioThHigh = 0.20f;
 
 // For SSRT histogram
 static const float kSrttHistDecay = 1.0f / 128; // Roughly 3s decay time
-static const float kSrttHistBinSize = 0.001;
+static const float kSrttHistBinSize = 0.001f;
 static const float kSrttHighPercentile = 0.9f;
 static const float kSrttLowPercentile = 0.1f;
 
@@ -1085,7 +1085,6 @@ void ScreamV1Tx::getLogHeader(char* s) {
 }
 
 void ScreamV1Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
-	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
 		logTag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
 		cwnd, bytesInFlightLog, rateTransmittedLog / 1000.0f, isInFastStart());
@@ -1122,7 +1121,6 @@ void ScreamV1Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 }
 
 void ScreamV1Tx::getShortLog(float time, char* s) {
-	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
 		logTag, queueDelay, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f, isInFastStart());
@@ -1141,7 +1139,6 @@ void ScreamV1Tx::getShortLog(float time, char* s) {
 }
 
 void ScreamV1Tx::getVeryShortLog(float time, char* s) {
-	int inFlightMax = std::max(bytesInFlight, bytesInFlightHistHiMem);
 	sprintf(s, "%s %4.3f, %4.3f, %6d, %6d, %6.0f, ",
 		logTag, queueDelay, sRtt,
 		cwnd, bytesInFlightLog, rateTransmitted / 1000.0f);
@@ -1418,7 +1415,7 @@ void ScreamV1Tx::updateCwnd(uint32_t time_ntp) {
 				for (int n = 0; n < nStreams; n++) {
 					minBitrateSum += streams[n]->minBitrate;
 				}
-				cwndMinLow = minBitrateSum / 8.0f * sRttLow;
+				cwndMinLow = int(minBitrateSum / 8.0f * sRttLow);
 			}
 		}
 		/*
@@ -1528,7 +1525,7 @@ void ScreamV1Tx::updateCwnd(uint32_t time_ntp) {
 			* Also limit how fast CWND can increase when SRTT is low
 			* This should be identical to TCP Prague
 			*/
-			double tmp = std::min(1.0f, sRtt / kSrttVirtual);
+			float tmp = std::min(1.0f, sRtt / kSrttVirtual);
 			cwndRatioAdjusted *= tmp;
 			if (!inFastStart)
 				cwndRatioAdjusted *= 0.1f + cwndRatioScale * 0.9f;
@@ -2104,7 +2101,7 @@ ScreamV1Tx::Stream::Stream(ScreamV1Tx* parent_,
 	frameSizeAvg = 0.0f;
 	adaptivePacingRateScale = 1.0;
 	l4sOverShootScale = 0.0;
-	framePeriod = 0.02;
+	framePeriod = 0.02f;
 	rtpQOverShoot = 0.0f;
 	lastTargetBitrateHUpdateT_ntp = 0;
 
@@ -2231,7 +2228,7 @@ void ScreamV1Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 		if (frameSizeAvg == 0.0f)
 			frameSizeAvg = frameSizeAcc;
 		else
-			frameSizeAvg = frameSizeAcc * kFrameSizeAvgAlpha + frameSizeAvg * (1.0 - kFrameSizeAvgAlpha);
+			frameSizeAvg = frameSizeAcc * kFrameSizeAvgAlpha + frameSizeAvg * (1.0f - kFrameSizeAvgAlpha);
 		frameSize = std::max(rtpQueue->bytesInQueue(), frameSizeAcc);
 		/*
 		* Calculate a histogram over how much the frame sizes exceeds the average. This helps to avoid that
@@ -2404,7 +2401,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 		/*
 		* Variable scale down in fast start
 		*/
-		tmp /= 1.0 + (1.0f - scl) * (kMaxBytesInFlightHeadRoom - 1.0f);
+		tmp /= 1.0f + (1.0f - scl) * (kMaxBytesInFlightHeadRoom - 1.0f);
 	}
 	else {
 		tmp /= kMaxBytesInFlightHeadRoom;
@@ -2420,7 +2417,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateNew(uint32_t time_ntp) {
 	/*
 	* Scale down if RTP queue grows, this should happen seldom
 	*/
-	tmp /= (1.0 + 0.5 * rtpQOverShoot);
+	tmp /= (1.0f + 0.5f * rtpQOverShoot);
 
 	if (parent->isEnablePacketPacing) {
 		/*
@@ -2560,7 +2557,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 			* Nudge the target bitrate down slightly and allow for some grace time until next reduction
 			*  as media coders can sometimes be a bit slow in the reaction
 			*/
-			targetBitrate *= 0.95;
+			targetBitrate *= 0.95f;
 			lastFullWindowT_ntp = time_ntp;
 		}
 
@@ -2653,7 +2650,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 				*  we gradually reduce the increment the larger the difference is
 				*/
 				float scale = std::max(-1.0f, 1.0f * (rateRtpLimit / targetBitrate - 1.0f));
-				increment *= (1.0 + scale);
+				increment *= (1.0f + scale);
 			}
 			/*
 			* Take it easy with the ramp-up after congestion
@@ -2722,7 +2719,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 					*  we gradually reduce the increment the larger the difference is
 					*/
 					float scale = std::max(-1.0f, 2.0f * (rateRtpLimit / targetBitrate - 1.0f));
-					increment *= (1.0 + scale);
+					increment *= (1.0f + scale);
 				}
 			}
 			else {
@@ -2733,7 +2730,7 @@ void ScreamV1Tx::Stream::updateTargetBitrateOld(uint32_t time_ntp) {
 					*  that the video coder consistently delivers a lower bitrate than the target
 					*/
 					float scale = std::max(-1.0f, 2.0f * (rateRtpLimit / targetBitrate - 1.0f));
-					increment *= (1.0 + scale);
+					increment *= (1.0f + scale);
 				}
 				/*
 				* Also avoid that the target bitrate is reduced if
