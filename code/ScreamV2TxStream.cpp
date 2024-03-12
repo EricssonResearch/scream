@@ -1,5 +1,7 @@
 #include "RtpQueue.h"
 #include "ScreamTx.h"
+#include <iostream>
+
 
 static const uint32_t kMinRtpQueueDiscardInterval_ntp = 16384; // 0.25s in NTP doain
 
@@ -192,9 +194,9 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 		*  the RTP queue builds up when the video encoder generates frames with very varying sizes.
 		*/
 		if (frameSizeAcc > frameSizeAvg) {
-
 			int ix = std::max(0, std::min(kRelFrameSizeHistBins - 1,
-				(int)((frameSizeAcc - frameSizeAvg) / frameSizeAvg * (kRelFrameSizeHistRange - 1.0) * kRelFrameSizeHistBins)));
+				(int)((frameSizeAcc - frameSizeAvg) / (frameSizeAvg * (kRelFrameSizeHistRange - 1.0)) * kRelFrameSizeHistBins)));
+
 			relFrameSizeHist[ix]++;
 			for (int n = 0; n < kRelFrameSizeHistBins; n++) {
 				relFrameSizeHist[n] *= (1.0f - kRelFrameSizeHistDecay);
