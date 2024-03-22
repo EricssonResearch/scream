@@ -5,7 +5,7 @@ class RtpQueue;
 #define MAX_FRAMES 10000
 class VideoEnc {
 public:
-    VideoEnc(RtpQueue* rtpQueue, float frameRate, char *fname, int ixOffset=0);
+    VideoEnc(RtpQueue* rtpQueue, float frameRate, char *fname, int ixOffset=0, float sluggishness = 0.0);
 
     int encode(float time);
 
@@ -19,6 +19,9 @@ public:
     float nominalBitrate;
     unsigned int seqNr;
     int ix;
+
+    float sluggishness;
+    float bytes;
 };
 
 

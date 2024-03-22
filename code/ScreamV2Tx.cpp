@@ -98,6 +98,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	isAutoTuneMinCwnd(false),
 	enableRateUpdate(true),
 	isUseExtraDetailedLog(false),
+	isSlowEncoder(false),
 
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
@@ -1337,7 +1338,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* Update inflexion point
 		*/
-		if (time_ntp - lastCwndIUpdateT_ntp > 16384) {
+		if (time_ntp - lastCwndIUpdateT_ntp > 32768) {
 			lastCwndIUpdateT_ntp = time_ntp;
 			cwndI = cwnd;
 		}
@@ -1357,7 +1358,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* Update inflexion point
 		*/
-		if (time_ntp - lastCwndIUpdateT_ntp > 16384) {
+		if (time_ntp - lastCwndIUpdateT_ntp > 32768) {
 			lastCwndIUpdateT_ntp = time_ntp;
 			cwndI = cwnd;
 		}
@@ -1461,14 +1462,14 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	float tmp = std::min(1.0f, sRtt / kSrttVirtual);
 	increment *= tmp * tmp;
 
-	if (!isL4sActive) {
-		float sclI = 1.0;
-		sclI = float(cwnd - cwndI) / cwndI;
-		sclI *= 4;
-		sclI = sclI * sclI;
-		sclI = std::max(0.1f, std::min(1.0f, sclI));
+	float sclI = 1.0f;
+	sclI = float(cwnd - cwndI) / cwndI;
+	sclI *= 4;
+	sclI = sclI * sclI;
+	sclI = std::max(0.1f, std::min(1.0f, sclI));
+	if (isSlowEncoder || !isL4sActive) {
 		increment *= sclI;
-	}
+	} 
 
 	/*
 	* Slow down CWND increase when CWND is only a few MSS
@@ -1481,9 +1482,12 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	*  recently
 	*/
 	if (tmp2 > 1.0f && postCongestionDelay > 0.2f) {
-		tmp2 = 1.0f + ((tmp2 - 1.0f) * postCongestionScale);
+		tmp2 = 1.0f + ((tmp2 - 1.0f) * postCongestionScale) * sclI;
 	}
 	increment *= tmp2;
+
+	//fprintf(stderr, "%3.2f\n", postCongestionScale);
+
 	/*
 	* Increase CWND only if bytes in flight is large enough
 	* Quite a lot of slack is allowed here to avoid that bitrate locks to

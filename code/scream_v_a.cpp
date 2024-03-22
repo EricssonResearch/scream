@@ -19,7 +19,7 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 10;
+const float Tmax = 40;
 const bool isChRate = false;
 const bool printLog = true;
 const bool ecnCapable = true;
@@ -58,13 +58,14 @@ int main(int argc, char* argv[])
 	//screamTx->autoTuneMinCwnd(true);
 	//screamTx->setMaxTotalBitrate(40e6);
 	screamTx->setLogTag((char*)log_tag);
+	screamTx->setIsSlowEncoder(false);
 
 	ScreamRx* screamRx = new ScreamRx(0, 1, 1);
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
 	NetQueue* netQueueRate = new NetQueue(0.0f, 20e6, 0.0f, true && isL4s);
-	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0);
+	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
 	videoEnc[2] = new VideoEnc(rtpQueue[2], FR / FR_DIV, (char*)TRACEFILE, 100);
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
@@ -225,8 +226,8 @@ int main(int argc, char* argv[])
 		}
 
 		if (isChRate) {
-			if ((time > 10.0 && time < 20) && isChRate) {
-				netQueueRate->rate = 5000e3;
+			if ((time > 15.0 && time < 25) && isChRate) {
+				netQueueRate->rate = 10000e3;
 			}
 			else {
 				netQueueRate->rate = 20000e3;

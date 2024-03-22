@@ -1177,6 +1177,16 @@ extern "C" {
 			isAutoTuneMinCwnd = isAutotune;
 		}
 
+		/*
+		* Set to true if the video encoder is known to be slow to react to changes in the 
+		*  target bitrate. This is especially important when operating in L4S mode. 
+		* The drawback is that SCReAM can have more difficulties to compete with Prague 
+		*  over the same bottleneck
+		*/
+		void setIsSlowEncoder(bool isSlowEncoder_) {
+			isSlowEncoder = isSlowEncoder_;
+		}
+
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -1436,6 +1446,7 @@ extern "C" {
 		bool isAutoTuneMinCwnd;
 		bool enableRateUpdate;
 		bool isUseExtraDetailedLog;
+		bool isSlowEncoder;
 
 		float sRtt;
 		uint32_t sRttSh_ntp;
