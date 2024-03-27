@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-03-27 :  
+  - Stability issue at very low RTTs fixed
 - 2024-03-22 :  
   - Added method setIsSlowEncoder to increase robustness when video encoders react slowly to updated target bitrates
 - 2024-03-11 :  

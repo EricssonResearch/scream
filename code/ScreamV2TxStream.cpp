@@ -315,7 +315,7 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	/*
 	* Compute target bitrate.
 	*/
-	tmp *= rateShare;//8 * cwndShare / std::max(0.001f, std::min(0.2f, sRtt));
+	tmp *= rateShare;
 	targetBitrate = tmp;
 
 	targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate));

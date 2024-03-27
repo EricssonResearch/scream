@@ -1486,8 +1486,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	}
 	increment *= tmp2;
 
-	//fprintf(stderr, "%3.2f\n", postCongestionScale);
-
 	/*
 	* Increase CWND only if bytes in flight is large enough
 	* Quite a lot of slack is allowed here to avoid that bitrate locks to
@@ -1510,9 +1508,12 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Compute rate share among streams, take into account that some streams reach the
 	* max bitrate, and therefore more is shared among the other streams that
-	* have not reached the max bitrate
+	* have not reached the max bitrate.
+	* 1ms extra is addded to sRTT to address a problem that system clocks can have limited 
+	* accuracy that in turn can lead to a too high media bitrate. It is thus better to slightly over 
+	* estimate sRtt than under estimate it.
 	*/
-	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt));
+	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt+0.001f));
 
 	/*
 	* Scale down based on weigthed average high percentile of frame sizes
