@@ -776,10 +776,14 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	}
 	isL4sActive = isL4s && (time_ntp - lastCeEventT_ntp < (5 * 65535)) && lastCeEventT_ntp != 0; // L4S enabled and at least one CE event the last 10 seconds
 
+	float time = time_ntp * ntp2SecScaleFactor;
+
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		if (fp_log && completeLogItem) {
-			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d",
-				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe, isMark);
+			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f",
+				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, 
+				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe, 
+				isMark, stream->targetBitrate, stream->rtpQueue->getDelay(time));
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
 			}
@@ -1000,7 +1004,7 @@ void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
 
 void ScreamV2Tx::getLogHeader(char* s) {
 	sprintf(s,
-		"LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe, packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
+		"LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
 }
 
 void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {

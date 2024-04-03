@@ -85,7 +85,7 @@ float rateMax[MAX_SOURCES]={30000,30000,10000,10000};
 #ifdef V2
 ScreamV2Tx *screamTx = 0;
 float pacingHeadroom = 1.5;
-float multiplicativeIncreaseFactor = 1.0;
+float multiplicativeIncreaseFactor = 0.05;
 #else
 ScreamV1Tx *screamTx = 0;
 float rateIncrease[MAX_SOURCES]={10000,10000,10000,10000};

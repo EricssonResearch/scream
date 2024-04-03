@@ -3,13 +3,16 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-04-03 :  
+  - Multicam scream_sender.cpp, multiplicativeIncreaseFactor was erroneously set to 1.0, replaced with a much more correct value 0.05. 
+  - ScreamV2Tx.cpp, targetBitrate and RTP queue delay added to extra detailed log (-log option).
 - 2024-03-27 :  
-  - Stability issue at very low RTTs fixed
+  - Stability issue at very low RTTs fixed.
 - 2024-03-22 :  
-  - Added method setIsSlowEncoder to increase robustness when video encoders react slowly to updated target bitrates
+  - Added method setIsSlowEncoder to increase robustness when video encoders react slowly to updated target bitrates.
 - 2024-03-11 :  
-  - Added support for IPv6 in SCReAM BW test application
-  - Added counter for Not-ECT, ECT(0), ECT(1) and CE in summary printout
+  - Added support for IPv6 in SCReAM BW test application.
+  - Added counter for Not-ECT, ECT(0), ECT(1) and CE in summary printout.
 - 2024-02-21 :
   - Added averaging to transmit and rtp rate logs.
 - 2024-01-24 :
