@@ -2,6 +2,7 @@
 #define RTP_QUEUE
 
 #include <cstdint>
+#include <mutex>
 /*
 * Implements a simple RTP packet queue, one RTP queue
 * per stream {SSRC,PT}
@@ -59,6 +60,7 @@ public:
 	int bytesInQueue_;
 	int sizeOfQueue_;
 	int sizeOfNextRtp_;
+	std::mutex queue_operation_mutex_;
 };
 
 #endif

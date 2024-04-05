@@ -27,6 +27,7 @@ RtpQueue::RtpQueue() {
 }
 
 bool RtpQueue::push(void* rtpPacket, int size, uint32_t ssrc, unsigned short seqNr, bool isMark, float ts) {
+	std::unique_lock<std::mutex> lock(queue_operation_mutex_);
 	int ix = head + 1;
 	if (ix == kRtpQueueSize) ix = 0;
 	if (items[ix]->used) {
@@ -52,6 +53,7 @@ bool RtpQueue::push(void* rtpPacket, int size, uint32_t ssrc, unsigned short seq
 }
 bool RtpQueue::pop(void** rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr, bool& isMark)
 {
+	std::unique_lock<std::mutex> lock(queue_operation_mutex_);
 	if (items[tail]->used == false) {
 		*rtpPacket = NULL;
 		return false;
