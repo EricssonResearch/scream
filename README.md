@@ -3,9 +3,13 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+
+- 2024-04-17 :
+  - ScreamV2Tx :  openWindow option did not function properly, fixed. Reaction to sudden drop in throughput improved.
+  - RtpQueue :  code after return statement fixed.
 - 2024-04-03 :  
-  - Multicam scream_sender.cpp, multiplicativeIncreaseFactor was erroneously set to 1.0, replaced with a much more correct value 0.05. 
-  - ScreamV2Tx.cpp, targetBitrate and RTP queue delay added to extra detailed log (-log option).
+  - Multicam scream_sender.cpp : multiplicativeIncreaseFactor was erroneously set to 1.0, replaced with a much more correct value 0.05. 
+  - ScreamV2Tx : targetBitrate and RTP queue delay added to extra detailed log (-log option).
 - 2024-03-27 :  
   - Stability issue at very low RTTs fixed.
 - 2024-03-22 :  

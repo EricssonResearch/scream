@@ -741,7 +741,7 @@ int main(int argc, char* argv[]) {
 	*/
 	if (argc <= 1) {
 #ifdef V2
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-04-03 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-04-17 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;

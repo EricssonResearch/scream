@@ -38,7 +38,7 @@ static const uint32_t kReordertime_ntp = 655;  // 10ms in NTP domain
 static const uint32_t kBaseDelayUpdateInterval_ntp = 655360; // 10s in NTP doain
 
 // L4S alpha gain factor, for scalable congestion control
-static const float kL4sG = 1.0f / 16;
+static const float kL4sG = 1.0f / 32 ;
 
 // L4S alpha max value, for scalable congestion control
 static const float kL4sAlphaMax = 1.0;
@@ -103,6 +103,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
 	sRttSh_ntp(3277),
+	currRtt(-1.0f),
 	ackedOwd(0),
 	baseOwd(UINT32_MAX),
 
@@ -150,6 +151,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	isCeThisFeedback(false),
 	isL4sActive(false),
 	fractionMarked(0.0f),
+	lastFractionMarked(0.0f),
 	l4sAlpha(0.1f),
 	ceDensity(1.0f),
 	virtualL4sAlpha(0.0f),
@@ -211,10 +213,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	}
 	else {
 		cwnd = cwnd_;
-	}
-	if (openWindow) {
-		cwndMin = 10000000;
-		cwnd = cwndMin;
 	}
 
 	for (int n = 0; n < kBaseOwdHistSize; n++)
@@ -320,8 +318,7 @@ void ScreamV2Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 		*/
 		int sizeOfNextRtp = stream->rtpQueue->sizeOfNextRtp();
 		mss = std::max(mss, sizeOfNextRtp);
-		if (!openWindow)
-			cwndMin = std::max(cwndMinLow, 2 * mss);
+		cwndMin = std::max(cwndMinLow, 2 * mss);
 		cwnd = std::max(cwnd, cwndMin);
 	}
 }
@@ -380,8 +377,7 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 		* transmitted
 		*/
 		mss = kInitMss;
-		if (!openWindow)
-			cwndMin = std::max(cwndMinLow, kMinCwndMss * mss);
+		cwndMin = std::max(cwndMinLow, kMinCwndMss * mss);
 		cwnd = std::max(cwnd, cwndMin);
 
 		/*
@@ -485,8 +481,7 @@ float ScreamV2Tx::addTransmitted(uint32_t time_ntp,
 	* Update MSS and cwndMin
 	*/
 	mss = std::max(mss, size);
-	if (!openWindow)
-		cwndMin = std::max(cwndMinLow, 2 * mss);
+	cwndMin = std::max(cwndMinLow, 2 * mss);
 	cwnd = std::max(cwnd, cwndMin);
 
 	/*
@@ -555,8 +550,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		/*
 		* Validate RTCP feedback message
 		* Discard out of order RTCP feedback,
-		*  they are quite rate but will mess up the entire
-		*  feedback handling if they are not taken care of.
+		* they are quite rate but will mess up the entire
+		* feedback handling if they are not taken care of.
 		*/
 		int streamId = -1;
 		Stream* stream = getStream(ssrc, streamId);
@@ -664,9 +659,9 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		if (!isEnablePacketPacing) {
 			/*
 			* The CE density is a metric of the fraction of updated RTCP
-			*  feedback that indicates CE marking when congestion occurs
+			* feedback that indicates CE marking when congestion occurs
 			* This scales down the CE mark fraction when packet pacing
-			*  is disabled
+			* is disabled
 			*
 			*/
 			if (isCeThisFeedback)
@@ -678,13 +673,12 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		if (isL4s) {
 			/*
 			* L4S mode compute a congestion scaling factor that is dependent on the fraction
-			*  of ECN marked packets
+			* of ECN marked packets
 			*/
-			if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(1966u, sRtt_ntp)) { // Update at least every 30ms
+			if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(655u, sRtt_ntp)) { // Update at least every 10ms
 				lastL4sAlphaUpdateT_ntp = time_ntp;
 				fractionMarked = 0.0f;
 				if (bytesDeliveredThisRtt > 0) {
-					//fractionMarked = float(bytesMarkedThisRtt) / float(bytesDeliveredThisRtt);
 					fractionMarked = float(packetsMarkedThisRtt) / float(packetsDeliveredThisRtt);
 					if (fractionMarked == 1.0) {
 						/*
@@ -692,8 +686,23 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 						*  so that CWND is reduced properly
 						*/
 						ceDensity = 1.0;
+						if (lastFractionMarked == 1.0f) {
+							/*
+							* Both this update and previous had all packets marked, quite likely 
+							*  a continusly growing or standing queue.
+							* Set sRtt to the current value to track the increasing RTT faster.
+							* This helps the rate control to change to correct value faster and 
+							* thus avoids unnecessary delay in the RTP queue
+							*/
+							sRtt = std::max(sRtt,std::min(0.2f,currRtt));
+							sRtt_ntp = uint32_t(sRtt * 65536);
+							sRttSh_ntp = sRtt_ntp;
+						}
 					}
 
+					/*
+					* Scale down fractionMarked if packet pacing is disabled
+					*/
 					fractionMarked *= ceDensity;
 
 					/*
@@ -709,6 +718,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 					bytesMarkedThisRtt = 0;
 					packetsDeliveredThisRtt = 0;
 					packetsMarkedThisRtt = 0;
+					lastFractionMarked = fractionMarked;
 				}
 			}
 		}
@@ -892,11 +902,13 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 
 
 			uint32_t rtt = time_ntp - tmp->timeTx_ntp;
+			currRtt = rtt*ntp2SecScaleFactor;
 
 			if (fp_log && (isUseExtraDetailedLog || isLast || isMark)) {
 				fprintf(fp_log, "%s,%1.4f,%1.4f,", timeString, queueDelay, rtt * ntp2SecScaleFactor);
 				completeLogItem = true;
 			}
+			
 			if (rtt < 1000000 && isLast) {
 				sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
 				if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
@@ -1386,27 +1398,27 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 			/*
 			* Hmm.. Yes.. This is a bit of voodoo magic.. and
-			*  actually on top of previous scaling
+			* actually on top of previous scaling
 			* This extra compensation is to make sure that bitrate does not
-			*  become too low at high CE rates == low CWND/MSS
+			* become too low at high CE rates == low CWND/MSS
 			*/
 			backOff *= std::max(0.8f, 1.0f - cwndRatio * 2.0f);
 
 			if (time_ntp - lastCongestionDetectedT_ntp > 65536 * 5.0f) {
 				/*
 				* A long time since last congested because link throughput
-				*  exceeds max video bitrate.
+				* exceeds max video bitrate.
 				* There is a certain risk that CWND has increased way above
-				*  bytes in flight, so we reduce it here to get it better on track
-				*  and thus the congestion episode is shortened
+				* bytes in flight, so we reduce it here to get it better on track
+				* and thus the congestion episode is shortened
 				*/
 				cwnd = std::min(cwnd, maxBytesInFlightPrev);
 				/*
 				* Also, we back off a little extra if needed
-				*  because alpha is quite likely very low
+				* because alpha is quite likely very low
 				* This can in some cases be an over-reaction though
-				*  but as this function should kick in relatively seldom
-				*  it should not be to too big concern
+				* but as this function should kick in relatively seldom
+				* it should not be to too big concern
 				*/
 				backOff = std::max(backOff, 0.25f);
 
@@ -1466,6 +1478,10 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	float tmp = std::min(1.0f, sRtt / kSrttVirtual);
 	increment *= tmp * tmp;
 
+	/*
+	* Scale the increment more cautious when close the last 
+	* know max CWND. 
+	*/
 	float sclI = 1.0f;
 	sclI = float(cwnd - cwndI) / cwndI;
 	sclI *= 4;
@@ -1483,7 +1499,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	float tmp2 = cwndScaleFactor;
 	/*
 	* Furher limit multiplicative increase when congestion occured
-	*  recently
+	* recently
 	*/
 	if (tmp2 > 1.0f && postCongestionDelay > 0.2f) {
 		tmp2 = 1.0f + ((tmp2 - 1.0f) * postCongestionScale) * sclI;
@@ -1493,7 +1509,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Increase CWND only if bytes in flight is large enough
 	* Quite a lot of slack is allowed here to avoid that bitrate locks to
-	*  low values.
+	* low values.
 	*/
 	double maxAllowed = mss + std::max(maxBytesInFlight, maxBytesInFlightPrev) * bytesInFlightHeadRoom;
 	int cwndTmp = cwnd + (int)(increment + 0.5f);
@@ -1517,7 +1533,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* accuracy that in turn can lead to a too high media bitrate. It is thus better to slightly over 
 	* estimate sRtt than under estimate it.
 	*/
-	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt+0.001f));
+	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt + 0.001f));
 
 	/*
 	* Scale down based on weigthed average high percentile of frame sizes
@@ -1579,7 +1595,7 @@ void ScreamV2Tx::estimateOwd(uint32_t time_ntp) {
 		if (enableClockDriftCompensation) {
 			/*
 			* The clock drift compensation looks at how the baseOwd increases over time
-			*  and calculates a compensation factor that advanced the sender clock stamps
+			* and calculates a compensation factor that advanced the sender clock stamps
 			* Only positive drift (receiver side is faster) is compensated as negative
 			* drift is already handled
 			*/
@@ -1606,7 +1622,7 @@ void ScreamV2Tx::estimateOwd(uint32_t time_ntp) {
 				if (clockDriftCompensation == 0) {
 					/*
 					* Two update periods delayed with compensation so we add one update period worth of
-					*  clock drift compensation
+					* clock drift compensation
 					*/
 					clockDriftCompensation += clockDriftCompensationInc * (kBaseDelayUpdateInterval_ntp / 65536);
 				}

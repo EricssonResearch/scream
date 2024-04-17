@@ -56,8 +56,8 @@ bool RtpQueue::pop(void** rtpPacket, int& size, uint32_t& ssrc, unsigned short& 
 	std::unique_lock<std::mutex> lock(queue_operation_mutex_);
 	if (items[tail]->used == false) {
 		*rtpPacket = NULL;
-		return false;
 		sizeOfNextRtp_ = -1;
+		return false;
 	}
 	else {
 		size = items[tail]->size;

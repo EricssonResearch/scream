@@ -1451,6 +1451,7 @@ extern "C" {
 		float sRtt;
 		uint32_t sRttSh_ntp;
 		uint32_t sRtt_ntp;
+		float currRtt;
 		uint32_t ackedOwd;
 		uint32_t baseOwd;
 
@@ -1497,6 +1498,7 @@ extern "C" {
 		bool isCeThisFeedback;
 		bool isL4sActive;
 		float fractionMarked;
+		float lastFractionMarked;
 		float l4sAlpha;
 		float ceDensity;
 		float virtualL4sAlpha;

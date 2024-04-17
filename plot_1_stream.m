@@ -40,11 +40,11 @@ function plot_1_stream(a,Tlim,maxR,maxD,maxRT, U)
   subplot(K,1,L);L=L+1;
   ce = a(:,13);
   loss = a(:,12);
-  plot(T,ce/1e2,T,loss/1e2,T,filter(B,1,a(:,6))/1e3,'k');
+  plot(T,ce/1e3,T,loss/1e3,T,filter(B,1,a(:,6))/1e3,'k');
   set(gca,'FontSize',12);grid on;
   set(gca,'XTickLabel',[]);  
   title('Tx rate [Mbps]')
-  legend('ce*10','loss*10','Total')
+  legend('ce','loss','Total')
   ylim([0 maxRT]);
   xlim(Tlim);
 
