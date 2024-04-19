@@ -39,7 +39,7 @@ int swprio = -1;
 */
 const int mode = 0x1;// 0x0F;
 
-const float RTT = 0.005f;
+const float RTT = 0.030f;
 
 #include "ScreamTx.h"
 #define V2
@@ -150,8 +150,10 @@ int main(int argc, char* argv[])
 
 		bool isCe = false;
 		bool isMark = false;
+		int seqNrTx = 0, seqNrRx = 0;
 		if (netQueueDelay->extract(time, rtpPacket, ssrc, size, seqNr, isCe, isMark)) {
 			netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr, isCe, isMark);
+			seqNrTx = seqNr;
 		}
 
 		if (true) {
@@ -166,6 +168,7 @@ int main(int argc, char* argv[])
 				}
 				//if (n % 1000 > 0)
 				screamRx->receive(time_ntp_rx, 0, ssrc, size, seqNr, ceBits, isMark);
+				seqNrRx = seqNr;
 			}
 		}
 
@@ -196,22 +199,27 @@ int main(int argc, char* argv[])
 			*/
 			void** rtpPacket = 0;
 			uint32_t ssrc_tmp;
+			float rtpQueueDelay = 0.0f;
 			switch (ssrc) {
 			case 10:
+				rtpQueueDelay = rtpQueue[0]->getDelay(time);
 				rtpQueue[0]->sendPacket(rtpPacket, size, ssrc_tmp, seqNr, isMark);
 				break;
 			case 11:
+				rtpQueueDelay = rtpQueue[1]->getDelay(time);
 				rtpQueue[1]->sendPacket(rtpPacket, size, ssrc_tmp, seqNr, isMark);
 				break;
 			case 12:
+				rtpQueueDelay = rtpQueue[2]->getDelay(time);
 				rtpQueue[2]->sendPacket(rtpPacket, size, ssrc_tmp, seqNr, isMark);
 				break;
 			case 13:
+				rtpQueueDelay = rtpQueue[3]->getDelay(time);
 				rtpQueue[3]->sendPacket(rtpPacket, size, ssrc_tmp, seqNr, isMark);
 				break;
 			}
 			netQueueDelay->insert(time, rtpPacket, ssrc, size, seqNr, false, isMark);
-			retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark);
+			retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark, rtpQueueDelay);
 			nextCallN = n + max(1, (int)(65536.0f * retVal));
 			isEvent = true;
 		}

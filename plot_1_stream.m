@@ -30,10 +30,10 @@ function plot_1_stream(a,Tlim,maxR,maxD,maxRT, U)
   xlim(Tlim);
 
   subplot(K,1,L);L=L+1;
-  plot(T,a(:,8));
+  plot(T,a(:,8)+a(:,2));
   set(gca,'FontSize',12);grid on;
   set(gca,'XTickLabel',[]);  
-  title('RTP queue delay[s]')
+  title('RTP queue+network delay[s]')
   ylim([0 maxD]);
   xlim(Tlim);
 

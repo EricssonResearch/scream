@@ -285,7 +285,8 @@ extern "C" {
 			uint32_t ssrc,
 			int size,
 			uint16_t seqNr,
-			bool isMark);
+			bool isMark,
+			float rtpQueueDelay=0.0f);
 
 		/* New incoming feedback, this function
 		* triggers a CWND update
@@ -468,6 +469,7 @@ extern "C" {
 			uint32_t timeTx_ntp;
 			int size;
 			uint16_t seqNr;
+			float rtpQueueDelay;
 			bool isMark;
 			bool isUsed;
 			bool isAcked;
@@ -622,6 +624,7 @@ extern "C" {
 			float relFrameSizeHist[kRelFrameSizeHistBins];
 			float relFrameSizeHigh;
 
+			float rtpQueueDelay;
 		};
 
 		/*
@@ -1015,7 +1018,8 @@ extern "C" {
 			uint32_t ssrc,
 			int size,
 			uint16_t seqNr,
-			bool isMark);
+			bool isMark,
+			float rtpQueueDelay=0.0f);
 
 		/* New incoming feedback, this function
 		* triggers a CWND update
@@ -1195,6 +1199,7 @@ extern "C" {
 			uint32_t timeTx_ntp;
 			int size;
 			uint16_t seqNr;
+			float rtpQueueDelay;
 			bool isMark;
 			bool isUsed;
 			bool isAcked;
@@ -1325,6 +1330,7 @@ extern "C" {
 			float rateShare;
 			bool isMaxrate;
 
+			float rtpQueueDelay;
 		};
 
 		/*

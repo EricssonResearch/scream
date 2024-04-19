@@ -440,7 +440,8 @@ float ScreamV2Tx::addTransmitted(uint32_t time_ntp,
 	uint32_t ssrc,
 	int size,
 	uint16_t seqNr,
-	bool isMark) {
+	bool isMark,
+	float rtpQueueDelay) {
 	if (!isInitialized)
 		initialize(time_ntp);
 
@@ -452,6 +453,7 @@ float ScreamV2Tx::addTransmitted(uint32_t time_ntp,
 	Transmitted* txPacket = &(stream->txPackets[ix]);
 	stream->hiSeqTx = seqNr;
 	txPacket->timeTx_ntp = time_ntp;
+	txPacket->rtpQueueDelay = rtpQueueDelay;
 	txPacket->size = size;
 	txPacket->seqNr = seqNr;
 	txPacket->isMark = isMark;
@@ -791,9 +793,9 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		if (fp_log && completeLogItem) {
 			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f",
-				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog, 
-				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe, 
-				isMark, stream->targetBitrate, stream->rtpQueue->getDelay(time));
+				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
+				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
+				isMark, stream->targetBitrate, stream->rtpQueueDelay); //rtpQueue->getDelay(time));
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
 			}
@@ -847,6 +849,7 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 				stream->packetsCe++;
 				isCe = true;
 			}
+			stream->rtpQueueDelay = tmp->rtpQueueDelay;
 			tmp->isAcked = true;
 			ackedOwd = timestamp - tmp->timeTx_ntp;
 
@@ -1033,7 +1036,8 @@ void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 		}
 		char s2[200];
 		sprintf(s2, "%4.3f, %d,%d,%6.0f, %6.0f, %lu, %6.0f, %6.0f, %5.0f, %5.0f, %lu, %5d, %5d, %d, %lu,%lu",
-			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
+			//std::max(0.0f, tmp->rtpQueue->getDelay(time)),
+			std::max(0.0f, tmp->rtpQueueDelay),
 			tmp->rtpQueue->bytesInQueue(),
 			tmp->rtpQueue->sizeOfQueue(),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtpAvg / 1000.0f,
@@ -1067,7 +1071,7 @@ void ScreamV2Tx::getShortLog(float time, char* s) {
 		Stream* tmp = streams[n];
 		char s2[200];
 		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f,",
-			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
+			std::max(0.0f, tmp->rtpQueueDelay),// tmp->rtpQueue->getDelay(time)),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtpAvg / 1000.0f,
 			tmp->rateTransmittedAvg / 1000.0f,
 			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);

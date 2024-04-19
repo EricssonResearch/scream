@@ -66,6 +66,7 @@ float scaleFactor = 0.7f;
 ScreamV2Tx* screamTx = 0;
 float bytesInFlightHeadroom = 2.0f;
 float multiplicativeIncreaseFactor = 0.05f;
+bool openWindow = false;
 #else
 int rateIncrease = 10000;
 float rateScale = 0.5f;
@@ -264,6 +265,8 @@ void* transmitRtpThread(void* arg) {
 		uint32_t ssrc_unused;
 
 		pthread_mutex_lock(&lock_rtp_queue);
+		float rtpQueueDelay = 0.0f;
+		rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f));
 		rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
 		sendPacket(buf, size);
 		nTx++;
@@ -274,7 +277,7 @@ void* transmitRtpThread(void* arg) {
 
 		pthread_mutex_lock(&lock_scream);
 		time_ntp = getTimeInNtp();
-		retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, isMark);
+		retVal = screamTx->addTransmitted(time_ntp, SSRC, size, seqNr, isMark, rtpQueueDelay);
 		pthread_mutex_unlock(&lock_scream);
 
 		if (!disablePacing && retVal > 0.0) {
@@ -633,7 +636,7 @@ int setup() {
 			bytesInFlightHeadroom,
 			multiplicativeIncreaseFactor,
 			ect == 1,
-			false,
+			openWindow,
 			false,
 			enableClockDriftCompensation);
 #else
@@ -767,6 +770,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << endl;
 		cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
 		cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << endl;
+		cerr << "     -openwindow              override SCReAMs window limitation  (default = false) " << endl;
 		cerr << "     -adaptivepaceheadroom value set adaptive packet pacing headroom (default = 1.5) " << endl;
 		cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << endl;
 		cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << endl;
@@ -923,6 +927,11 @@ int main(int argc, char* argv[]) {
 			keyFrameInterval = atof(argv[ix + 1]);
 			keyFrameSize = atof(argv[ix + 2]);
 			ix += 3;
+			continue;
+		}
+		if (strstr(argv[ix], "-openwindow")) {
+			openWindow = true;
+			ix++;
 			continue;
 		}
 		if (strstr(argv[ix], "-nopace")) {

@@ -549,7 +549,8 @@ float ScreamV1Tx::addTransmitted(uint32_t time_ntp,
 	uint32_t ssrc,
 	int size,
 	uint16_t seqNr,
-	bool isMark) {
+	bool isMark, 
+	float rtpQueueDelay) {
 	if (!isInitialized)
 		initialize(time_ntp);
 
@@ -561,6 +562,7 @@ float ScreamV1Tx::addTransmitted(uint32_t time_ntp,
 	Transmitted* txPacket = &(stream->txPackets[ix]);
 	stream->hiSeqTx = seqNr;
 	txPacket->timeTx_ntp = time_ntp;
+	txPacket->rtpQueueDelay = rtpQueueDelay;
 	txPacket->size = size;
 	txPacket->seqNr = seqNr;
 	txPacket->isMark = isMark;
@@ -910,6 +912,7 @@ bool ScreamV1Tx::markAcked(uint32_t time_ntp,
 				stream->packetsCe++;
 				isCe = true;
 			}
+			stream->rtpQueueDelay = tmp->rtpQueueDelay;
 			tmp->isAcked = true;
 			ackedOwd = timestamp - tmp->timeTx_ntp;
 
@@ -1097,7 +1100,7 @@ void ScreamV1Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 		}
 		char s2[200];
 		sprintf(s2, "%4.3f, %d,%d,%6.0f, %6.0f, %lu, %6.0f, %6.0f, %5.0f, %5.0f, %lu, %5d, %5d, %d, %lu,%lu",
-			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
+			std::max(0.0f, tmp->rtpQueueDelay), //tmp->rtpQueue->getDelay(time)),
 			tmp->rtpQueue->bytesInQueue(),
 			tmp->rtpQueue->sizeOfQueue(),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
@@ -1130,7 +1133,7 @@ void ScreamV1Tx::getShortLog(float time, char* s) {
 		Stream* tmp = streams[n];
 		char s2[200];
 		sprintf(s2, "%4.3f, %6.0f, %6.0f, %6.0f, %5.0f, %5.0f,",
-			std::max(0.0f, tmp->rtpQueue->getDelay(time)),
+			std::max(0.0f, tmp->rtpQueueDelay),
 			tmp->targetBitrate / 1000.0f, tmp->rateRtp / 1000.0f,
 			tmp->rateTransmitted / 1000.0f,
 			tmp->rateLost / 1000.0f, tmp->rateCe / 1000.0f);
@@ -2110,7 +2113,7 @@ ScreamV1Tx::Stream::Stream(ScreamV1Tx* parent_,
 		relFrameSizeHist[n] = 0.0f;
 	}
 	relFrameSizeHigh = 1.0f;
-
+	rtpQueueDelay = 0.0f;
 }
 
 /*

@@ -629,14 +629,16 @@ void *txRtpThread(void *arg) {
         RtpQueue *rtpQueue = (RtpQueue*)screamTx->getStreamQueue(ssrc);
 
         pthread_mutex_lock(&lock_rtp_queue);
-    		rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
+        float rtpQueueDelay = 0.0f;
+        rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f));
+        rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
     		sendPacket((char*)buf, size);
     		nTx++;
     		pthread_mutex_unlock(&lock_rtp_queue);
 
         pthread_mutex_lock(&lock_scream);
     		time_ntp = getTimeInNtp();
-    		retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark);
+    		retVal = screamTx->addTransmitted(time_ntp, ssrc, size, seqNr, isMark, rtpQueueDelay);
     		pthread_mutex_unlock(&lock_scream);
 
     		if (retVal > 0.0){
@@ -703,6 +705,8 @@ void *txRtpThread(void *arg) {
                         bool isMark;
 						uint32_t ssrc_unused;
 
+                        float rtpQueueDelay = 0.0f;
+                        rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f));
                         rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
                         pthread_mutex_unlock(&lock_rtp_queue);
 
@@ -715,7 +719,7 @@ void *txRtpThread(void *arg) {
                         * Register transmitted RTP packet
                         */
                         pthread_mutex_lock(&lock_scream);
-                        retVal = screamTx->addTransmitted(getTimeInNtp(), ssrc, size, seqNr, false);
+                        retVal = screamTx->addTransmitted(getTimeInNtp(), ssrc, size, seqNr, true, rtpQueueDelay);
                         pthread_mutex_unlock(&lock_scream);
                     }
 

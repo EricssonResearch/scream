@@ -94,6 +94,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	rateShare = minBitrate;
 	isMaxrate = false;
 
+	rtpQueueDelay = 0.0f;
 }
 
 /*
