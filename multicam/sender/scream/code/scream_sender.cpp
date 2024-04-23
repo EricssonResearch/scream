@@ -94,6 +94,7 @@ float pacingHeadroom = 1.2;
 bool isNewCc = false;
 #endif
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
+bool ntp = false;
 
 struct sockaddr_in in_rtp_addr[MAX_SOURCES];
 struct sockaddr_in out_rtcp_addr[MAX_SOURCES];
@@ -210,6 +211,7 @@ int main(int argc, char* argv[]) {
         cerr << "    example -priority 1.0:0.5:0.2:0.1" << endl;
         cerr << " -ratescale list    : Compensate for systematic error in actual vs desired rate" << endl;
         cerr << "    example -ratescale 0.6:0.5:1.0:1.0" << endl;
+        cerr << " -ntp               : Use NTP timestamp in logfile" << endl;
 
         cerr << " nsources           : Number of sources, min=1, max=" << MAX_SOURCES << endl;
         cerr << " out_ip             : remote (SCReAM receiver) IP address" << endl;
@@ -250,6 +252,7 @@ int main(int argc, char* argv[]) {
         cerr << "    example -priority 1.0:0.5:0.2:0.1" << endl;
         cerr << " -ratescale list    : Compensate for systematic error in actual vs desired rate" << endl;
         cerr << "    example -ratescale 0.6:0.5:1.0:1.0" << endl;
+        cerr << " -ntp               : Use NTP timestamp in logfile" << endl;
 
         cerr << " nsources           : Number of sources, min=1, max=" << MAX_SOURCES << endl;
         cerr << " out_ip             : remote (SCReAM receiver) IP address" << endl;
@@ -379,6 +382,11 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
+        if (strstr(argv[ix], "-ntp")) {
+	    ntp = true;
+	    ix++;
+	    continue;
+	}
 #endif
         fprintf(stderr, "unexpected arg %s\n", argv[ix]);
         ix += 1;
@@ -706,7 +714,7 @@ void *txRtpThread(void *arg) {
 						uint32_t ssrc_unused;
 
                         float rtpQueueDelay = 0.0f;
-                        rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f));
+                        rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f);
                         rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
                         pthread_mutex_unlock(&lock_rtp_queue);
 
@@ -888,8 +896,17 @@ void *rxRtcpThread(void *arg) {
         if (stopThread)
             return;
         if (recvlen > KEEP_ALIVE_PKT_SIZE) {
-			sprintf(s, "%1.4f", getTimeInNtp() / 65536.0f);
-			screamTx->setTimeString(s);
+	    if (ntp) {
+		struct timeval tp;
+		gettimeofday(&tp, NULL);
+		double time = tp.tv_sec + tp.tv_usec * 1e-6;
+		sprintf(s, "%1.6f", time);
+	    }
+	    else {
+	       sprintf(s, "%1.4f", getTimeInNtp() / 65536.0f);
+	    }
+
+	    screamTx->setTimeString(s);
             pthread_mutex_lock(&lock_scream);
             screamTx->incomingStandardizedFeedback(getTimeInNtp(), buf_rtcp, recvlen);
             lastRtcpT_ntp = getTimeInNtp();
