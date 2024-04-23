@@ -266,7 +266,7 @@ void* transmitRtpThread(void* arg) {
 
 		pthread_mutex_lock(&lock_rtp_queue);
 		float rtpQueueDelay = 0.0f;
-		rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f);
+		rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f); 
 		rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
 		sendPacket(buf, size);
 		nTx++;
