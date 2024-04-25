@@ -6,6 +6,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 
 - 2024-04-25 :
   - Improved stability at very low bitrates 
+  - Added isslowencoder option for the case that rate increase should be more moderate. This comes with the risk that SCReAM is starved by e.g TCP Prague.
 - 2024-04-19 :
   - Log item RTP queue delay modified to make it possible to add network queue delay and RTP queue delay to see the actual extra delay for transmitted RTP packets.
   - SCReAM BW test tool (SCReAMv2 only): Added openWindow option
