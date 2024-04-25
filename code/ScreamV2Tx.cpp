@@ -1505,8 +1505,8 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	   */
 	   float tmp = 1.0f/sclI;
 	   tmp = std::min(tmp,std::max(1.0f,tmp*cwndRatio*3.0f));
-	   sclI = 1.0/tmp;
-	   increment *= sclI;
+	   //sclI = 1.0/tmp;
+	   //increment *= sclI;
 
 	}
 

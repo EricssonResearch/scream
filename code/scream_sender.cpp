@@ -83,6 +83,7 @@ bool isNewCc = false;
 float postCongestionDelay = 4.0f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
+bool isSlowEncoder = false;
 
 int periodicRateDropInterval = 600; // seconds*10
 
@@ -642,6 +643,7 @@ int setup() {
 			openWindow,
 			false,
 			enableClockDriftCompensation);
+		screamTx->setIsSlowEncoder(isSlowEncoder);
 #else
 		screamTx = new ScreamV1Tx(scaleFactor, scaleFactor,
 			delayTarget,
@@ -661,7 +663,7 @@ int setup() {
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow((mtu+12)*2);
 	screamTx->setPostCongestionDelay(postCongestionDelay);
-	//screamTx->setIsSlowEncoder(true);
+
 	if (disablePacing)
 		screamTx->enablePacketPacing(false);
 
@@ -783,6 +785,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -fps value               set the frame rate (default 50)" << endl;
 		cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
 		cerr << "                               receiver end clock is faster" << endl;
+		cerr << "     -isslowencoder           make adaptation more cautious for better handling of slow encoders" << endl;
 		cerr << "     -verbose                 print a more extensive log" << endl;
 		cerr << "     -nosummary               don't print summary" << endl;
 		cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
@@ -1042,6 +1045,13 @@ int main(int argc, char* argv[]) {
 			}
 			continue;
 		}
+		
+		if (strstr(argv[ix], "-isslowencoder")) {
+			isSlowEncoder = true;
+			ix++;
+			continue;
+		}
+
 
 #ifdef V2
 		if (strstr(argv[ix], "-mulincrease")) {

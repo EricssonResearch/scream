@@ -93,6 +93,7 @@ float fastIncreaseFactor = 1.0;
 float pacingHeadroom = 1.2;
 bool isNewCc = false;
 #endif
+bool isSlowEncoder = false;
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
 bool ntp = false;
 
@@ -200,6 +201,7 @@ int main(int argc, char* argv[]) {
         cerr << "                      is static for long periods. " << endl;
         cerr << " -maxtotalrate val  : Set max total bitrate [kbps], default 100000." << endl;
         cerr << " -pacingheadroom val: Set packet pacing headroom, default 1.5." << endl;
+        cerr << " -isslowencoder     : Make adaptation more cautious for better handling of slow encoders" << endl;
         cerr << " -log log_file      : Save detailed per-ACK log to file" << endl;
         cerr << " -ratemax list      : Set max rate [kbps] for streams" << endl;
         cerr << "    example -ratemax 30000:20000" << endl;
@@ -212,6 +214,7 @@ int main(int argc, char* argv[]) {
         cerr << " -ratescale list    : Compensate for systematic error in actual vs desired rate" << endl;
         cerr << "    example -ratescale 0.6:0.5:1.0:1.0" << endl;
         cerr << " -ntp               : Use NTP timestamp in logfile" << endl;
+        
 
         cerr << " nsources           : Number of sources, min=1, max=" << MAX_SOURCES << endl;
         cerr << " out_ip             : remote (SCReAM receiver) IP address" << endl;
@@ -352,6 +355,11 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
+        if (strstr(argv[ix], "-isslowencoder")) {
+	    isSlowEncoder = true;
+            ix++;
+	    continue;
+	}
 #else
         if (strstr(argv[ix], "-fincrease")) {
             fastIncreaseFactor = atof(argv[ix + 1]);
@@ -1035,6 +1043,7 @@ int setup() {
         false,
         false);
         screamTx->setPostCongestionDelay(4.0);
+        screamTx->setIsSlowEncoder(isSlowEncoder);
 #else
     screamTx = new ScreamV1Tx(
         congestionScaleFactor,
