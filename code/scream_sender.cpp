@@ -60,13 +60,13 @@ bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 bool pushTraffic = false;
+bool openWindow = false;
 #ifdef V2
 float packetPacingHeadroom = 1.5f;
 float scaleFactor = 0.7f;
 ScreamV2Tx* screamTx = 0;
 float bytesInFlightHeadroom = 2.0f;
 float multiplicativeIncreaseFactor = 0.05f;
-bool openWindow = false;
 #else
 int rateIncrease = 10000;
 float rateScale = 0.5f;
@@ -247,9 +247,12 @@ void* transmitRtpThread(void* arg) {
 			}
 
 		}
+		
+
+		
 		if (accumulatedPaceTime > minPaceIntervalUs * 1e-6) {
 			diff = 100;
-			if (accumulatedPaceTime > 1.5 * minPaceIntervalUs * 1e-6)
+			if (accumulatedPaceTime > 1.1 * minPaceIntervalUs * 1e-6)
 				usleep(std::max(10, (int)(accumulatedPaceTime * 1e6 - diff)));
 			else
 				usleep(std::max(10u, minPaceIntervalUs - diff));
@@ -266,7 +269,7 @@ void* transmitRtpThread(void* arg) {
 
 		pthread_mutex_lock(&lock_rtp_queue);
 		float rtpQueueDelay = 0.0f;
-		rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f); 
+		rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f);
 		rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
 		sendPacket(buf, size);
 		nTx++;
@@ -600,7 +603,7 @@ int setup() {
 			1.0f,
 			1.0f,
 			delayTarget,
-			(fixedRate * 100) / 8,
+			(mtu+12)*2,
 			1.5f,
 			1.5f,
 			2.0f,
@@ -614,7 +617,7 @@ int setup() {
 			delayTarget,
 			false,
 			1.0f, 2.0f,
-			(fixedRate * 100) / 8,
+			(mtu+12)*2,
 			1.5f,
 			20,
 			ect == 1,
@@ -656,8 +659,9 @@ int setup() {
 #endif
 	}
 	rtpQueue = new RtpQueue();
-	screamTx->setCwndMinLow(5000);
+	screamTx->setCwndMinLow((mtu+12)*2);
 	screamTx->setPostCongestionDelay(postCongestionDelay);
+	//screamTx->setIsSlowEncoder(true);
 	if (disablePacing)
 		screamTx->enablePacketPacing(false);
 
@@ -744,7 +748,7 @@ int main(int argc, char* argv[]) {
 	*/
 	if (argc <= 1) {
 #ifdef V2
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-04-19 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-04-25 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;

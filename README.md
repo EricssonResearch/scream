@@ -4,6 +4,8 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 
 ## News
 
+- 2024-04-25 :
+  - Improved stability at very low bitrates 
 - 2024-04-19 :
   - Log item RTP queue delay modified to make it possible to add network queue delay and RTP queue delay to see the actual extra delay for transmitted RTP packets.
   - SCReAM BW test tool (SCReAMv2 only): Added openWindow option

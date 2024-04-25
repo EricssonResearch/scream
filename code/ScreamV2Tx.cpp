@@ -671,6 +671,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			ceDensity *= 1.0f - kCeDensityAlpha;
 			ceDensity = std::max(0.25f, ceDensity);
 		}
+
 		isCeThisFeedback = false;
 		if (isL4s) {
 			/*
@@ -1211,6 +1212,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		}
 
 		float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtpAvg);
+	
 		pacingBitrate = std::max(50e3f, headroom * pacingBitrate);
 		if (maxTotalBitrate > 0) {
 			pacingBitrate = std::min(pacingBitrate, maxTotalBitrate * packetPacingHeadroom);
@@ -1394,11 +1396,12 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			*  reduced, especially at very low bitrates
 			*/
 
+
 			/*
 			* Compensate for very small cwndRatios
 			* i.e CWND is almost as small as MSS
 			*/
-			backOff *= std::min(1.0f, cwndScaleFactor);
+			//backOff *= std::min(1.0f, cwndScaleFactor);
 
 			/*
 			* Hmm.. Yes.. This is a bit of voodoo magic.. and
@@ -1406,7 +1409,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			* This extra compensation is to make sure that bitrate does not
 			* become too low at high CE rates == low CWND/MSS
 			*/
-			backOff *= std::max(0.8f, 1.0f - cwndRatio * 2.0f);
+			//backOff *= std::max(0.8f, 1.0f - cwndRatio * 2.0f);
 
 			if (time_ntp - lastCongestionDetectedT_ntp > 65536 * 5.0f) {
 				/*
@@ -1492,8 +1495,20 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	sclI = sclI * sclI;
 	sclI = std::max(0.1f, std::min(1.0f, sclI));
 	if (isSlowEncoder || !isL4sActive) {
-		increment *= sclI;
-	} 
+	   /*
+	   * Not L4S or video coder is slow to react on rate changes
+	   */
+	   increment *= sclI;
+	} else {
+	   /* 
+	   * L4S adjustment when the congestion window is very small
+	   */
+	   float tmp = 1.0f/sclI;
+	   tmp = std::min(tmp,std::max(1.0f,tmp*cwndRatio*3.0f));
+	   sclI = 1.0/tmp;
+	   increment *= sclI;
+
+	}
 
 	/*
 	* Slow down CWND increase when CWND is only a few MSS
