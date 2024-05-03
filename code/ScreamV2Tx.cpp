@@ -62,7 +62,7 @@ static const float kCeDensityAlpha = 1.0f / 16;
 static const float kCwndOverhead = 1.5f;
 
 // Min additive increase scaling
-static const float kLowCwndScaleFactor = 0.1f;
+static const float kLowCwndScaleFactor = 1.0f;
 
 // Time constant for queue delay average
 static const float kQueueDelayAvgAlpha = 1.0f / 4;
@@ -98,7 +98,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	isAutoTuneMinCwnd(false),
 	enableRateUpdate(true),
 	isUseExtraDetailedLog(false),
-	isSlowEncoder(false),
+	isEmulateCubic(false),
 
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
@@ -650,12 +650,12 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		detectLoss(time_ntp, txPackets, seqNr, stream);
 	}
+
 	if (isLast) {
 		if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) { // CE event at least every 30ms
 			ecnCeEvent = true;
 			lastLossEventT_ntp = time_ntp;
 			lastCeEventT_ntp = time_ntp;
-
 		}
 
 		if (!isEnablePacketPacing) {
@@ -683,6 +683,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				fractionMarked = 0.0f;
 				if (bytesDeliveredThisRtt > 0) {
 					fractionMarked = float(packetsMarkedThisRtt) / float(packetsDeliveredThisRtt);
+					
 					if (fractionMarked == 1.0) {
 						/*
 						* Likely a fast reduction in throughput, reset ceDensity
@@ -930,6 +931,7 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 	return isCe;
 }
 
+
 /*
 * Detect lost RTP packets
 */
@@ -1159,7 +1161,11 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	if (lastCwndUpdateT_ntp == 0)
 		lastCwndUpdateT_ntp = time_ntp;
 
-	postCongestionScale = std::max(0.0f, std::min(1.0f, (time_ntp - lastCongestionDetectedT_ntp) / (postCongestionDelay * 65536.0f)));
+	float lossDistanceScale = std::max(0.0f,std::min(1.0f,
+                             ((time_ntp - lastLossEventT_ntp)/65536.0f/sRtt-4.0f)/4.0f));
+	postCongestionScale = std::max(0.0f, 
+	     std::min(1.0f, 
+             ((time_ntp - lastCongestionDetectedT_ntp) / 65536.0f-0.0f*postCongestionDelay)/postCongestionDelay));
 
 	queueDelayMin = std::min(queueDelayMin, queueDelay);
 
@@ -1352,10 +1358,12 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* and the congestion marking this gets more unsteady.
 	* The drawback is that reaction to congestion becomes slower.
 	* Reducing the MSS when bitrate is low is the best option if fast reaction to congestion
-	* is desired.
+	* is desired
 	*/
-	float cwndScaleFactor = (kLowCwndScaleFactor + (multiplicativeIncreaseScalefactor * cwnd) / mss);
-
+	
+	float cwndScaleFactorBase = kLowCwndScaleFactor;
+	float cwndScaleFactorExt = (multiplicativeIncreaseScalefactor * cwnd)/mss;
+	
 	if (lossEvent) {
 		/*
 		* Update inflexion point
@@ -1374,7 +1382,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 		wasLossEvent = true;
 		postCongestionScale = 0.0f;
-
 	}
 	else if (ecnCeEvent || virtualCeEvent) {
 		/*
@@ -1389,27 +1396,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		*/
 		if (isL4s && !virtualCeEvent) {
 			float backOff = l4sAlpha / 2.0f;
-			/*
-			* Additional compensation is needed to compensate for
-			* small CWND as well as the packet pacing headroom
-			* The drawback is that reaction to congestion can become
-			*  reduced, especially at very low bitrates
-			*/
-
 
 			/*
-			* Compensate for very small cwndRatios
-			* i.e CWND is almost as small as MSS
-			*/
-			//backOff *= std::min(1.0f, cwndScaleFactor);
-
-			/*
-			* Hmm.. Yes.. This is a bit of voodoo magic.. and
-			* actually on top of previous scaling
+			* Hmm.. Yes.. This is a bit of voodoo magic..
 			* This extra compensation is to make sure that bitrate does not
 			* become too low at high CE rates == low CWND/MSS
 			*/
-			//backOff *= std::max(0.8f, 1.0f - cwndRatio * 2.0f);
+			backOff *= std::max(0.8f, 1.0f - cwndRatio * 2.0f);
 
 			if (time_ntp - lastCongestionDetectedT_ntp > 65536 * 5.0f) {
 				/*
@@ -1434,7 +1427,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 				* This may over react but it is better than
 				* excessive queue delay
 				*/
-				l4sAlpha = 0.25;
+				l4sAlpha = std::max(l4sAlpha,0.25f);
 
 			}
 			/*
@@ -1472,6 +1465,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		lastRttT_ntp = time_ntp;
 	}
 
+
 	/*
 	* Compute max increment based on bytes acked
 	*  but subtract number of CE marked bytes
@@ -1491,37 +1485,26 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	*/
 	float sclI = 1.0f;
 	sclI = float(cwnd - cwndI) / cwndI;
-	sclI *= 4;
+	if (isL4sActive)
+  	   sclI *= 16;
+	else 
+	   sclI *= 4;
 	sclI = sclI * sclI;
 	sclI = std::max(0.1f, std::min(1.0f, sclI));
-	if (isSlowEncoder || !isL4sActive) {
-	   /*
-	   * Not L4S or video coder is slow to react on rate changes
-	   */
-	   increment *= sclI;
-	} else {
-	   /* 
-	   * L4S adjustment when the congestion window is very small
-	   */
-	   float tmp = 1.0f/sclI;
-	   tmp = std::min(tmp,std::max(1.0f,tmp*cwndRatio*3.0f));
-	   //sclI = 1.0/tmp;
-	   //increment *= sclI;
-
-	}
+	if (isEmulateCubic || !isL4sActive) {
+           increment *= sclI;
+    }
 
 	/*
-	* Slow down CWND increase when CWND is only a few MSS
-	* This goes hand in hand with that the down scaling is also
-	* slowed down then
+	* Calculate relative growth of CWND
 	*/
-	float tmp2 = cwndScaleFactor;
+	float tmp2 = cwndScaleFactorBase+cwndScaleFactorExt;
 	/*
-	* Furher limit multiplicative increase when congestion occured
+	* Limit multiplicative increase when congestion occured
 	* recently
 	*/
-	if (tmp2 > 1.0f && postCongestionDelay > 0.2f) {
-		tmp2 = 1.0f + ((tmp2 - 1.0f) * postCongestionScale) * sclI;
+	if (tmp2 > cwndScaleFactorBase && postCongestionDelay > 0.2f) {
+		tmp2 = cwndScaleFactorBase + ((tmp2 - cwndScaleFactorBase) * postCongestionScale) * sclI;
 	}
 	increment *= tmp2;
 

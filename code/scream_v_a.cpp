@@ -58,7 +58,7 @@ int main(int argc, char* argv[])
 	//screamTx->autoTuneMinCwnd(true);
 	//screamTx->setMaxTotalBitrate(40e6);
 	screamTx->setLogTag((char*)log_tag);
-	//screamTx->setIsSlowEncoder(true);
+	screamTx->setIsEmulateCubic(true);
 
 	ScreamRx* screamRx = new ScreamRx(0, 1, 1);
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
@@ -71,7 +71,7 @@ int main(int argc, char* argv[])
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.3f, 1e6f, 50e6f, 0.1f, false, 0.05f);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.3f, 1e6f, 100e6f, 0.1f, false, 0.05f);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
@@ -234,11 +234,11 @@ int main(int argc, char* argv[])
 		}
 
 		if (isChRate) {
-			if ((time > 10.0 && time < 12) && isChRate) {
-				netQueueRate->rate = 16000e3;
+			if ((time > 10.0 && time < 20) && isChRate) {
+				netQueueRate->rate = 20000e3;
 			}
 			else {
-				netQueueRate->rate = 32000e3;
+				netQueueRate->rate = 10000e3;
 			}
 		}
 

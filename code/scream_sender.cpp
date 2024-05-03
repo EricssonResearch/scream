@@ -83,7 +83,7 @@ bool isNewCc = false;
 float postCongestionDelay = 4.0f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
-bool isSlowEncoder = false;
+bool isEmulateCubic = false;
 
 int periodicRateDropInterval = 600; // seconds*10
 
@@ -643,7 +643,7 @@ int setup() {
 			openWindow,
 			false,
 			enableClockDriftCompensation);
-		screamTx->setIsSlowEncoder(isSlowEncoder);
+		screamTx->setIsEmulateCubic(isEmulateCubic);
 #else
 		screamTx = new ScreamV1Tx(scaleFactor, scaleFactor,
 			delayTarget,
@@ -750,7 +750,7 @@ int main(int argc, char* argv[]) {
 	*/
 	if (argc <= 1) {
 #ifdef V2
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-04-25 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-05-03 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -785,7 +785,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -fps value               set the frame rate (default 50)" << endl;
 		cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
 		cerr << "                               receiver end clock is faster" << endl;
-		cerr << "     -isslowencoder           make adaptation more cautious for better handling of slow encoders" << endl;
+		cerr << "     -emulatecubic            make adaptation more cautious around the last known higher rate" << endl;
 		cerr << "     -verbose                 print a more extensive log" << endl;
 		cerr << "     -nosummary               don't print summary" << endl;
 		cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
@@ -1046,8 +1046,8 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 		
-		if (strstr(argv[ix], "-isslowencoder")) {
-			isSlowEncoder = true;
+		if (strstr(argv[ix], "-emulatecubic")) {
+			isEmulateCubic = true;
 			ix++;
 			continue;
 		}

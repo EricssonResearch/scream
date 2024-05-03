@@ -93,7 +93,7 @@ float fastIncreaseFactor = 1.0;
 float pacingHeadroom = 1.2;
 bool isNewCc = false;
 #endif
-bool isSlowEncoder = false;
+bool isEmulateCubic = false;
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
 bool ntp = false;
 
@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
         cerr << "                      is static for long periods. " << endl;
         cerr << " -maxtotalrate val  : Set max total bitrate [kbps], default 100000." << endl;
         cerr << " -pacingheadroom val: Set packet pacing headroom, default 1.5." << endl;
-        cerr << " -isslowencoder     : Make adaptation more cautious for better handling of slow encoders" << endl;
+        cerr << " -emulatecubic      : Make adaptation more cautious around the last known max rate" << endl;
         cerr << " -log log_file      : Save detailed per-ACK log to file" << endl;
         cerr << " -ratemax list      : Set max rate [kbps] for streams" << endl;
         cerr << "    example -ratemax 30000:20000" << endl;
@@ -355,8 +355,8 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
-        if (strstr(argv[ix], "-isslowencoder")) {
-	    isSlowEncoder = true;
+        if (strstr(argv[ix], "-emulatecubic")) {
+	    isEmulateCubic = true;
             ix++;
 	    continue;
 	}
@@ -1043,7 +1043,7 @@ int setup() {
         false,
         false);
         screamTx->setPostCongestionDelay(4.0);
-        screamTx->setIsSlowEncoder(isSlowEncoder);
+        screamTx->setIsEmulateCubic(isEmulateCubic);
 #else
     screamTx = new ScreamV1Tx(
         congestionScaleFactor,

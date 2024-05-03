@@ -1182,13 +1182,14 @@ extern "C" {
 		}
 
 		/*
-		* Set to true if the video encoder is known to be slow to react to changes in the 
+		* Set to true to make the rate increase more slow when close to the last known max, before congestion hit.
+               * This is also benficial if the video encoder is known to be slow to react to changes in the 
 		*  target bitrate. This is especially important when operating in L4S mode. 
 		* The drawback is that SCReAM can have more difficulties to compete with Prague 
 		*  over the same bottleneck
 		*/
-		void setIsSlowEncoder(bool isSlowEncoder_) {
-			isSlowEncoder = isSlowEncoder_;
+		void setIsEmulateCubic(bool isEmulateCubic_) {
+			isEmulateCubic = isEmulateCubic_;
 		}
 
 	private:
@@ -1452,7 +1453,7 @@ extern "C" {
 		bool isAutoTuneMinCwnd;
 		bool enableRateUpdate;
 		bool isUseExtraDetailedLog;
-		bool isSlowEncoder;
+		bool isEmulateCubic;
 
 		float sRtt;
 		uint32_t sRttSh_ntp;
@@ -1510,7 +1511,7 @@ extern "C" {
 		float virtualL4sAlpha;
 		float postCongestionScale;
 		float postCongestionDelay;
-
+		
 		float rateTransmitted;
 		float rateRtpAvg;
 		float maxRate;
