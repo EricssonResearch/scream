@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-05-11 :
+  - -emulatecubic option modified to be adaptive so that SCReAM will have a reasonable chance to compete against competing Prague flows. -emulatecubic is made optional but is recommended as it stabilizes SCReAM target bitrate and can also reduce delay jitter. 
 - 2024-05-03 :
   - isslowencoder option renamed to -emulatecubic as it behaves similar to TCP Cubic with a more moderate CWND growth close to the last known max value. The -emulatecubic option reduces bitrate variations at steady state but comes with the drawback that SCReAM can have problems to compete with Prague CC
 - 2024-04-25 :

@@ -19,9 +19,9 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 20;
+const float Tmax = 30;
 const bool isChRate = false;
-const bool printLog = true;
+const bool printLog = false;
 const bool ecnCapable = true;
 const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
@@ -60,18 +60,22 @@ int main(int argc, char* argv[])
 	screamTx->setLogTag((char*)log_tag);
 	screamTx->setIsEmulateCubic(true);
 
+	FILE* fp = fopen("log.txt", "w");
+	screamTx->setDetailedLogFp(fp);
+
+
 	ScreamRx* screamRx = new ScreamRx(0, 1, 1);
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 10e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 20e6, 0.0f, true && isL4s);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
 	videoEnc[2] = new VideoEnc(rtpQueue[2], FR / FR_DIV, (char*)TRACEFILE, 100);
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.3f, 1e6f, 100e6f, 0.1f, false, 0.05f);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.3e6f, 1e6f, 100e6f, 0.1f, false, 0.05f);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
@@ -93,6 +97,10 @@ int main(int argc, char* argv[])
 	double lastLogT = -1.0;
 	time = 0;
 	while (time <= Tmax) {
+		char s[100];
+		sprintf(s, "%3.4f", time);
+		screamTx->setTimeString(s);
+
 		time_ntp = n + 0;
 		time_ntp_rx = n + time_ntp_rx_plus;
 		float retVal = -1.0;
@@ -261,7 +269,7 @@ int main(int argc, char* argv[])
 		sleep(0);
 #endif
 	}
-
+	fclose(fp);
 	return 0;
 }
 

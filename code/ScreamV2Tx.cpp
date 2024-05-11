@@ -67,6 +67,8 @@ static const float kLowCwndScaleFactor = 1.0f;
 // Time constant for queue delay average
 static const float kQueueDelayAvgAlpha = 1.0f / 4;
 
+static const float kCwndISpreadAlpha = 1.0f / 64;
+
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	float ecnCeBeta_,
 	float queueDelayTargetMin_,
@@ -103,6 +105,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
 	sRttSh_ntp(3277),
+	sRttShPrev_ntp(3277),
 	currRtt(-1.0f),
 	ackedOwd(0),
 	baseOwd(UINT32_MAX),
@@ -130,6 +133,8 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	cwndMinLow(0),
 	cwndI(1),
 	cwndRatio(0.001f),
+	cwndIHistIx(0),
+	cwndISpread(0.0f),
 
 	bytesInFlight(0),
 	bytesInFlightLog(0),
@@ -223,6 +228,9 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 		streams[n] = NULL;
 	for (int n = 0; n < kMaxBytesInFlightHistSize; n++)
 		maxBytesInFlightHist[n] = 0;
+	for (int n = 0; n < kCwndIHistSize; n++) 
+		cwndIHist[n] = 0;
+
 }
 
 ScreamV2Tx::~ScreamV2Tx() {
@@ -525,8 +533,6 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	uint32_t rts;
 	memcpy(&rts, buf + length * 4, 4);
 	rts = ntohl(rts);
-	//printf(" TS %X\n", rts);
-
 
 	while (ptr != size - 4) {
 		/*
@@ -652,10 +658,13 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	}
 
 	if (isLast) {
-		if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) { // CE event at least every 30ms
-			ecnCeEvent = true;
-			lastLossEventT_ntp = time_ntp;
-			lastCeEventT_ntp = time_ntp;
+		//if (isCeThisFeedback && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) { // CE event at least every 30ms
+		if (time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) { // CE event at least every 30ms
+			if (isCeThisFeedback) {
+				ecnCeEvent = true;
+				lastLossEventT_ntp = time_ntp;
+				lastCeEventT_ntp = time_ntp;
+			}
 		}
 
 		if (!isEnablePacketPacing) {
@@ -684,19 +693,20 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				if (bytesDeliveredThisRtt > 0) {
 					fractionMarked = float(packetsMarkedThisRtt) / float(packetsDeliveredThisRtt);
 					
-					if (fractionMarked == 1.0) {
+					if (fractionMarked == 1.0f) {
 						/*
 						* Likely a fast reduction in throughput, reset ceDensity
 						*  so that CWND is reduced properly
 						*/
 						ceDensity = 1.0;
-						if (lastFractionMarked == 1.0f) {
+						if (false && lastFractionMarked == 1.0f) {
 							/*
 							* Both this update and previous had all packets marked, quite likely 
 							*  a continusly growing or standing queue.
 							* Set sRtt to the current value to track the increasing RTT faster.
 							* This helps the rate control to change to correct value faster and 
 							* thus avoids unnecessary delay in the RTP queue
+							* NOTE, disabled for now as it increases rate varaiations with narrow bottlenecks
 							*/
 							sRtt = std::max(sRtt,std::min(0.2f,currRtt));
 							sRtt_ntp = uint32_t(sRtt * 65536);
@@ -760,6 +770,15 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			}
 		}
 
+		if (sRttShPrev_ntp > sRttSh_ntp && fractionMarked == 1.0f) {
+			/*
+			* L4S marking may have too high marking thresholds, the result is that queues
+			* can become large that CE marking stays too long. This inhibits CE marking if the RTT reduces, which 
+			* is a reasonably safe sign that queues begin to deplete
+			*/
+			ecnCeEvent = false;
+		}
+
 		if (lossEvent || ecnCeEvent || virtualCeEvent) {
 			lastLossEventT_ntp = time_ntp;
 		}
@@ -793,11 +812,11 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	float time = time_ntp * ntp2SecScaleFactor;
 
 	if (isUseExtraDetailedLog || isLast || isMark) {
-		if (fp_log && completeLogItem) {
-			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f",
+		if (fp_log && completeLogItem) {			
+			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f %d",
 				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
 				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
-				isMark, stream->targetBitrate, stream->rtpQueueDelay); //rtpQueue->getDelay(time));
+				isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI); //rtpQueue->getDelay(time));
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
 			}
@@ -915,6 +934,7 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 			}
 			
 			if (rtt < 1000000 && isLast) {
+				sRttShPrev_ntp = sRttSh_ntp;
 				sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
 				if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
 					sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
@@ -1155,6 +1175,42 @@ float ScreamV2Tx::getTotalMaxBitrate() {
 
 
 /*
+* Determine CWND inflexion point based on median filtering
+*/
+void ScreamV2Tx::updateCwndI(int cwndI_) {
+
+	if (cwndIHist[0] == 0) {
+		for (int n = 0; n < kCwndIHistSize; n++)
+			cwndIHist[n] = cwndI_;
+	}
+	cwndIHist[cwndIHistIx] = cwndI_;
+	cwndIHistIx = (cwndIHistIx + 1) % kCwndIHistSize;
+
+	int tmp[kCwndIHistSize];
+	for (int n = 0; n < kCwndIHistSize; n++)
+		tmp[n] = cwndIHist[n];
+
+	for (int n = 0; n < kCwndIHistSize - 1; n++) {
+		for (int m = n + 1; m < kCwndIHistSize; m++) {
+			if (tmp[n] > tmp[m]) {
+				int tmp2 = tmp[n];
+				tmp[n] = tmp[m];
+				tmp[m] = tmp2;
+			}
+		}
+	}
+
+	cwndI = tmp[kCwndIHistSize / 2];
+
+	float tmp2 = float(tmp[kCwndIHistSize-1] - tmp[0]) / cwndI;
+
+	/*
+	* Determine how the samples spread
+	*/
+	cwndISpread = tmp2 * kCwndISpreadAlpha + cwndISpread * (1.0f - kCwndISpreadAlpha);
+
+}
+/*
 * Update the  congestion window
 */
 void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
@@ -1335,7 +1391,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			*/
 			maxBytesInFlightPrev = maxBytesInFlight;
 			maxBytesInFlight = 0;
-
 		}
 
 		/*
@@ -1370,9 +1425,8 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		*/
 		if (time_ntp - lastCwndIUpdateT_ntp > 32768) {
 			lastCwndIUpdateT_ntp = time_ntp;
-			cwndI = cwnd;
+			updateCwndI(cwnd);
 		}
-
 		/*
 		* loss event detected, decrease congestion window
 		*/
@@ -1387,9 +1441,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* Update inflexion point
 		*/
-		if (time_ntp - lastCwndIUpdateT_ntp > 32768) {
+		if (time_ntp - lastCwndIUpdateT_ntp > sRtt_ntp) {
 			lastCwndIUpdateT_ntp = time_ntp;
-			cwndI = cwnd;
+			updateCwndI(cwnd);
 		}
 		/*
 		* CE event detected, decrease congestion window
@@ -1458,9 +1512,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 	if (time_ntp - lastRttT_ntp > sRtt_ntp) {
 		if (wasLossEvent)
-			lossEventRate = 0.99f * lossEventRate + 0.01f;
+			lossEventRate = 0.98f * lossEventRate + 0.02f;
 		else
-			lossEventRate *= 0.99f;
+			lossEventRate *= 0.98f;
 		wasLossEvent = false;
 		lastRttT_ntp = time_ntp;
 	}
@@ -1482,17 +1536,31 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Scale the increment more cautious when close the last 
 	* know max CWND. 
+	* The effect is that CWND is increased as little as 0.1MSS per RTT 
 	*/
 	float sclI = 1.0f;
 	sclI = float(cwnd - cwndI) / cwndI;
-	if (isL4sActive)
-  	   sclI *= 16;
-	else 
-	   sclI *= 4;
+	float loLim = 0.1f;
+	if (isL4sActive) {
+	    sclI *= 4;
+		/*
+		* The smallest increase is determined by the loss event rate and how the CWND inflexion 
+		* point samples vary. 
+		* A low lossEvent rate or high cwndISpread indicates that the congestion control is oscillating, 
+		* the cure is to reduce the CNWD increase at the inflexion point.
+		* Competing (Prague) flows generally gives a higher loss event rate and also smaller variation
+		* in CWND inflextion point samples. Thus it is less needed to reduce the CWND growth near the 
+		* inflesxion point.
+		*/
+		loLim = std::max(0.1f, lossEventRate*std::min(1.0f, 1.0f-5.0f*(cwndISpread-0.1f)));
+	} else {
+	    sclI *= 4;
+	}
 	sclI = sclI * sclI;
-	sclI = std::max(0.1f, std::min(1.0f, sclI));
+	
+	sclI = std::max(loLim, std::min(1.0f, sclI));
 	if (isEmulateCubic || !isL4sActive) {
-           increment *= sclI;
+          increment *= sclI;
     }
 
 	/*
@@ -1504,7 +1572,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* recently
 	*/
 	if (tmp2 > cwndScaleFactorBase && postCongestionDelay > 0.2f) {
-		tmp2 = cwndScaleFactorBase + ((tmp2 - cwndScaleFactorBase) * postCongestionScale) * sclI;
+		tmp2 = cwndScaleFactorBase + ((tmp2 - cwndScaleFactorBase) * postCongestionScale)*sclI;
 	}
 	increment *= tmp2;
 

@@ -104,6 +104,7 @@ extern "C" {
 	static const int kSrttHistBins = 200;
 	static const int kRelFrameSizeHistBins = 50;
 	static const int kMaxBytesInFlightHistSize = 10;
+	static const int kCwndIHistSize = 9;
 
 	enum StatisticsItem {
 		AVG_RATE,          // [bps]
@@ -1431,6 +1432,11 @@ extern "C" {
 		float getQueueDelayFraction();
 
 		/*
+		* Update cwndI
+		*/
+		void updateCwndI(int cwndI);
+
+		/*
 		* Variables for network congestion control
 		*/
 
@@ -1457,6 +1463,7 @@ extern "C" {
 
 		float sRtt;
 		uint32_t sRttSh_ntp;
+		uint32_t sRttShPrev_ntp;
 		uint32_t sRtt_ntp;
 		float currRtt;
 		uint32_t ackedOwd;
@@ -1484,6 +1491,10 @@ extern "C" {
 		int cwndMinLow;
 		int cwndI; // congestion window inflexion point
 		float cwndRatio;
+		int cwndIHist[kCwndIHistSize];
+		int cwndIHistIx;
+		float cwndISpread;
+
 
 		int bytesInFlight;
 		int bytesInFlightLog;
