@@ -1549,14 +1549,14 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		* A low lossEvent rate or high cwndISpread indicates that the congestion control is oscillating, 
 		* the cure is to reduce the CNWD increase at the inflexion point.
 		* Competing (Prague) flows generally gives a higher loss event rate and also smaller variation
-		* in CWND inflextion point samples. Thus it is less needed to reduce the CWND growth near the 
-		* inflesxion point.
+		* in CWND inflexion point samples. Thus it is less needed to reduce the CWND growth near the 
+		* inflexion point.
 		*/
 		loLim = std::max(0.1f, lossEventRate*std::min(1.0f, 1.0f-5.0f*(cwndISpread-0.1f)));
 		/*
 		* In addition relax limitation as CWND grows large. 
 		*/
-		loLim = std::max(0.1f, std::min(1.0f, 0.01f / cwndRatio));
+		loLim = std::max(loLim, std::min(1.0f, 0.01f / cwndRatio));
 
 	} else {
 	    sclI *= 4;
