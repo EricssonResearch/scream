@@ -39,7 +39,7 @@ int swprio = -1;
 */
 const int mode = 0x1;// 0x0F;
 
-const float RTT = 0.025f;
+const float RTT = 0.085f;
 
 #include "ScreamTx.h"
 #define V2

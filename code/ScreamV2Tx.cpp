@@ -1535,8 +1535,8 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 	/*
 	* Scale the increment more cautious when close the last 
-	* know max CWND. 
-	* The effect is that CWND is increased as little as 0.1MSS per RTT 
+	* know max CWND. This essencially scales the CWND increase so that it can be as 
+	* small as 0.1MSS per RTT.
 	*/
 	float sclI = 1.0f;
 	sclI = float(cwnd - cwndI) / cwndI;
@@ -1553,6 +1553,11 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		* inflesxion point.
 		*/
 		loLim = std::max(0.1f, lossEventRate*std::min(1.0f, 1.0f-5.0f*(cwndISpread-0.1f)));
+		/*
+		* In addition relax limitation as CWND grows large. 
+		*/
+		loLim = std::max(0.1f, std::min(1.0f, 0.01f / cwndRatio));
+
 	} else {
 	    sclI *= 4;
 	}
