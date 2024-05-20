@@ -366,7 +366,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
                     std::cerr << "     -fps value               set the frame rate (default 50)" << std::endl;
                     std::cerr << "     -clockdrift              enable clock drift compensation for the case that the" << std::endl;
                     std::cerr << "                               receiver end clock is faster" << std::endl;
-                    std::cerr << "     -emulatecubic            make adaptation more cautious around the last known higher rate" << endl;
+                    std::cerr << "     -emulatecubic            make adaptation more cautious around the last known higher rate" << std::endl;
                     std::cerr << "     -verbose                 print a more extensive log" << std::endl;
                     std::cerr << "     -nosummary               don't print summary" << std::endl;
                     std::cerr << "     -log logfile             save detailed per-ACK log to file" << std::endl;
