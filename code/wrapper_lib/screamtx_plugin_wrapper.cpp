@@ -17,6 +17,8 @@ typedef struct  stream_s {
     uint8_t *cb_data;
     uint64_t rtpqueue_full;
     uint64_t force_idr;
+    uint64_t rate_updates;
+    uint32_t prev_encoder_rate;
     uint32_t encoder_rate;
     float lastLossEpochT;
 
@@ -76,6 +78,7 @@ int maxRate = 200000;
 float rateMultiply = 1.0;
 bool enableClockDriftCompensation = false;
 float priority = 1.0;
+bool openWindow = false;
 #ifdef V2
 const char *scream_version = "V2";
 float packetPacingHeadroom = 1.5f;
@@ -400,6 +403,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     std::cerr << "     -dscale value         scale factor in case of increased delay (default 10.0) " << std::endl;
     std::cerr << "     -delaytarget value    set a queue delay target (default = 0.06s) " << std::endl;
     std::cerr << "     -paceheadroom value   set a packet pacing headroom (default = 1.25s) " << std::endl;
+    std::cerr << "     -openwindow              override SCReAMs window limitation  (default = false) " << std::endl;
     std::cerr << "     -txqueuesizefactor value reaction to increased RTP queue delay (default 0.1) " << std::endl;
     std::cerr << "     -queuedelayguard value   reaction to increased network queue delay (default 0.05)" << std::endl;
     std::cerr << "     -forceidr             enable Force-IDR in case of loss"  << std::endl;
@@ -551,6 +555,11 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       ix+=2;
 			continue;
     }
+    if (strstr(argv[ix], "-openwindow")) {
+        openWindow = true;
+        ix++;
+        continue;
+    }
     if (strstr(argv[ix],"-nopace")) {
       disablePacing = true;
       ix++;
@@ -673,7 +682,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
           bytesInFlightHeadroom,
           multiplicativeIncreaseFactor,
           ect == 1,
-          false,
+          openWindow,
           false,
           enableClockDriftCompensation);
       screamTx->setIsEmulateCubic(isEmulateCubic);
@@ -925,7 +934,11 @@ void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force
     *rate_p = (uint32_t)(rate * rateMultiply);
     if (*rate_p)  {
         stream_t *stream = getStream(ssrc);
+        stream->prev_encoder_rate = stream->encoder_rate;
         stream->encoder_rate = *rate_p;
+        if (stream->prev_encoder_rate != stream->encoder_rate) {
+            stream->rate_updates++;
+        }
     }
     // cerr << " rate " << *rate_p << endl;
     if (forceidr) {
@@ -964,18 +977,19 @@ void ScreamSenderStats(char     *s,
         return;
     }
     screamTx->getLog(time_s, s, ssrc, clear != 0);
-    snprintf(buffer, 50, ",%lu,%lu", stream->rtpqueue_full,stream->force_idr);
+    snprintf(buffer, 50, ",%lu,%lu,%lu", stream->rtpqueue_full, stream->force_idr, stream->rate_updates);
     strcat(s, buffer);
     *len = strlen(s);
     if (clear) {
         stream->rtpqueue_full = 0;
         stream->force_idr = 0;
+        stream->rate_updates = 0;
     }
 }
 void ScreamSenderStatsHeader(char     *s,
                              uint32_t *len)
 {
-    const char *extra = ",rtpqueue_full,force_idr";
+    const char *extra = ",rtpqueue_full,force_idr,rate_updates";
     screamTx->getLogHeader(s);
     strcat(s, extra);
     *len = strlen(s);
