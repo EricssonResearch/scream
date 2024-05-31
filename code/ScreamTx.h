@@ -103,7 +103,7 @@ extern "C" {
 	static const int kLossRateHistSize = 10;
 	static const int kSrttHistBins = 200;
 	static const int kRelFrameSizeHistBins = 50;
-	static const int kMaxBytesInFlightHistSize = 10;
+	static const int kMaxBytesInFlightHistSize = 20;
 	static const int kCwndIHistSize = 9;
 
 	enum StatisticsItem {

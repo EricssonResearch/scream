@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-05-31 :
+  - Congestion window validation modified
 - 2024-05-20 :
   - -emulatecubic option decoupled for very large CWND.
   - -emulatecubic option also made available for gstreamer plugin wrapper

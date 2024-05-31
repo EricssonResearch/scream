@@ -32,14 +32,14 @@ const bool enablePacing = true;
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
 #define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_flat.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2
 */
 const int mode = 0x1;// 0x0F;
 
-const float RTT = 0.085f;
+const float RTT = 0.010f;
 
 #include "ScreamTx.h"
 #define V2
@@ -68,14 +68,14 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 20e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 100e6, 0.0f, true && isL4s);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
 	videoEnc[2] = new VideoEnc(rtpQueue[2], FR / FR_DIV, (char*)TRACEFILE, 100);
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.3e6f, 1e6f, 100e6f, 0.1f, false, 0.05f);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.3e6f, 1e6f, 20e6f, 0.1f, false, 0.05f);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
@@ -118,6 +118,8 @@ int main(int argc, char* argv[])
 			// "Encode" audio + video frame
 			if (mode & 0x01) {
 				float br = screamTx->getTargetBitrate(10);
+				//if (time > 15 && time < 20)
+				//	br /= 4;
 				videoEnc[0]->setTargetBitrate(br);
 				int bytes = videoEnc[0]->encode(time);
 				screamTx->newMediaFrame(time_ntp, 10, bytes, true);

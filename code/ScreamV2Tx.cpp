@@ -1370,6 +1370,18 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			for (int n = 0; n < kMaxBytesInFlightHistSize; n++) {
 				tmp = std::max(tmp, maxBytesInFlightHist[n]);
 			}
+
+			/*
+			* Additionally compute updated CWND from totalMaxBitrate and rtt 
+			* with extra headroom, to avoid that the target bitrates 
+			* varies unnecessarily near the max rate
+			*/
+			tmp = std::max(tmp, (int)(packetPacingHeadroom * relFrameSizeHigh * getTotalMaxBitrate() / 8 * 
+				                (sRtt + 0.001f)));
+
+			/*
+			* Limit CWND
+			*/
 			cwnd = std::min(cwnd, tmp);
 		}
 
@@ -1614,6 +1626,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Scale down based on weigthed average high percentile of frame sizes
 	*/
 	rateLeft /= relFrameSizeHigh;
+
 
 	float prioritySum = 0.0f;
 	/*
