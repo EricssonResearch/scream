@@ -21,7 +21,6 @@ struct sigaction sa;
 
 using namespace std;
 
-//#define V2
 /*
  * Stub function
  */
@@ -82,17 +81,9 @@ float maxTotalRate = 100000000;
 float rateInit[MAX_SOURCES]={3000,3000,1000,1000};
 float rateMin[MAX_SOURCES]={3000,3000,1000,1000};
 float rateMax[MAX_SOURCES]={30000,30000,10000,10000};
-#ifdef V2
 ScreamV2Tx *screamTx = 0;
 float pacingHeadroom = 1.5;
 float multiplicativeIncreaseFactor = 0.05;
-#else
-ScreamV1Tx *screamTx = 0;
-float rateIncrease[MAX_SOURCES]={10000,10000,10000,10000};
-float fastIncreaseFactor = 1.0;
-float pacingHeadroom = 1.2;
-bool isNewCc = false;
-#endif
 bool isEmulateCubic = false;
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
 bool ntp = false;
@@ -188,7 +179,6 @@ int main(int argc, char* argv[]) {
     * Parse command line
     */
     if (argc <= 1) {
-#ifdef V2
         cerr << "Usage : " << endl << " scream_sender <options> nsources out_ip out_port prio_1 ..  prio_n" << endl;
         cerr << " -ect n             : ECN capable transport. n = 0 for ECT(0), n=1 for ECT(1). Default Not-ECT" << endl;
         cerr << " -cscale val        : Congestion scale factor, range [0.5..1.0], default = 0.9" << endl;
@@ -227,48 +217,6 @@ int main(int argc, char* argv[]) {
         cerr << endl;
         cerr << "  Note. lists should not contain white space and can have 1 to 4 elements, delimited by ':' " << endl;
         exit(-1);
-#else
-        cerr << "Usage : " << endl << " scream_sender <options> nsources out_ip out_port prio_1 ..  prio_n" << endl;
-        cerr << " -newcc             : Use new congestion control algorithm (dec 2022)" << endl;
-        cerr << " -ect n             : ECN capable transport. n = 0 for ECT(0), n=1 for ECT(1). Default Not-ECT" << endl;
-        cerr << " -cscale val        : Congestion scale factor, range [0.5..1.0], default = 0.9" << endl;
-        cerr << "                      it can be necessary to set scale 1.0 if the LTE modem drops packets" << endl;
-        cerr << "                      already at low congestion levels." << endl;
-        cerr << " -delaytarget val   : Sets a queue delay target (default = 0.1s) " << endl;
-        cerr << " -cwvmem val        : Sets the memory of the congestion window validation (default 5s), max 60s" << endl;
-        cerr << " -fincrease val     : Fast increase factor for newcc (default 1.0)" << endl;
-        cerr << " -in_ip_rtcp_addr   : Set in_ip_rtcp_addr" << endl;
-        cerr << "                      a larger memory can be beneficial in remote applications where the video input" << endl;
-        cerr << "                      is static for long periods. " << endl;
-        cerr << " -maxtotalrate val  : Set max total bitrate [kbps], default 100000." << endl;
-        cerr << " -pacingheadroom val: Set packet pacing headroom, default 1.2." << endl;
-        cerr << " -log log_file      : Save detailed per-ACK log to file" << endl;
-        cerr << " -ratemax list      : Set max rate [kbps] for streams" << endl;
-        cerr << "    example -ratemax 30000:20000" << endl;
-        cerr << " -ratemin list      : Set min rate [kbps] for streams" << endl;
-        cerr << "    example -ratemin 3000:3000" << endl;
-        cerr << " -rateinit list     : Set init rate [kbps] for streams" << endl;
-        cerr << "    example -rateinit 3000:3000}" << endl;
-        cerr << " -rateincrease list : Set rate increase speed [kbps/s] for streams" << endl;
-        cerr << "    example -rateincrease 10000,10000" << endl;
-        cerr << " -priority list     : Set stream priorities" << endl;
-        cerr << "    example -priority 1.0:0.5:0.2:0.1" << endl;
-        cerr << " -ratescale list    : Compensate for systematic error in actual vs desired rate" << endl;
-        cerr << "    example -ratescale 0.6:0.5:1.0:1.0" << endl;
-        cerr << " -ntp               : Use NTP timestamp in logfile" << endl;
-
-        cerr << " nsources           : Number of sources, min=1, max=" << MAX_SOURCES << endl;
-        cerr << " out_ip             : remote (SCReAM receiver) IP address" << endl;
-        cerr << " out_port           : remote (SCReAM receiver) port" << endl;
-        cerr << " Media sources: " << endl;
-        cerr << "   0 = Front camera encoded with omxh264" << endl;
-        cerr << "   1 = Rear camera encoded with omxh264" << endl;
-        cerr << "   2 = Not used" << endl;
-        cerr << "   3 = Not used" << endl;
-        cerr << endl;
-        cerr << "  Note. lists should not contain white space and can have 1 to 4 elements, delimited by ':' " << endl;
-        exit(-1);
-#endif
     }
     int ix = 1;
     int nExpectedArgs = 1 + 2 + 1;
@@ -348,7 +296,6 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
-#ifdef V2
         if (strstr(argv[ix], "-mulincrease")) {
             multiplicativeIncreaseFactor = atof(argv[ix + 1]);
             ix += 2;
@@ -360,45 +307,9 @@ int main(int argc, char* argv[]) {
             ix++;
 	    continue;
 	}
-#else
-        if (strstr(argv[ix], "-fincrease")) {
-            fastIncreaseFactor = atof(argv[ix + 1]);
-            ix += 2;
-            nExpectedArgs += 2;
-            continue;
-        }
-
-        if (strstr(argv[ix], "-newcc")) {
-            isNewCc = true;
-            ix += 1;
-            nExpectedArgs += 1;
-            continue;
-        }
-        if (strstr(argv[ix], "-cwvmem")) {
-            bytesInFlightHistSize = atoi(argv[ix + 1]);
-            ix += 2;
-            nExpectedArgs += 2;
-            if (bytesInFlightHistSize > kBytesInFlightHistSizeMax || bytesInFlightHistSize < 2) {
-                cerr << "cwvmem must be in range [2 .. " << kBytesInFlightHistSizeMax << "]" << endl;
-                exit(0);
-            }
-            continue;
-        }
-        if (strstr(argv[ix], "-rateincrease")) {
-      			readList(argv[ix + 1],rateIncrease);
-            ix += 2;
-            nExpectedArgs += 2;
-            continue;
-        }
-        if (strstr(argv[ix], "-ntp")) {
-	    ntp = true;
-	    ix++;
-	    continue;
-	}
-#endif
-        fprintf(stderr, "unexpected arg %s\n", argv[ix]);
-        ix += 1;
-        nExpectedArgs += 1;
+    fprintf(stderr, "unexpected arg %s\n", argv[ix]);
+    ix += 1;
+    nExpectedArgs += 1;
     }
 
   //test code for python
@@ -672,6 +583,7 @@ void *txRtpThread(void *arg) {
 void *txRtpThread(void *arg) {
     int size;
     uint16_t seqNr;
+    uint32_t ts;
     //char buf[2000];
     void *buf;
     uint32_t time_ntp = getTimeInNtp();
@@ -723,7 +635,7 @@ void *txRtpThread(void *arg) {
 
                         float rtpQueueDelay = 0.0f;
                         rtpQueueDelay = rtpQueue->getDelay((time_ntp) / 65536.0f);
-                        rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark);
+                        rtpQueue->pop(&buf, size, ssrc_unused, seqNr, isMark, ts);
                         pthread_mutex_unlock(&lock_rtp_queue);
 
                         /*
@@ -735,7 +647,7 @@ void *txRtpThread(void *arg) {
                         * Register transmitted RTP packet
                         */
                         pthread_mutex_lock(&lock_scream);
-                        retVal = screamTx->addTransmitted(getTimeInNtp(), ssrc, size, seqNr, true, rtpQueueDelay);
+                        retVal = screamTx->addTransmitted(getTimeInNtp(), ssrc, size, seqNr, isMark, rtpQueueDelay, ts);
                         pthread_mutex_unlock(&lock_scream);
                     }
 
@@ -812,7 +724,7 @@ void processRtp(unsigned char *buf_rtp, int recvlen, int ix) {
         memcpy(&buf_rtp[8], &in_ssrc_network[ix], 4);
         pthread_mutex_lock(&lock_rtp_queue);
         uint32_t ssrc_unused = 0;
-        rtpQueue[ix]->push(buf_rtp, recvlen, ssrc_unused, seqNr, isMark, (getTimeInNtp())/65536.0f);
+        rtpQueue[ix]->push(buf_rtp, recvlen, ssrc_unused, seqNr, isMark, (getTimeInNtp())/65536.0f, ts);
         pthread_mutex_unlock(&lock_rtp_queue);
 
         pthread_mutex_lock(&lock_scream);
@@ -1092,11 +1004,12 @@ void *videoControlThread(void *arg) {
     char buf[5];
     while (!stopThread) {
 		nn++;
+        uint32_t time_ntp = getTimeInNtp();
         for (int n = 0; n < nSources; n++) {
             /*
             * Poll rate change for all media sources
             */
-            float rate = screamTx->getTargetBitrate(in_ssrc[n]);
+            float rate = screamTx->getTargetBitrate(time_ntp, in_ssrc[n]);
             if (rate > 0) {
               uint32_t rate_32 = (uint32_t)(rate*rateScale[n]);
               rate_32 = htonl(rate_32);

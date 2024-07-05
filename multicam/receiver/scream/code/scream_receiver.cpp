@@ -30,6 +30,12 @@ uint32_t SSRC_RTCP=10;
 
 
 /*
+* Enable feedback for OOO RTP packets that are behind the normal 
+* feedback window
+*/
+//#define EXT_OOO_FB
+
+/*
 * Simple code to verify that L4S works
 * as intended
 * The intention is that
@@ -450,7 +456,7 @@ int main(int argc, char* argv[])
         memcpy(s,&bufRtp[2],recvlen);
         s[recvlen] = 0x00;
         cout << s << endl;
-		sendto(fd_python,(const char*)s,strlen(s),MSG_CONFIRM,(const struct sockaddr*)&python_addr, sizeof(python_addr));
+		    sendto(fd_python,(const char*)s,strlen(s),MSG_CONFIRM,(const struct sockaddr*)&python_addr, sizeof(python_addr));
       } else if (bufRtp[1] == 0x7E) {
         // Packet contains an SSRC map
 	      nSources = (recvlen-2)/4;
@@ -458,7 +464,7 @@ int main(int argc, char* argv[])
           uint32_t tmp_l;
           memcpy(&tmp_l, bufRtp+2+n*4, 4);
           ssrcMap[n] = ntohl(tmp_l);
-	}
+	      }
       } else {
         if (time_ntp - last_received_time_ntp > 131072) { // 2s in Q16
           /*
@@ -506,7 +512,7 @@ int main(int argc, char* argv[])
         * Register received RTP packet with ScreamRx
         */
         pthread_mutex_lock(&lock_scream);
-        screamRx->receive(getTimeInNtp(), 0, ssrc, recvlen, seqNr, received_ecn, isMark);
+        screamRx->receive(getTimeInNtp(), 0, ssrc, recvlen, seqNr, received_ecn, isMark, ts);
         pthread_mutex_unlock(&lock_scream);
 
         if (screamRx->checkIfFlushAck()) {
@@ -515,8 +521,21 @@ int main(int argc, char* argv[])
           bool isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), false, bufRtcp, rtcpSize);
           pthread_mutex_unlock(&lock_scream);
           if (isFeedback) {
-             sendto(fd_in_rtp, bufRtcp, rtcpSize, 0, (struct sockaddr *)&out_rtcp_addr, sizeof(out_rtcp_addr));
-             lastPunchNatT_ntp = getTimeInNtp();
+            sendto(fd_in_rtp, bufRtcp, rtcpSize, 0, (struct sockaddr *)&out_rtcp_addr, sizeof(out_rtcp_addr));
+#ifdef EXT_OOO_FB            
+            while (screamRx->isOooDetected()) {
+              /*
+              * OOO RTP detected, additional "transmission" of RTCP
+              */
+              pthread_mutex_lock(&lock_scream);                    
+              bool isFeedbackOoo = screamRx->createStandardizedFeedbackOoo(getTimeInNtp(), false, bufRtcp, rtcpSize);
+              pthread_mutex_unlock(&lock_scream);
+              if (isFeedbackOoo) {
+                sendto(fd_in_rtp, bufRtcp, rtcpSize, 0, (struct sockaddr *)&out_rtcp_addr, sizeof(out_rtcp_addr));
+              }
+            }
+#endif            
+            lastPunchNatT_ntp = getTimeInNtp();
           }
         }
       }

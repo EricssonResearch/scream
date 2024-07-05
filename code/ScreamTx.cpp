@@ -24,6 +24,11 @@ ScreamTx::Statistics::Statistics(ScreamTx* parent_) {
 	rateLostAcc = 0.0f;
 	rateCeAcc = 0.0f;
 	rateLostN = 0;
+	n00 = 0;
+	n10 = 0;
+	n01 = 0;
+	n11 = 0;
+	nEcn = 0;
 	for (int n = 0; n < kLossRateHistSize; n++) {
 		lossRateHist[n] = 0.0f;
 		ceRateHist[n] = 0.0f;
@@ -79,8 +84,30 @@ void ScreamTx::Statistics::add(float rateTx, float rateLost, float rateCe, float
 	}
 }
 
+void ScreamTx::Statistics::addEcn(uint8_t ecn) {
+	nEcn++;
+	switch (ecn) {
+	case 0x00:
+		n00++;
+		break;
+	case 0x02:
+		n10++;
+		break;
+	case 0x01:
+		n01++;
+		break;
+	case 0x03:
+		n11++;
+		break;
+	default:
+		break;
+	}
+}
+
+
 void ScreamTx::Statistics::getSummary(float time, char s[]) {
-	sprintf(s, "%s summary %5.1f  Transmit rate = %5.0fkbps, PLR = %5.2f%%(%5.2f%%), CE = %5.2f%%(%5.2f%%), RTT = %5.3fs, Queue delay = %5.3fs",
+	int tmp = std::max(1, nEcn);
+	sprintf(s, "%s summary %5.1f  Transmit rate = %5.0fkbps, PLR = %5.2f%%(%5.2f%%), CE = %5.2f%%(%5.2f%%)[%4.1f%%, %4.1f%%, %4.1f%%, %4.1f%%], RTT = %5.3fs, Queue delay = %5.3fs",
 		parent->logTag,
 		time,
 		avgRateTx / 1000.0f,
@@ -88,6 +115,10 @@ void ScreamTx::Statistics::getSummary(float time, char s[]) {
 		lossRateLong,
 		ceRate,
 		ceRateLong,
+		100.0f * float(n00) / tmp,
+		100.0f * float(n10) / tmp,
+		100.0f * float(n01) / tmp,
+		100.0f * float(n11) / tmp,
 		avgRtt,
 		avgQueueDelay);
 }

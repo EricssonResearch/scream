@@ -18,6 +18,7 @@ VideoEnc::VideoEnc(RtpQueue* rtpQueue_, float frameRate_, char *fname, int ixOff
     ix = ixOffset_;
     nFrames = 0;
     seqNr = 0;
+    timeStamp = 0;
     nominalBitrate = 0.0;
     sluggishness = sluggishness_;
     FILE *fp = fopen(fname,"r");
@@ -42,6 +43,7 @@ void VideoEnc::setTargetBitrate(float targetBitrate_) {
 }
 
 int VideoEnc::encode(float time) {
+
 	int rtpBytes = 0;
 	char rtpPacket[2000];
 	float tmp = (int)(frameSize[ix] / nominalBitrate * targetBitrate);
@@ -49,6 +51,7 @@ int VideoEnc::encode(float time) {
         bytes = bytes * (sluggishness)+(1.0 - sluggishness) * tmp;
     else
         bytes = tmp;
+
     int tmp2 = (int) bytes;
 	//nominalBitrate = 0.95*nominalBitrate + 0.05*frameSize[ix] * frameRate * 8;
     ix++; if (ix == nFrames) ix = 0;
@@ -58,8 +61,9 @@ int VideoEnc::encode(float time) {
         tmp2 -= rtpSize;
         rtpSize += kRtpOverHead;
         rtpBytes += rtpSize;
-        rtpQueue->push(rtpPacket, rtpSize, SSRC, seqNr, isMarker, time);
+        rtpQueue->push(rtpPacket, rtpSize, SSRC, seqNr, isMarker, time, timeStamp);
         seqNr++;
+        timeStamp = (unsigned long)(time * 90000);
     }
     rtpQueue->setSizeOfLastFrame(rtpBytes);
     return rtpBytes;

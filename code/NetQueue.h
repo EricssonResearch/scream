@@ -9,6 +9,7 @@ public:
     unsigned int ssrc;
     int size;
     unsigned short seqNr;
+    unsigned int timeStamp;
     float tRelease;
 //    float tReleaseExt;
     float tQueue;
@@ -28,14 +29,16 @@ public:
         int size,
         unsigned short seqNr,
         bool isCe,
-        bool isMark);
+        bool isMark,
+        unsigned int timeStamp);
     bool extract(float time, 
         void *rtpPacket, 
         unsigned int &ssrc,
         int& size, 
         unsigned short &seqNr,
         bool &isCe,
-        bool &isMark);
+        bool &isMark,
+        unsigned int& timeStamp);
     int sizeOfQueue();
 
     void updateRate(float time);

@@ -21,7 +21,9 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	float maxBitrate_,
 	float maxRtpQueueDelay_,
 	bool isAdaptiveTargetRateScale_,
-	float hysteresis_) {
+	float hysteresis_,
+	bool enableFrameSizeOverhead_
+) {
 	parent = parent_;
 	rtpQueue = rtpQueue_;
 	ssrc = ssrc_;
@@ -34,6 +36,8 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	maxRtpQueueDelay = maxRtpQueueDelay_;
 	isAdaptiveTargetRateScale = isAdaptiveTargetRateScale_;
 	hysteresis = hysteresis_;
+	enableFrameSizeOverhead = enableFrameSizeOverhead_;
+	timeStampClockRate = 90000.0f;
 	credit = 0;
 	creditLost = 0;
 	bytesTransmitted = 0;
@@ -54,6 +58,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	packetsRtp = 0;
 	rateRtp = 0.0f;
 	timeTxAck_ntp = 0;
+	timeStampAckHigh = 0;
 	lastTransmitT_ntp = 0;
 	numberOfUpdateRate = 0;
 	cleared = 0;
@@ -194,7 +199,7 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 		* Calculate a histogram over how much the frame sizes exceeds the average. This helps to avoid that
 		* the RTP queue builds up when the video encoder generates frames with very varying sizes.
 		*/
-		if (frameSizeAcc > frameSizeAvg) {
+		if (frameSizeAcc > frameSizeAvg && enableFrameSizeOverhead) {
 			int ix = std::max(0, std::min(kRelFrameSizeHistBins - 1,
 				(int)((frameSizeAcc - frameSizeAvg) / (frameSizeAvg * (kRelFrameSizeHistRange - 1.0)) * kRelFrameSizeHistBins)));
 
@@ -215,6 +220,7 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 				}
 				ix--;
 				relFrameSizeHigh = 1.0f + ((float)ix) * (kRelFrameSizeHistRange - 1.0f) / kRelFrameSizeHistBins;
+				//printf(" %3.3f \n", relFrameSizeHigh);
 			}
 		}
 		frameSizeAcc = 0;

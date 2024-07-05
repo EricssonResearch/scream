@@ -10,6 +10,7 @@ RtpQueueItem::RtpQueueItem() {
 	used = false;
 	size = 0;
 	seqNr = 0;
+	timeStamp = 0;
 }
 
 
@@ -26,7 +27,7 @@ RtpQueue::RtpQueue() {
 	sizeOfNextRtp_ = -1;
 }
 
-bool RtpQueue::push(void* rtpPacket, int size, uint32_t ssrc, unsigned short seqNr, bool isMark, float ts) {
+bool RtpQueue::push(void* rtpPacket, int size, uint32_t ssrc, unsigned short seqNr, bool isMark, float ts, uint32_t timeStamp) {
 	std::unique_lock<std::mutex> lock(queue_operation_mutex_);
 	int ix = head + 1;
 	if (ix == kRtpQueueSize) ix = 0;
@@ -38,6 +39,7 @@ bool RtpQueue::push(void* rtpPacket, int size, uint32_t ssrc, unsigned short seq
 	}
 	head = ix;
 	items[head]->seqNr = seqNr;
+	items[head]->timeStamp = timeStamp;
 	items[head]->ssrc = ssrc;
 	items[head]->size = size;
 	items[head]->ts = ts;
@@ -51,7 +53,7 @@ bool RtpQueue::push(void* rtpPacket, int size, uint32_t ssrc, unsigned short seq
 	computeSizeOfNextRtp();
 	return (true);
 }
-bool RtpQueue::pop(void** rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr, bool& isMark)
+bool RtpQueue::pop(void** rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr, bool& isMark, uint32_t& timeStamp)
 {
 	std::unique_lock<std::mutex> lock(queue_operation_mutex_);
 	if (items[tail]->used == false) {
@@ -66,6 +68,7 @@ bool RtpQueue::pop(void** rtpPacket, int& size, uint32_t& ssrc, unsigned short& 
 		* rtpPacket = items[tail]->packet;
 #endif
 		seqNr = items[tail]->seqNr;
+		timeStamp = items[tail]->timeStamp;
 		ssrc = items[tail]->ssrc;
 		isMark = items[tail]->isMark;
 		items[tail]->used = false;
@@ -135,9 +138,9 @@ float RtpQueue::getDelay(float currTs) {
 	}
 }
 
-bool RtpQueue::sendPacket(void** rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr, bool& isMark) {
+bool RtpQueue::sendPacket(void** rtpPacket, int& size, uint32_t& ssrc, unsigned short& seqNr, bool& isMark, uint32_t& timeStamp) {
 	if (sizeOfQueue() > 0) {
-		pop(rtpPacket, size, ssrc, seqNr, isMark);
+		pop(rtpPacket, size, ssrc, seqNr, isMark, timeStamp);
 		return true;
 	}
 	return false;
@@ -148,13 +151,14 @@ extern void packet_free(void* buf, uint32_t ssrc);
 #endif
 int RtpQueue::clear() {
 	uint16_t seqNr;
+	uint32_t timeStamp;
 	uint32_t ssrc;
 	int freed = 0;
 	int size;
 	void* buf;
 	while (sizeOfQueue() > 0) {
 		bool isMark;
-		pop(&buf, size, ssrc, seqNr, isMark);
+		pop(&buf, size, ssrc, seqNr, isMark, timeStamp);
 		if (buf != NULL) {
 			freed++;
 #ifndef IGNORE_PACKET

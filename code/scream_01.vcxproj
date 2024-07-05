@@ -86,6 +86,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetQueue.h" />
+    <ClInclude Include="OooQueue.h" />
     <ClInclude Include="RtpQueue.h" />
     <ClInclude Include="ScreamRx.h" />
     <ClInclude Include="ScreamTx.h" />
@@ -95,10 +96,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetQueue.cpp" />
+    <ClCompile Include="OooQueue.cpp" />
     <ClCompile Include="RtpQueue.cpp" />
     <ClCompile Include="ScreamRx.cpp" />
     <ClCompile Include="ScreamTx.cpp" />
-    <ClCompile Include="ScreamV1Tx.cpp" />
     <ClCompile Include="ScreamV2Tx.cpp" />
     <ClCompile Include="ScreamV2TxStream.cpp" />
     <ClCompile Include="scream_v_a.cpp" />

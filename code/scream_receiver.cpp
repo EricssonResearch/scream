@@ -153,7 +153,7 @@ int main(int argc, char* argv[])
 	unsigned char buf[BUFSIZE];
 	unsigned char buf_rtcp[BUFSIZE];
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2024-03-11 " << endl;
+		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2024-07-04 " << endl;
 		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
 		cerr << "     -ipv6               IPv6" << endl;
 		cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
@@ -454,7 +454,7 @@ int main(int argc, char* argv[])
 					}
 				}
 #endif
-				screamRx->receive(getTimeInNtp(), 0, SSRC, recvlen, seqNr, received_ecn, isMark);
+				screamRx->receive(getTimeInNtp(), 0, SSRC, recvlen, seqNr, received_ecn, isMark,ts);
 				pthread_mutex_unlock(&lock_scream);
 
 				if (screamRx->checkIfFlushAck() || isMark) {
@@ -470,6 +470,23 @@ int main(int argc, char* argv[])
 							sendto(fd_incoming_rtp, buf_rtcp, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
 
 						}
+				        while (screamRx->isOooDetected()) {
+					        /*
+					        * OOO RTP detected, additional "transmission" of RTCP
+					        */
+				        	pthread_mutex_lock(&lock_scream);					           
+				        	bool isFeedbackOoo = screamRx->createStandardizedFeedbackOoo(getTimeInNtp(), false, buf_rtcp, rtcpSize);
+				        	pthread_mutex_unlock(&lock_scream);
+				        	if (isFeedbackOoo) {
+				        		if (ipv6) {
+				        			sendto(fd_incoming_rtp, buf_rtcp, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr6, sizeof(outgoing_rtcp_addr6));
+				        		}
+				        		else {
+				        			sendto(fd_incoming_rtp, buf_rtcp, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
+
+				        		}
+				        	}
+				        }
 						lastPunchNatT_ntp = getTimeInNtp();
 					}
 				}

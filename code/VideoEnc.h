@@ -18,6 +18,7 @@ public:
     float frameRate;
     float nominalBitrate;
     unsigned int seqNr;
+    unsigned long timeStamp;
     int ix;
 
     float sluggishness;

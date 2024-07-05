@@ -3,6 +3,11 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-07-05 :
+  - Robustness to large packet reordering improved. Feature is currently only enabled for the BW test application. To enable featire in multicam, add #define EXT_OOO_FB in multicam scream_receiver.cpp. Updated code also fixed an issue where even little reordering triggered packet loss reaction.
+  - -periodicdropinterval option removed. Periodic rate reduction is instead implemented in ScreamV2Tx.cpp. 
+  - ScreamV1Tx.cpp removed. 
+  - BW test tool, summary output displays %-age of packets marked Not-ECT, ECT(0), ECT(1) and CE.
 - 2024-05-31 :
   - Congestion window validation modified
 - 2024-05-20 :

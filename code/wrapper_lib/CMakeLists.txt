@@ -12,7 +12,6 @@ SET(HEADERS
 SET(SRCS
 ../RtpQueue.cpp
 ../ScreamTx.cpp
-../ScreamV1Tx.cpp
 ../ScreamV2Tx.cpp
 ../ScreamV2TxStream.cpp
 screamtxbw_plugin_wrapper.cpp

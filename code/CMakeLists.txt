@@ -8,7 +8,6 @@ RtpQueue.h
 
 SET(SRC_SENDER
 ScreamTx.cpp
-ScreamV1Tx.cpp
 ScreamV2Tx.cpp
 ScreamV2TxStream.cpp
 RtpQueue.cpp

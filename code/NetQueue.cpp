@@ -17,6 +17,7 @@ NetQueueItem::NetQueueItem() {
 	used = false;
 	size = 0;
 	seqNr = 0;
+	timeStamp = 0;
 	tRelease = 0.0;
     tQueue = 0.0;
 }
@@ -51,7 +52,8 @@ void NetQueue::insert(float time,
 	int size,
 	unsigned short seqNr,
 	bool isCe,
-	bool isMark) {
+	bool isMark,
+	unsigned int timeStamp) {
 	int prevHead = head;
 	if (false && nItems > 1000)
 		return;
@@ -62,6 +64,7 @@ void NetQueue::insert(float time,
 	items[head]->ssrc = ssrc;
 	items[head]->size = size;
 	items[head]->seqNr = seqNr;
+	items[head]->timeStamp = timeStamp;
 	float tmp = 0;
 	if (rate > 0)
 		tmp += size * 8 / rate;
@@ -98,7 +101,8 @@ bool NetQueue::extract(float time,
 	int& size,
 	unsigned short& seqNr,
 	bool& isCe,
-	bool& isMark) {
+	bool& isMark,
+	unsigned int& timeStamp) {
 	if (items[tail]->used == false) {
 		lastQueueLow = time;
 		return false;
@@ -108,6 +112,7 @@ bool NetQueue::extract(float time,
 		//	items[tail]->tReleaseExt = time;
 			rtpPacket = items[tail]->packet;
 			seqNr = items[tail]->seqNr;
+			timeStamp = items[tail]->timeStamp;
 			ssrc = items[tail]->ssrc;
 			size = items[tail]->size;
 			isCe = items[tail]->isCe;
@@ -137,7 +142,7 @@ int NetQueue::sizeOfQueue() {
 	return size;
 }
 
-const float rateUpdateT = 0.05;
+const float rateUpdateT = 0.05f;
 
 void NetQueue::updateRate(float time) {
     if (time - lastRateUpdateT >= rateUpdateT && rate > 0) {
@@ -145,10 +150,10 @@ void NetQueue::updateRate(float time) {
         float rateT = bytesTx * 8 / dT;
         bytesTx = 0;
         lastRateUpdateT = time;
-        float rateFrac = rateT / rate - 0.9;
-        rateFrac /= 0.2;
+        float rateFrac = rateT / rate - 0.9f;
+        rateFrac /= 0.2f;
         rateFrac = std::max(0.0f, std::min(1.0f, rateFrac));
-        pDrop = 0.9*pDrop + 0.1*rateFrac;
+        pDrop = 0.9f*pDrop + 0.1f*rateFrac;
         pDrop = std::min(1.0f, std::max(0.0f, pDrop));
         prevRateFrac = rateFrac;
         if (false && pDrop > 0)

@@ -2,8 +2,8 @@
 #define SCREAM_RX
 #include <cstdint>
 #include <list>
-const int kReportedRtpPackets = 64;
-const int kRxHistorySize = 128;
+const int kReportedRtpPackets = 32;
+const int kRxHistorySize = 512;
 
 /*
 * This module implements the receiver side of SCReAM.
@@ -53,7 +53,8 @@ public:
 			uint16_t seqNr,
 			bool isEcnCe,
 			uint8_t ceBits,
-			bool isMarker);
+			bool isMarker,
+			uint32_t timeStamp);
 
 		/*
 		* Get SCReAM standardized RTCP feedback
@@ -63,26 +64,36 @@ public:
 			unsigned char* buf,
 			int& size);
 
+		/*
+		* Get SCReAM standardized RTCP feedback for OOO RTP packets, i.e packets that 
+		* are received more than kReportedRtpPackets behind highestSeqNrTx
+		* return FALSE if no pending feedback available
+		*/
+		bool getStandardizedFeedbackOoo(uint32_t time_ntp,
+			unsigned char* buf,
+			int& size);
+
 
 		uint32_t ssrc;                       // SSRC of stream (source SSRC)
+		uint32_t receiveTimestamp;           // Wall clock time
 		uint16_t highestSeqNr;               // Highest received sequence number
 		uint16_t highestSeqNrTx;             // Highest fed back sequence number
-		uint32_t receiveTimestamp;           // Wall clock time
+		uint16_t oooLowSeqNr;                // Lowest OOO RTP received sequence number
+		int numOooDetected;                  // Number of OOO RTP packets
+
+
 		uint8_t  ceBitsHist[kRxHistorySize]; // Vector of CE bits for last <kRxHistorySize>
-		//  received RTP packets
+		                                     //  received RTP packets
 		uint32_t rxTimeHist[kRxHistorySize]; // Receive time for last <kRxHistorySize>
-		//  received RTP packets
+		                                     //  received RTP packets
 		uint16_t seqNrHist[kRxHistorySize];  // Seq Nr of last received <kRxHistorySize>
-		//  packets
+		                                     //  received RTP packets
+		bool isOooHist[kRxHistorySize];      // Packet is received OOO
 		uint32_t lastFeedbackT_ntp;          // Last time feedback transmitted for
-		//  this SSRC
+		                                     //  this SSRC
 		int nRtpSinceLastRtcp;               // Number of RTP packets since last transmitted RTCP
 
 		bool firstReceived;
-
-		float timeStampConversionFactor;
-
-		int ix;
 
 		int nReportedRtpPackets;
 
@@ -98,6 +109,12 @@ public:
 	bool checkIfFlushAck();
 
 	/*
+	* At least one stream has received OOO RTP packets, this necessitates transmission of 
+	*  extra RTCP packets to cover the hole
+	*/
+	bool isOooDetected();
+
+	/*
 	* Function is called each time an RTP packet is received
 	*/
 	void receive(uint32_t time_ntp,
@@ -106,7 +123,8 @@ public:
 		int size,
 		uint16_t seqNr,
 		uint8_t ceBits,
-		bool isMarker);
+		bool isMarker,
+		uint32_t timeStamp);
 
 	/*
 	* Return TRUE if an RTP packet has been received and there is
@@ -121,12 +139,20 @@ public:
 
 	/*
 	* Create standardized feedback according to
-	* https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
-	* Current implementation implements -02 version
+	* https://datatracker.ietf.org/doc/rfc8888/
 	* It is up to the wrapper application to prepend this RTCP
 	*  with SR or RR when needed
 	*/
 	bool createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsigned char* buf, int& size);
+
+	/*
+	* Create standardized feedback according to
+	* https://datatracker.ietf.org/doc/rfc8888/ ...
+	* That catches up with OOO RTP packets
+	* It is up to the wrapper application to prepend this RTCP
+	*  with SR or RR when needed
+	*/
+	bool ScreamRx::createStandardizedFeedbackOoo(uint32_t time_ntp, bool isMark, unsigned char* buf, int& size);
 
 	/*
 	* Get last feedback transmission time in NTP domain (Q16)
@@ -140,8 +166,8 @@ public:
 	uint32_t rtcpFbInterval_ntp;
 	uint32_t ssrc;
 
-	int getIx(uint32_t ssrc);
-	int ix;
+	//int getIx(uint32_t ssrc);
+	//int ix;
 	int ackDiff;
 
 	int nReportedRtpPackets;

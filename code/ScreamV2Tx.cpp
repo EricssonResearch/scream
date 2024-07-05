@@ -32,10 +32,14 @@ static const uint32_t kRateUpdateInterval_ntp = 3277; // 50ms in NTP domain
 // Update period for MSS estimation
 static const int kMssUpdateInterval_ntp = 65536;      // 1s in NTP
 // Packet reordering margin (us)
-static const uint32_t kReordertime_ntp = 655;  // 10ms in NTP domain
+static const uint32_t kReordertime_ntp = 1966;        // 30ms in NTP domain
 
 // Update interval for base delay history
 static const uint32_t kBaseDelayUpdateInterval_ntp = 655360; // 10s in NTP doain
+
+// Reset interval for base delay history when not L4S active
+static const uint32_t kBaseDelayResetInterval_ntp = 3932160; // 60s in NTP doain
+static const int kNumRateLimitRtts = 5;
 
 // L4S alpha gain factor, for scalable congestion control
 static const float kL4sG = 1.0f / 32 ;
@@ -109,6 +113,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	currRtt(-1.0f),
 	ackedOwd(0),
 	baseOwd(UINT32_MAX),
+	canResetBaseDelayHistory(false),
 
 	queueDelay(0.0),
 	queueDelayFractionAvg(0.0f),
@@ -207,7 +212,8 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	lastQueueDelayAvgUpdateT_ntp(0),
 	lastL4sAlphaUpdateT_ntp(0),
 	lastCwndUpdateT_ntp(0),
-	lastBaseDelayRefreshT_ntp(0)
+	lastBaseDelayRefreshT_ntp(0),
+	lastRateLimitT_ntp(0)
 
 {
 	strcpy(detailedLogExtraData, "");
@@ -250,7 +256,8 @@ void ScreamV2Tx::registerNewStream(RtpQueueIface* rtpQueue,
 	float maxBitrate,
 	float maxRtpQueueDelay,
 	bool isAdaptiveTargetRateScale,
-	float hysteresis) {
+	float hysteresis,
+	bool enableFrameSizeOverhead) {
 	Stream* stream = new Stream(this,
 		rtpQueue,
 		ssrc,
@@ -260,7 +267,8 @@ void ScreamV2Tx::registerNewStream(RtpQueueIface* rtpQueue,
 		maxBitrate,
 		maxRtpQueueDelay,
 		isAdaptiveTargetRateScale,
-		hysteresis);
+		hysteresis,
+		enableFrameSizeOverhead);
 	streams[nStreams++] = stream;
 }
 
@@ -449,10 +457,10 @@ float ScreamV2Tx::addTransmitted(uint32_t time_ntp,
 	int size,
 	uint16_t seqNr,
 	bool isMark,
-	float rtpQueueDelay) {
+	float rtpQueueDelay,
+	uint32_t timeStamp) {
 	if (!isInitialized)
 		initialize(time_ntp);
-
 
 	int id;
 	Stream* stream = getStream(ssrc, id);
@@ -464,6 +472,7 @@ float ScreamV2Tx::addTransmitted(uint32_t time_ntp,
 	txPacket->rtpQueueDelay = rtpQueueDelay;
 	txPacket->size = size;
 	txPacket->seqNr = seqNr;
+	txPacket->timeStamp = timeStamp;
 	txPacket->isMark = isMark;
 	txPacket->isUsed = true;
 	txPacket->isAcked = false;
@@ -571,12 +580,16 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		}
 
 		uint16_t diff = end_seq - stream->hiSeqAck;
-
+		bool isAckOoo = false;
 		if (diff > 65000 && stream->hiSeqAck != 0 && stream->timeTxAck_ntp != 0) {
 			/*
-			* Out of order received ACKs are ignored
+			* Out of order received ACKs are ignored but we allow some slack for OOO packets
 			*/
-			return;
+			uint16_t diff = stream->hiSeqAck - end_seq;
+			isAckOoo = true;
+			if (diff > 512) {
+				return;
+			}
 		}
 		uint32_t size_before = stream->rtpQueue->sizeOfQueue();
 		uint16_t N = end_seq - begin_seq;
@@ -742,7 +755,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				queueDelayAvg = queueDelay;
 			}
 			else {
-				queueDelayAvg = (1.0 - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * queueDelay;
+				queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * queueDelay;
 			}
 			lastQueueDelayAvgUpdateT_ntp = time_ntp;
 		}
@@ -858,6 +871,7 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 			bytesDeliveredThisRtt += tmp->size;
 			packetsDeliveredThisRtt += 1;
 			isMark = tmp->isMark;
+			statistics->addEcn(ceBits);
 			if (ceBits == 0x03) {
 				/*
 				* Packet was CE marked, increase counter
@@ -870,6 +884,14 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 				stream->packetsCe++;
 				isCe = true;
 			}
+			/*
+			* Wrap-around safe update of timeStampAckHigh 
+			*/
+			uint32_t diff = tmp->timeStamp - stream->timeStampAckHigh;
+			if (diff < 50000) {
+				stream->timeStampAckHigh = tmp->timeStamp;
+			}
+
 			stream->rtpQueueDelay = tmp->rtpQueueDelay;
 			tmp->isAcked = true;
 			ackedOwd = timestamp - tmp->timeTx_ntp;
@@ -957,15 +979,47 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 */
 void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, uint16_t highestSeqNr, Stream* stream) {
 	/*
-	* Loop only through the packets that are covered by the last highest ACK, this saves complexity
+	* Loop only through the packets that are covered by the last highest ACK - 512, this saves complexity
 	* There is a faint possibility that we miss to detect large bursts of lost packets with this fix
 	*/
-	int ix1 = highestSeqNr; ix1 = ix1 % kMaxTxPackets;
-	int ix0 = stream->hiSeqAck - 256;
-	stream->hiSeqAck = highestSeqNr;
+	int ix1 = highestSeqNr; 
+	ix1 = ix1 % kMaxTxPackets;
+	int ix0 = stream->hiSeqAck;
+	ix0 = ix0 % kMaxTxPackets;
+	ix0 -= 512;
+	int diff = std::min(uint16_t(32),uint16_t(highestSeqNr - stream->hiSeqAck));
+
 	if (ix0 < 0) ix0 += kMaxTxPackets;
-	while (ix1 < ix0)
+	int ixL0 = ix0-diff;
+	if (ixL0 < 0) {
+		ixL0 += kMaxTxPackets;
+		ix0 += kMaxTxPackets;
+	}
+	while (ix1 < ix0) {
 		ix1 += kMaxTxPackets;
+	}
+	stream->hiSeqAck = highestSeqNr;
+
+	/*
+	* Mark unacked packets outside window as lost forever
+	*/
+	for (int m = ixL0; m < ix0; m++) {
+		int n = m % kMaxTxPackets;
+		if (txPackets[n].isUsed) {
+			Transmitted* tmp = &txPackets[n];
+			if (!tmp->isAcked) {
+				//printf(" LOST ! %3.3f %d %d %d %d\n", time_ntp/65536.0f, tmp->seqNr, ixL0, ix0, tmp->seqNr % 2048);
+				if (time_ntp - lastLossEventT_ntp > sRtt_ntp && lossBeta < 1.0f) {
+					lossEvent = true;
+				}
+				stream->bytesLost += tmp->size;
+				stream->packetLost++;
+				tmp->isUsed = false;
+				stream->repairLoss = true;
+			}
+			tmp->isUsed = false;
+		}
+	}
 
 	/*
 	* Mark late packets as lost
@@ -1007,10 +1061,18 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 				tmp->isAfterReceivedEdge = true;
 			}
 
-			if (tmp->timeTx_ntp + kReordertime_ntp < stream->timeTxAck_ntp && !tmp->isAcked) {
+			/*
+			* Determine if RTP packet is ACKed beyond the allowed reording delay, or just lost
+			* It is necessary to compensate for that the transmission events jump because of periodic video frames
+			* the tsDiffCorrection makes a reference to transmission of earlier frames with same timestamp
+			* to determine if a packet is lost.
+			*/
+			uint32_t tsDiffCorrection = (uint32_t)(65536.0f * (stream->timeStampAckHigh - tmp->timeStamp) / stream->timeStampClockRate);
+			if (tmp->timeTx_ntp + kReordertime_ntp + tsDiffCorrection < stream->timeTxAck_ntp && !tmp->isAcked) {
 				/*
-				* Packet ACK is delayed more than kReordertime_ntp after an ACK of a higher SN packet
-				* raise a loss event and remove from TX list
+				* Packet ACK is delayed more than kReordertime_ntp after an ACK of a higher SN packet, 
+				* compensated for timestamp jumps for new frames.
+				* Raise a loss event and remove from TX list
 				*/
 				if (time_ntp - lastLossEventT_ntp > sRtt_ntp && lossBeta < 1.0f) {
 					lossEvent = true;
@@ -1018,7 +1080,7 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 				stream->bytesLost += tmp->size;
 				stream->packetLost++;
 				tmp->isUsed = false;
-				// cerr << log_tag << " LOSS detected by reorder timer SSRC=" << stream->ssrc << " SN=" << tmp->seqNr << endl;
+				//printf("%2.3f Late LOSS \n", time_ntp / 65536.0);
 				stream->repairLoss = true;
 			}
 			else if (tmp->isAcked) {
@@ -1028,9 +1090,48 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 	}
 }
 
-float ScreamV2Tx::getTargetBitrate(uint32_t ssrc) {
+float ScreamV2Tx::getTargetBitrate(uint32_t time_ntp, uint32_t ssrc) {
 	int id;
-	return  getStream(ssrc, id)->getTargetBitrate();
+	float rate = getStream(ssrc, id)->getTargetBitrate();
+	/*
+	* Check if queue delay is constantly high either because of clock drift
+	* or a standing queue. If that is the case, base delay history is reset.
+	*/
+	if (!isL4sActive || isL4sActive && queueDelayMinAvg > queueDelayTarget / 8) {
+		/*
+		* The base delay may slowly creep up when SCReAM operates only on 
+		* detection of estimated one way delay. The reason can be clock drift 
+		* or standing queue. A short period with reduced target bitrate and 
+		* simultaneous reset on the base delay history fixes this problem
+		*/
+		if (time_ntp - lastRateLimitT_ntp > kBaseDelayResetInterval_ntp) {
+			lastRateLimitT_ntp = time_ntp;
+		}
+		uint32_t tmp = time_ntp - lastRateLimitT_ntp;
+		uint32_t tmp2 = std::max(6554u,kNumRateLimitRtts*sRtt_ntp); // At least 100ms reduced rate
+		if (tmp < tmp2) {
+			rate *= 0.5f;
+			canResetBaseDelayHistory = true;
+		} else {
+			if (canResetBaseDelayHistory) {;
+				/*
+				* Reset base delay history
+				*/
+				clockDriftCompensation = 0;
+				clockDriftCompensationInc = 0;
+				queueDelayMinAvg = 0.0f;
+				queueDelay = 0.0f;
+				for (int n = 0; n < kBaseOwdHistSize; n++)
+					baseOwdHist[n] = UINT32_MAX;
+				baseOwd = UINT32_MAX;
+				baseOwdHistMin = UINT32_MAX;
+				baseOwdResetT_ntp = time_ntp;
+				canResetBaseDelayHistory = false;
+			}	
+		}
+	}
+
+	return  rate;
 }
 
 void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
@@ -1155,6 +1256,7 @@ void ScreamV2Tx::initialize(uint32_t time_ntp) {
 	initTime_ntp = time_ntp;
 	lastCongestionDetectedT_ntp = 0;
 	lastQueueDelayAvgUpdateT_ntp = time_ntp;
+	lastRateLimitT_ntp = time_ntp;
 }
 
 float ScreamV2Tx::getTotalTargetBitrate() {
@@ -1295,6 +1397,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		kSlowUpdateInterval_ntp) {
 
 		determineActiveStreams(time_ntp);
+#ifdef ENABLE_BASE_OWD_RESET_2		
 		if ((queueDelayMinAvg > 0.5f * queueDelayTarget || queueDelayMinAvg > 0.9f*sRtt) && time_ntp - baseOwdResetT_ntp > 655360) {
 			/*
 			* The base OWD is likely wrong, for instance due to
@@ -1310,7 +1413,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			baseOwdHistMin = UINT32_MAX;
 			baseOwdResetT_ntp = time_ntp;
 		}
-
+#endif
 		/*
 		* Calculate queueDelayMinAvg as a ~10s average.
 		* A slow attack, fast decay filter is used

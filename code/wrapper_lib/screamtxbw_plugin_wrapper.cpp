@@ -211,7 +211,7 @@ int txbw_plugin_main(int argc, char* argv[])
   * Parse command line
   */
   if (argc <= 1) {
-    cerr << "SCReAM sender. Ericsson AB. Version 2020-12-17" << endl;
+    cerr << "SCReAM sender. Ericsson AB. Version 2024-07-03" << endl;
     cerr << "Usage : " << endl << " > scream_bw_test_tx <options>  " << endl;
     cerr << "     -initrate value       set a start bitrate [kbps]" << endl;
     cerr << "                            example -initrate 2000 " << endl;
