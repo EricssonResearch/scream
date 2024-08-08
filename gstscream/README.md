@@ -7,9 +7,14 @@
 # Building gstscream and sample applications
 Should be possible to build and run on Windows (not tested)  
 However  SCReAM BW  can't be built for Windows.  
-Therefore modify build.sh to remove --features screamtxbw-enabled
+Therefore you cannot build with --features screamtxbw-enabled
+
 ```bash
-./scripts/build.sh
+# To build with L4S and with SCReAM BW
+cargo build --features=ecn-enabled,screamtxbw-enabled
+
+# To build without SCReAM BW
+cargo build --features=ecn-enabled
 ```
 
 # Environment Variables are set in script/env.sh
