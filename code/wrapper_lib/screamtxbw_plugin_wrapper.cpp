@@ -1,5 +1,5 @@
-#include "ScreamTx.h"
-#include "RtpQueue.h"
+#include "../ScreamTx.h"
+#include "../RtpQueue.h"
 #include "sys/types.h"
 #include <sys/time.h>
 #include <pthread.h>
