@@ -357,7 +357,7 @@ extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
         drop(buf);
     }
 }
-#[link(name = "scream")]
+
 extern "C" {
     fn ScreamSenderPush(
         buf: *mut gst_sys::GstBuffer,

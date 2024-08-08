@@ -152,7 +152,7 @@ public:
 	* It is up to the wrapper application to prepend this RTCP
 	*  with SR or RR when needed
 	*/
-	bool ScreamRx::createStandardizedFeedbackOoo(uint32_t time_ntp, bool isMark, unsigned char* buf, int& size);
+	bool createStandardizedFeedbackOoo(uint32_t time_ntp, bool isMark, unsigned char* buf, int& size);
 
 	/*
 	* Get last feedback transmission time in NTP domain (Q16)

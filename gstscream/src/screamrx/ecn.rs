@@ -13,7 +13,6 @@ pub struct GstNetEcnMeta {
     pub cp: GstNetEcnCp,
 }
 
-#[link(name = "gstnet-1.0")]
 extern "C" {
 
     //=========================================================================
