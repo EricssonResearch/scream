@@ -1,8 +1,9 @@
 #![allow(clippy::uninlined_format_args)]
 extern crate failure;
-use failure::Error;
+use std::fmt::Display;
 
-use std::env;
+use clap::Parser;
+use failure::Error;
 
 extern crate gtypes;
 
@@ -12,16 +13,26 @@ use gst::prelude::*;
 
 extern crate chrono;
 
+#[derive(clap::Parser)]
+#[command(version, about, long_about = None)]
+struct Arguments {
+    #[arg(env)]
+    /// The gstreamer pipeline to use for the receiver application.
+    recvpipeline: String,
+}
+
 fn main() {
+    let args = Arguments::parse();
+    println!("{args}");
     gst::init().expect("Failed to initialize");
 
     let main_loop = glib::MainLoop::new(None, false);
 
-    start(&main_loop).expect("Failed to start");
+    start(&main_loop, args).expect("Failed to start");
 }
 
-pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
-    let pls: String = env::var("RECVPIPELINE").unwrap();
+fn start(main_loop: &glib::MainLoop, args: Arguments) -> Result<(), Error> {
+    let pls: String = args.recvpipeline;
     println!("RECVPIPELINE={}", pls);
     let pipeline = gst::parse::launch(&pls).unwrap();
 
@@ -42,7 +53,6 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
         .add_watch(move |_, msg| {
             use gst::MessageView;
 
-            // println!("bus {:?}", msg.view());
             let main_loop = &main_loop_clone;
             match msg.view() {
                 MessageView::Eos(..) => {
@@ -70,4 +80,10 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
         .expect("Failed to set pipeline to `Null`");
 
     Ok(())
+}
+
+impl Display for Arguments {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Configuration:\n\t- Pipeline {}", self.recvpipeline)
+    }
 }

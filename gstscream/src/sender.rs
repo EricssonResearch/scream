@@ -1,9 +1,9 @@
 #![allow(clippy::uninlined_format_args)]
+use clap::Parser;
 use failure::Error;
-use std::env;
+use std::fmt::Display;
 use std::process::exit;
 
-extern crate argparse;
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
@@ -11,36 +11,45 @@ extern crate lazy_static;
 use gst::glib;
 use gst::prelude::*;
 
-use argparse::{ArgumentParser, StoreOption, StoreTrue};
-
 mod sender_util;
 
+#[derive(clap::Parser)]
+#[command(version, about, long_about = None)]
+struct Arguments {
+    #[arg(short, long, default_value_t = false)]
+    /// Produces verbose logs.
+    verbose: bool,
+
+    #[arg(short, long)]
+    /// Rate multiplication factor.
+    ratemultiply: Option<i32>,
+
+    #[arg(env)]
+    /// The gstreamer pipeline to use for the sender application.
+    sendpipeline: String,
+
+    #[arg(env, default_value_t = 1000)]
+    /// The logging interval for sender statistics.
+    sender_stats_timer: u32,
+
+    #[arg(env, default_value = "sender_scream_stats.csv")]
+    /// The logging interval for sender statistics.
+    sender_stats_file_name: std::path::PathBuf,
+}
+
 fn main() {
+    let args = Arguments::parse();
+    println!("{}", args);
+
     gst::init().expect("Failed to initialize gst_init");
 
     let main_loop = glib::MainLoop::new(None, false);
-    start(&main_loop).expect("Failed to start");
+    start(&main_loop, args).expect("Failed to start");
 }
 
-pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
-    let mut ratemultiply_opt: Option<i32> = None;
-    let mut verbose = false;
-    {
-        // this block limits scope of borrows by ap.refer() method
-        let mut ap = ArgumentParser::new();
-        ap.set_description("Sender");
-        ap.refer(&mut verbose)
-            .add_option(&["-v", "--verbose"], StoreTrue, "Be verbose");
-        ap.refer(&mut ratemultiply_opt).add_option(
-            &["-r", "--ratemultiply"],
-            StoreOption,
-            "Set ratemultiply",
-        );
+fn start(main_loop: &glib::MainLoop, args: Arguments) -> Result<(), Error> {
+    let pls = args.sendpipeline;
 
-        ap.parse_args_or_exit();
-    }
-
-    let pls = env::var("SENDPIPELINE").unwrap();
     println!("Pipeline: {}", pls);
     let n_encoder0 = pls.matches("name=encoder0").count();
     let n_encoders = pls.matches("name=encoder").count();
@@ -68,13 +77,15 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
             &pipeline_clone,
             n,
             &Some("screamtx".to_string() + &n_string),
+            args.sender_stats_timer,
+            args.sender_stats_file_name.clone(),
         );
         sender_util::run_time_bitrate_set(
             &pipeline_clone,
-            verbose,
+            args.verbose,
             &Some("screamtx".to_string() + &n_string),
             &Some("encoder".to_string() + &n_string),
-            ratemultiply_opt,
+            args.ratemultiply,
         );
     }
 
@@ -109,4 +120,17 @@ pub fn start(main_loop: &glib::MainLoop) -> Result<(), Error> {
         .expect("Failed to set pipeline to `Null`");
     println!("Done");
     Ok(())
+}
+impl Display for Arguments {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Configuration:\n\t- Verbose: {},\n\t- Ratemultiply: {:?},\n\t- Pipeline: {},\n\t- Logging interval: {},\n\t- sender_stats_file: {}",
+            self.verbose,
+            self.ratemultiply,
+            self.sendpipeline,
+            self.sender_stats_timer,
+            self.sender_stats_file_name.display()
+        )
+    }
 }

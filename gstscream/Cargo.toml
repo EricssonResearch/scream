@@ -22,7 +22,7 @@ libc = "0.2.68"
 failure = "0.1"
 gtypes = "0.2.0"
 chrono = "0.4"
-argparse = "0.2.2"
+clap = { version = "4.5.11", features=["env","derive"] }
 
 [lib]
 name = "gstscream"

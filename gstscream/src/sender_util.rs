@@ -1,6 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
 use std::convert::TryInto;
-use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -18,26 +17,48 @@ struct RateInfo {
     count: u32,
 }
 
-pub fn stats(bin: &gst::Pipeline, n: usize, screamtx_name_opt: &Option<String>) {
-    let sender_stats_timer: u32 = env::var("SENDER_STATS_TIMER")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1000);
-    println!("SENDER_STATS_TIMER={}", sender_stats_timer);
+pub fn stats(
+    bin: &gst::Pipeline,
+    n: usize,
+    screamtx_name_opt: &Option<String>,
+    sender_stats_timer: u32,
+    mut sender_stats_file_name: std::path::PathBuf,
+) {
     if sender_stats_timer == 0 {
         return;
     }
+
     if screamtx_name_opt.is_none() {
         println!("no scream name");
         return;
     }
+
+    println!("SENDER_STATS_TIMER={}", sender_stats_timer);
+
     let pipeline_clock = bin.pipeline_clock();
 
     let repl_string = "_".to_owned() + &n.to_string() + ".csv";
-    let sender_stats_file_name: String = env::var("SENDER_STATS_FILE_NAME")
-        .unwrap_or_else(|_| "sender_scream_stats.csv".into())
-        .replace(".csv", &repl_string);
-    println!("SENDER_STATS_FILE_NAME={}", sender_stats_file_name);
+    let file_name = match sender_stats_file_name.file_name() {
+        Some(file) => file,
+        None => {
+            println!("Invalid SENDER_STATS_FILE_NAME.");
+            return;
+        }
+    };
+    let file_name = match file_name.to_str() {
+        Some(file_name) => file_name,
+        None => {
+            println!("SENDER_STATS_FILE_NAME must be a utf8 encoded string");
+            return;
+        }
+    }
+    .to_string();
+
+    sender_stats_file_name.set_file_name(file_name.replace(".csv", &repl_string));
+    println!(
+        "SENDER_STATS_FILE_NAME={}",
+        sender_stats_file_name.display()
+    );
     let mut out: File = File::create(&sender_stats_file_name).unwrap();
 
     let scream_name = screamtx_name_opt.as_ref().unwrap();

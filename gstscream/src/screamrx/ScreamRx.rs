@@ -106,23 +106,6 @@ impl Default for ScreamRx {
     }
 }
 
-use std::io::Write;
-struct WriteToGstInfo {
-    cat: gst::DebugCategory,
-}
-impl Write for WriteToGstInfo {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let str_buf = String::from_utf8_lossy(buf);
-        gst::error!(self.cat, "{}", str_buf);
-        let len = str_buf.len();
-        Ok(len)
-    }
-    fn flush(&mut self) -> Result<(), std::io::Error> {
-        // nothing to do
-        Ok(())
-    }
-}
-
 impl ScreamRx {
     pub fn ScreamReceiverPluginInit(&mut self, rtcp_srcpad: Option<Arc<Mutex<gst::Pad>>>) {
         gst::info!(CAT, "Init");
@@ -189,7 +172,7 @@ impl ScreamRx {
              *  to the range [2ms,100ms]
              */
             let mut rate: f64 = 0.02 * self.averageReceivedRate / (100.0 * 8.0); // RTCP overhead
-            rate = f64::min(500.0, f64::max(10.0, rate));
+            rate = rate.clamp(10., 500.);
             /*
              * More than one stream ?, increase the feedback rate as
              *  we currently don't bundle feedback packets
