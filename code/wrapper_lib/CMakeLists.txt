@@ -2,20 +2,20 @@
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
-set(BUILD_SHARED_LIBS  on)
+# set(BUILD_SHARED_LIBS  on)
 
 SET(HEADERS
-../ScreamTx.h
-../RtpQueue.h
+  ../ScreamTx.h
+  ../RtpQueue.h
 )
 
 SET(SRCS
-../RtpQueue.cpp
-../ScreamTx.cpp
-../ScreamV2Tx.cpp
-../ScreamV2TxStream.cpp
-screamtxbw_plugin_wrapper.cpp
-screamtx_plugin_wrapper.cpp
+  ../RtpQueue.cpp
+  ../ScreamTx.cpp
+  ../ScreamV2Tx.cpp
+  ../ScreamV2TxStream.cpp
+  screamtxbw_plugin_wrapper.cpp
+  screamtx_plugin_wrapper.cpp
 )
 
 set(CMAKE_BUILD_TYPE Debug)
@@ -25,12 +25,17 @@ if(BUILD_SHARED_LIBS)
   add_library(scream SHARED ${SRCS})
 
 else()
-
   set(CMAKE_CXX_FLAGS                " -DV2  -g  -I .. ${CMAKE_CXX_FLAGS_INIT} -fPIC")
   add_library(scream STATIC ${SRCS})
 endif()
 
 
 INCLUDE_DIRECTORIES(
-${screamIncludes}
+  ${screamIncludes}
 )
+
+# Add install instructions for the library for automated buildscripts
+install(TARGETS scream 
+  ARCHIVE DESTINATION lib
+)
+

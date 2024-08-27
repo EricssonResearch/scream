@@ -38,6 +38,7 @@ name="scream_receiver"
 path="src/receiver.rs"
 
 [build-dependencies]
+cmake = "0.1.35"
 gst-plugin-version-helper = { git = "https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs.git" }
 
 [features]

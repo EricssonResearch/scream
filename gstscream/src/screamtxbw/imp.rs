@@ -189,7 +189,7 @@ extern "C" fn callback(
             .expect("Screamtxbw callback srcpad.push failed");
     }
 }
-#[link(name = "scream")]
+
 extern "C" {
     #[allow(improper_ctypes)]
     fn ScreamTxBwPluginInit(
