@@ -85,27 +85,10 @@ void ScreamRx::Stream::receive(uint32_t time_ntp,
 
 #ifdef OOO	
 	uint16_t diff = highestSeqNr - seqNr;
-
-
-	if (false && time_ntp / 65536.0 > 15.0) {
-		cerr << seqNr;
-		if (isMarker)
-			cerr << "M";
-
-		if (diff < 60000) {
-			cerr << "*(" << highestSeqNr << ")*";
-		}
-		cerr << " ";
-
-		if (seqNr == 4833) {
-			cerr << " ************************************* RX ************************* " << endl;
-		}
-	}
 	/*
 	* We tag a packet as OOO as soon at it is behind the highest ACKed packet
 	*/
 	if (diff > 0 && diff < (kRxHistorySize-kReportedRtpPackets)) {
-	//if (diff > nReportedRtpPackets-nReportedRtpPackets/4 && diff < (kRxHistorySize-kReportedRtpPackets)) {
 		/*
 		* Large OOO RTP received, enable transmission of additional RTCP packet to indicate receiption
 		*/ 		
@@ -119,15 +102,11 @@ void ScreamRx::Stream::receive(uint32_t time_ntp,
 			} 
 			
 			numOooDetected++; 
-			if (false && time_ntp / 65536.0 > 15.0)
-				cerr << " OOOb " << time_ntp << " - " << seqNr << " " << oooLowSeqNr << " " << highestSeqNr << " " << numOooDetected  << endl;
 		}
 		else {
 			oooLowSeqNr = seqNr;
 			
 			numOooDetected++;
-			if (false && time_ntp / 65536.0 > 15.0)
-				cerr << " OOOa " << time_ntp << " - " << seqNr << " " << oooLowSeqNr << " " << highestSeqNr << " "  << numOooDetected << " " << diff << endl;
 		}
 		isOooHist[ix] = true;
 
@@ -168,7 +147,6 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
 	memcpy(buf, &tmp_l, 4);
 	size += 4;
 
-
 	/*
 	* Write 16bits report element for received RTP packets
 	*/
@@ -184,14 +162,9 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
 		sn_lo -= numLeftover;
 		
 		highestSeqNrTx = sn_lo + uint16_t(nReportedRtpPackets-1);
-		
-		//cerr << " \nCatch up ACK " << endl;
-
 	} else {
 	   	highestSeqNrTx = highestSeqNr;
 	}   	
-	if (false && time_ntp / 65536.0 > 15.0)
-		cerr << "\n" << time_ntp / 65536.0 << " TX ACK " << sn_lo << " " << highestSeqNr << " " << highestSeqNr - highestSeqNrTx << " " << nReportedRtpPackets << endl;
 
 	/*
 	* Write begin_seq
@@ -250,7 +223,6 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
 	doFlush = false;
 	if (highestSeqNrTx != highestSeqNr) {
 		doFlush = true;
-	//	exit(0);
 	}
 
 	return true;
@@ -294,13 +266,6 @@ bool ScreamRx::Stream::getStandardizedFeedbackOoo(uint32_t time_ntp,
 				oooLowSeqNrUpdated = seqNrHist[ix];
 				nReportedPackets = n + 1;
 				numOooReported++;
-			}
-			if (false && n > 16 && numOooReported == 1) {
-				/*
-				* Break loop as it is possible that it is only one OOO packet
-				* (the first) to report
-				*/
-				continue;
 			}
 		}
 
@@ -375,8 +340,6 @@ bool ScreamRx::Stream::getStandardizedFeedbackOoo(uint32_t time_ntp,
 			ptr += 2;
 		}
 		numOooDetected = std::max(0,numOooDetected-numOooReported);
-		if (false && time_ntp/65536.0 > 15.0)
-			cerr << time_ntp / 65536.0 << " TX OOO ACK " << oooLowSeqNr << " " << nReportedRtpPackets << " " << numOooReported << " " << numOooDetected << " " << oooLowSeqNrUpdated << endl;
 		oooLowSeqNr = oooLowSeqNrUpdated;
 		return true;
 	}
@@ -485,7 +448,6 @@ void ScreamRx::receive(uint32_t time_ntp,
 	*/
 	Stream* stream = new Stream(ssrc);
 	stream->nReportedRtpPackets = nReportedRtpPackets;
-	//stream->ix = ix++;
 	stream->receive(time_ntp, rtpPacket, size, seqNr, ceBits == 0x03, ceBits, isMark, timeStamp);
 	streams.push_back(stream);
 }
@@ -505,19 +467,6 @@ bool ScreamRx::isFeedback(uint32_t time_ntp) {
 	}
 	return false;
 }
-
-/*
-int ScreamRx::getIx(uint32_t ssrc) {
-	if (!streams.empty()) {
-		for (auto it = streams.begin(); it != streams.end(); ++it) {
-			Stream* stream = (*it);
-			if (ssrc == stream->ssrc)
-				return stream->ix;
-		}
-	}
-	return -1;
-}
-*/
 
 bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsigned char* buf, int& size) {
 
@@ -561,7 +510,6 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsign
 		ptr += size_stream;
 		stream->lastFeedbackT_ntp = time_ntp;
 		stream->nRtpSinceLastRtcp = 0;
-		//stream->highestSeqNrTx = stream->highestSeqNr;
 	}
 	if (!isFeedback)
 		return false;
