@@ -318,7 +318,7 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	* This helps to avoid unnecessary RTP queue build up
 	* Note that at very low bitrates it is necessary to reduce the MTU also
 	*/
-	tmp *= 1.0f - std::min(0.8f, std::max(0.0f, parent->cwndRatio - 0.1f));
+	tmp *= 1.0f - std::min(0.2f, std::max(0.0f, parent->cwndRatio - 0.1f));
 
 	/*
 	* Compute target bitrate.

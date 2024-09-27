@@ -84,7 +84,6 @@ float rateMax[MAX_SOURCES]={30000,30000,10000,10000};
 ScreamV2Tx *screamTx = 0;
 float pacingHeadroom = 1.5;
 float multiplicativeIncreaseFactor = 0.05;
-bool isEmulateCubic = false;
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
 bool ntp = false;
 
@@ -191,7 +190,6 @@ int main(int argc, char* argv[]) {
         cerr << "                      is static for long periods. " << endl;
         cerr << " -maxtotalrate val  : Set max total bitrate [kbps], default 100000." << endl;
         cerr << " -pacingheadroom val: Set packet pacing headroom, default 1.5." << endl;
-        cerr << " -emulatecubic      : Make adaptation more cautious around the last known max rate" << endl;
         cerr << " -log log_file      : Save detailed per-ACK log to file" << endl;
         cerr << " -ratemax list      : Set max rate [kbps] for streams" << endl;
         cerr << "    example -ratemax 30000:20000" << endl;
@@ -302,14 +300,9 @@ int main(int argc, char* argv[]) {
             nExpectedArgs += 2;
             continue;
         }
-        if (strstr(argv[ix], "-emulatecubic")) {
-	    isEmulateCubic = true;
-            ix++;
-	    continue;
-	}
-    fprintf(stderr, "unexpected arg %s\n", argv[ix]);
-    ix += 1;
-    nExpectedArgs += 1;
+        fprintf(stderr, "unexpected arg %s\n", argv[ix]);
+        ix += 1;
+        nExpectedArgs += 1;
     }
 
   //test code for python
@@ -955,7 +948,6 @@ int setup() {
         false,
         false);
         screamTx->setPostCongestionDelay(4.0);
-        screamTx->setIsEmulateCubic(isEmulateCubic);
 #else
     screamTx = new ScreamV1Tx(
         congestionScaleFactor,

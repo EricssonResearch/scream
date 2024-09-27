@@ -445,14 +445,13 @@ extern "C" {
 		}
 
 		/*
-		* Set to true to make the rate increase more slow when close to the last known max, before congestion hit.
-               * This is also benficial if the video encoder is known to be slow to react to changes in the 
-		*  target bitrate. This is especially important when operating in L4S mode. 
+		* Limit CWND growth speed when it is very small. This can reduce rate oscillation at low
+		* throughput.
 		* The drawback is that SCReAM can have more difficulties to compete with Prague 
 		*  over the same bottleneck
 		*/
-		void setIsEmulateCubic(bool isEmulateCubic_) {
-			isEmulateCubic = isEmulateCubic_;
+		void limitGrowthOnSmallCwnd(bool isLimitGrowthOnSmallCwnd_) {
+			isLimitGrowthOnSmallCwnd = isLimitGrowthOnSmallCwnd_;
 		}
 
 	private:
@@ -735,12 +734,12 @@ extern "C" {
 		bool isAutoTuneMinCwnd;
 		bool enableRateUpdate;
 		bool isUseExtraDetailedLog;
-		bool isEmulateCubic;
+		bool isLimitGrowthOnSmallCwnd;
 
 		float sRtt;
+		uint32_t sRtt_ntp;
 		uint32_t sRttSh_ntp;
 		uint32_t sRttShPrev_ntp;
-		uint32_t sRtt_ntp;
 		float currRtt;
 		uint32_t ackedOwd;
 		uint32_t baseOwd;
@@ -749,10 +748,12 @@ extern "C" {
 		float queueDelay;
 		float queueDelayFractionAvg;
 		float queueDelayTarget;
+
 		float queueDelaySbdVar;
 		float queueDelaySbdMean;
-		float queueDelaySbdSkew;
 		float queueDelaySbdMeanSh;
+		float queueDelaySbdSkew;
+
 		float queueDelayAvg;
 		float queueDelayMax;
 		float queueDelayMin;
@@ -762,6 +763,7 @@ extern "C" {
 		int bytesNewlyAckedCe;
 		int bytesNewlyAckedLog;
 		int ecnCeMarkedBytesLog;
+
 		int mss; // Maximum Segment Size
 		int cwnd; // congestion window
 		int cwndMin;
@@ -770,8 +772,6 @@ extern "C" {
 		float cwndRatio;
 		int cwndIHist[kCwndIHistSize];
 		int cwndIHistIx;
-		float cwndISpread;
-
 
 		int bytesInFlight;
 		int bytesInFlightLog;
@@ -814,8 +814,8 @@ extern "C" {
 		float adaptivePacingRateScale;
 
 		uint32_t baseOwdHist[kBaseOwdHistSize];
-		int baseOwdHistPtr;
 		uint32_t baseOwdHistMin;
+		int baseOwdHistPtr;
 		float queueDelayNormHist[kQueueDelayNormHistSize];
 		int queueDelayNormHistPtr;
 		int maxBytesInFlightHist[kMaxBytesInFlightHistSize];
@@ -842,14 +842,16 @@ extern "C" {
 		uint32_t baseOwdResetT_ntp;
 		uint32_t lastSlowUpdateT_ntp;
 		uint32_t lastLossEventT_ntp;
+		uint32_t lastCeEventT_ntp;
 		uint32_t lastTransmitT_ntp;
 		uint32_t nextTransmitT_ntp;
+
 		uint32_t lastRateUpdateT_ntp;
 		uint32_t lastCwndIUpdateT_ntp;
 		uint32_t lastCwndUpdateT_ntp;
+
 		uint32_t lastQueueDelayAvgUpdateT_ntp;
 		uint32_t lastL4sAlphaUpdateT_ntp;
-		uint32_t lastCeEventT_ntp;
 		uint32_t lastBaseDelayRefreshT_ntp;
 		uint32_t lastRateLimitT_ntp;
 	};

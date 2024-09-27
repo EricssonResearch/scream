@@ -57,10 +57,10 @@ K = 10;
 B = ones(1,K)/K;
 
 subplot(4,1,4);
-plot(T,a(ix,2),'.-',T,filter(B,1,a(ix,3)),'.-','linewidth',1);ylim([0 maxDelay]);
+plot(T,a(ix,2),'.-',T,filter(B,1,a(ix,19)),'.-','linewidth',1);ylim([0 maxDelay]);
 %plot(T,a(ix,2)+a(ix,19),'R.',T,a(ix,2),'B.-','linewidth',1);ylim([0 maxDelay]);
 set(gca,'FontSize',12);grid on;
-title('Network queue(B) and RTT(R) [s]');
+title('Network queue(B) and RTP Q (R) [s]');
 xlim(Tlim);
 
 

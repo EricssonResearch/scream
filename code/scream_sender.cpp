@@ -68,7 +68,7 @@ float multiplicativeIncreaseFactor = 0.05f;
 float postCongestionDelay = 4.0f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
-bool isEmulateCubic = false;
+bool isLimitGrowthOnSmallCwnd = false;
 
 
 uint16_t seqNr = 0;
@@ -588,7 +588,7 @@ int setup() {
 			openWindow,
 			false,
 			enableClockDriftCompensation);
-		screamTx->setIsEmulateCubic(isEmulateCubic);
+		screamTx->limitGrowthOnSmallCwnd(isLimitGrowthOnSmallCwnd);
 	}
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow((mtu+12)*2);
@@ -666,7 +666,7 @@ int main(int argc, char* argv[]) {
 		cerr << "                               example -maxrate 10000 " << endl;
 		cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
 		cerr << "                               -1 for not-ECT (default)" << endl;
-		cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << endl;
+		cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.7) " << endl;
 		cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
 		cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << endl;
 		cerr << "     -openwindow              override SCReAMs window limitation  (default = false) " << endl;
@@ -674,7 +674,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << endl;
 		cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << endl;
 		cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << endl;
-		cerr << "     -emulatecubic            make adaptation more cautious around the last known higher rate" << endl;
+		cerr << "     -slowonsmallcwnd         limit CWND growth on small CWND " << endl;
 		cerr << "     -fps value               set the frame rate (default 50)" << endl;
 		cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
 		cerr << "                               receiver end clock is faster" << endl;
@@ -879,8 +879,8 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 		
-		if (strstr(argv[ix], "-emulatecubic")) {
-			isEmulateCubic = true;
+		if (strstr(argv[ix], "-slowonsmallcwnd")) {
+			isLimitGrowthOnSmallCwnd = true;
 			ix++;
 			continue;
 		}

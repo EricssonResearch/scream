@@ -71,8 +71,6 @@ static const float kLowCwndScaleFactor = 1.0f;
 // Time constant for queue delay average
 static const float kQueueDelayAvgAlpha = 1.0f / 4;
 
-static const float kCwndISpreadAlpha = 1.0f / 64;
-
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	float ecnCeBeta_,
 	float queueDelayTargetMin_,
@@ -104,7 +102,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	isAutoTuneMinCwnd(false),
 	enableRateUpdate(true),
 	isUseExtraDetailedLog(false),
-	isEmulateCubic(false),
+	isLimitGrowthOnSmallCwnd(false),
 
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
@@ -118,14 +116,16 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	queueDelay(0.0),
 	queueDelayFractionAvg(0.0f),
 	queueDelayTarget(queueDelayTargetMin),
+
 	queueDelaySbdVar(0.0f),
 	queueDelaySbdMean(0.0f),
 	queueDelaySbdMeanSh(0.0f),
 	queueDelaySbdSkew(0),
+
 	queueDelayAvg(0.0f),
 	queueDelayMax(0.0f),
-	queueDelayMinAvg(0.0f),
 	queueDelayMin(1000.0),
+	queueDelayMinAvg(0.0f),
 
 	bytesNewlyAcked(0),
 	bytesNewlyAckedCe(0),
@@ -139,7 +139,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	cwndI(1),
 	cwndRatio(0.001f),
 	cwndIHistIx(0),
-	cwndISpread(0.0f),
 
 	bytesInFlight(0),
 	bytesInFlightLog(0),
@@ -209,12 +208,11 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	nextTransmitT_ntp(0),
 	lastRateUpdateT_ntp(0),
 	lastCwndIUpdateT_ntp(0),
+	lastCwndUpdateT_ntp(0),
 	lastQueueDelayAvgUpdateT_ntp(0),
 	lastL4sAlphaUpdateT_ntp(0),
-	lastCwndUpdateT_ntp(0),
 	lastBaseDelayRefreshT_ntp(0),
 	lastRateLimitT_ntp(0)
-
 {
 	strcpy(detailedLogExtraData, "");
 	strcpy(timeString, "");
@@ -1303,14 +1301,6 @@ void ScreamV2Tx::updateCwndI(int cwndI_) {
 	}
 
 	cwndI = tmp[kCwndIHistSize / 2];
-
-	float tmp2 = float(tmp[kCwndIHistSize-1] - tmp[0]) / cwndI;
-
-	/*
-	* Determine how the samples spread
-	*/
-	cwndISpread = tmp2 * kCwndISpreadAlpha + cwndISpread * (1.0f - kCwndISpreadAlpha);
-
 }
 /*
 * Update the  congestion window
@@ -1656,32 +1646,30 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	float sclI = 1.0f;
 	sclI = float(cwnd - cwndI) / cwndI;
 	float loLim = 0.1f;
-	if (isL4sActive) {
-	    sclI *= 4;
-		/*
-		* The smallest increase is determined by the loss event rate and how the CWND inflexion 
-		* point samples vary. 
-		* A low lossEvent rate or high cwndISpread indicates that the congestion control is oscillating, 
-		* the cure is to reduce the CNWD increase at the inflexion point.
-		* Competing (Prague) flows generally gives a higher loss event rate and also smaller variation
-		* in CWND inflexion point samples. Thus it is less needed to reduce the CWND growth near the 
-		* inflexion point.
-		*/
-		loLim = std::max(0.1f, lossEventRate*std::min(1.0f, 1.0f-5.0f*(cwndISpread-0.1f)));
-		/*
-		* In addition relax limitation as CWND grows large. 
-		*/
-		loLim = std::max(loLim, std::min(1.0f, 0.01f / cwndRatio));
-
-	} else {
-	    sclI *= 4;
-	}
+	sclI *= 4;
 	sclI = sclI * sclI;
-	
+	if (isL4sActive) {
+		/*
+		* Relax limitation as CWND grows large. 
+		*/
+		loLim = std::max(loLim, std::min(1.0f, 0.02f / cwndRatio));
+	}	
 	sclI = std::max(loLim, std::min(1.0f, sclI));
-	if (isEmulateCubic || !isL4sActive) {
-          increment *= sclI;
-    }
+
+	/*
+	* Apply hard limit on CWND growth speed for very small CWND (below 5 MSS)
+	*/
+	if (isLimitGrowthOnSmallCwnd && cwndRatio > 0.2f) {
+		/*
+		* Growth speed = MSS/20 per RTT
+		*/
+		sclI = 1.0f/(20*cwndRatio); 
+	}
+
+	/*
+	* Apply scaling on increment
+	*/
+	increment *= sclI;
 
 	/*
 	* Calculate relative growth of CWND
