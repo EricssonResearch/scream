@@ -4,9 +4,6 @@
 
 
 static const uint32_t kMinRtpQueueDiscardInterval_ntp = 16384; // 0.25s in NTP doain
-
-static const float kBytesInFlightLimit = 0.9f;
-static const float kMaxBytesInFlightLimitCompensation = 1.5f;
 static const float kRelFrameSizeHistDecay = 1.0f / 1024;
 static const float kRelFrameSizeHighPercentile = 0.75f;
 static const int kRelFrameSizeHistPreamble = 50;
@@ -220,11 +217,9 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 				}
 				ix--;
 				relFrameSizeHigh = 1.0f + ((float)ix) * (kRelFrameSizeHistRange - 1.0f) / kRelFrameSizeHistBins;
-				//printf(" %3.3f \n", relFrameSizeHigh);
 			}
 		}
 		frameSizeAcc = 0;
-
 
 		if (frameSizeAvg > 500.0f) {
 			adaptivePacingRateScale = std::min(parent->maxAdaptivePacingRateScale, std::max(1.0f, frameSize / frameSizeAvg));
@@ -297,36 +292,12 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 		rtpQueueDelay = rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
 	}
 
-
 	/*
-	* Rate is computed based CWND and RTT, this is done in ScreamV2Tx::updateCwnd
-	* The rest that follows below is to compensate for very small congestion windows
-	* and large variations in frame size
+	* Target rate is computed based CWND and RTT, this is done in ScreamV2Tx::updateCwnd
+	* Here only functions are added to keep target bitrate within specified limits 
+	* for the stream and add the hysteresis
 	*/
-	float tmp = 1.0f;
-
-	/*
-	* Make the rate estimation more cautious when the window is almost full or overfilled
-	* This is only enabled when L4S is neither enabled, nor active
-	*/
-	if (!parent->isL4sActive && parent->bytesInFlightRatio > kBytesInFlightLimit) {
-		tmp /= std::min(kMaxBytesInFlightLimitCompensation, parent->bytesInFlightRatio / kBytesInFlightLimit);
-	}
-
-	/*
-	* Scale down rate slighty when the congestion window is very small compared to mss
-	* This helps to avoid unnecessary RTP queue build up
-	* Note that at very low bitrates it is necessary to reduce the MTU also
-	*/
-	tmp *= 1.0f - std::min(0.2f, std::max(0.0f, parent->cwndRatio - 0.1f));
-
-	/*
-	* Compute target bitrate.
-	*/
-	tmp *= rateShare;
-	targetBitrate = tmp;
-
-	targetBitrate = std::min(maxBitrate, std::max(minBitrate, targetBitrate));
+	targetBitrate = std::min(maxBitrate, std::max(minBitrate, rateShare));
 
 	/*
 	* Update targetBitrateH

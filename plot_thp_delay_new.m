@@ -41,7 +41,7 @@ xlim(Tlim);
 
 
 subplot(4,1,3);
-K = 10;
+K = 1;
 B = ones(1,K)/K;
 x = a(ix,11)./a(ix,10)*100;
 plot(T,filter(B,1,x));

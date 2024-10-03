@@ -712,6 +712,11 @@ extern "C" {
 		void updateCwndI(int cwndI);
 
 		/*
+		* Get the mss
+		*/
+		int getMss();
+
+		/*
 		* Variables for network congestion control
 		*/
 
@@ -765,6 +770,7 @@ extern "C" {
 		int ecnCeMarkedBytesLog;
 
 		int mss; // Maximum Segment Size
+		int prevMss;
 		int cwnd; // congestion window
 		int cwndMin;
 		int cwndMinLow;

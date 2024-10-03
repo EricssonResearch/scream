@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-10-03 :
+  - Features that more cautiously increases CWND are removed/refined as these deviated too much from the principle of two marked packets per RTT at steady state.
 - 2024-09-27 :
   - Limit growth on very small CWND added (optional), to make algorithm more stable at very low bitrates when CWND is just a few MSS  
 - 2024-07-05 :
