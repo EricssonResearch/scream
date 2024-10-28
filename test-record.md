@@ -5,7 +5,7 @@ SCReAM test with 100Mbps bottleneck with DualPi2 AQM
 SCReAM commit 994f9a40d4b4a78b8052551e3480b30269d75a3a (2024-10-28)
 
 ### Hardware and qdisc configuration
-The test laptops are two Lenovo ThinkPPad E470 with Ubuntu 20.04. The PCs are interconnected with an ethernet cable
+The test laptops are two Lenovo ThinkPad E470 with Ubuntu 20.04. The PCs are interconnected with an ethernet cable
 Linux release 5.15 with TCP Prague and DualPi2 from 
 https://github.com/L4STeam/linux is used. Iperf is used as additional load generator, confugured to use L4S and Prague
 
@@ -13,7 +13,7 @@ The bottleneck is configured on the receiving (client side) with the below scrip
 
 ~~~
 # Script that runs on the receiving side  to model an 
-# L4S-capable link with 100Mbps thorughput and 25ms RTT
+# L4S-capable link with 100Mbps throughput and 25ms RTT
 # $INTERFACE is the network interface
 
 sudo modprobe ifb numifbs=1
@@ -44,6 +44,7 @@ The expected SCReAM bitrate  [Mbps] given the number of additional TCP loads  is
 |:-:|:-:|:-:|:-:|:-:|
 | 100 | 50 | 33 | 25 | 20 |
 
+All tests are run with only one iteration so one can expect a roughlt +/- 5% deviation from the figures below.
 
 ### Test 1, impact of microburst interval
 The test examines the impact of the microburst interval in the SCReAM performance without additional load and with 
