@@ -1643,7 +1643,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Reduce increment for very small RTTs
 	*/
 	tmp = std::min(1.0f, sRtt / kSrttVirtual);
-	increment *= tmp * tmp;
+	increment *= tmp;
 
 	/*
 	 * Limit on CWND growth speed further for small CWND

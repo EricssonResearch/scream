@@ -3,6 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-10-28 :
+  - Fixed wrong RTT scaling.
+  - Release dates for SCReAM BW test changed. Performance differences against previous 2024-07-04 version is however minimal. 
 - 2024-10-03 :
   - Features that more cautiously increases CWND are removed/refined as these deviated too much from the principle of two marked packets per RTT at steady state.
 - 2024-09-27 :
