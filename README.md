@@ -74,6 +74,8 @@ The algorithm is an IETF experimental standard [1], a Sigcomm paper [2] and [3] 
 
 As mentioned above, SCReAM was originally devised for WebRTC but did not make it into being incorporated into that platform. Instead, SCReAM has found use as congestion control for remote controlled vehicles, cloud gaming demos and benchmarking of 5G networks with and without L4S support.
 
+Test report(s) for SCReAM is found here https://github.com/EricssonResearch/scream/blob/master/test-record.md 
+
 ## What is L4S ?
 L4S is short for **L**ow **L**atency **L**ow **L**oss **S**calable thorughput, L4S is specified in [4]. A network node that is L4S capable can remark packets that have the ECT(1) code point set to CE. The marking threshold is set very low (milliseconds).
 
