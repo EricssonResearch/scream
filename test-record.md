@@ -1,4 +1,58 @@
 # Test activities with SCReAM
+Test activities ordered, most recent first
+
+## Test activity 2024-10-31
+SCReAM test with 100Mbps bottleneck with DualPi2 AQM
+SCReAM commit 76a298add1ebd3714f86ae6f4a31194ca04a168f (2024-10-31)
+
+### Hardware and qdisc configuration
+Same as 2024-10-28
+
+### Test 2, different RTTs
+The test is run with 5 different values of RTT and up to 4 additional TCP loads
+
+-microburstinterval 0.5
+-mtu 1360 (1400 byte in IP level)
+-rand 0 (fixed frame sizes)
+
+| RTT [ms]  | 0 TCP | 1 TCP | 2 TCP | 3 TCP | 4 TCP |
+| :- |:-:|:-:|:-:|:-:|:-:|
+| 5 | 79 | 52 | 40 | 29 | 20 |
+| 10 | 78 | 58 | 40 | 28 | 22 |
+| 25 | 78 | 60 | 48 | 38 | 29 |
+| 50 | 76 | 60 | 43 | 35 | 30 |
+| 100 | 71 | 54 | 32 | 25 | 18 |
+
+![First 20s only SCreAM then 1 TCP Prague added every 20s](https://github.com/EricssonResearch/scream/blob/master/images/L4S-100Mbps-25ms-0-4-TCP.png)
+First 20s only SCreAM then 1 TCP Prague added every 20s
+
+![First 20s only SCreAM then 4 TCP Prague for 20s](https://github.com/EricssonResearch/scream/blob/master/images/L4S-100Mbps-25ms-0-4-TCP.png)
+First 20s only SCreAM then 4 TCP Prague for 20s
+
+
+### Test3, different RTTs, and varying video frame sizes
+Like test # 2 but varying video frame sizes
+
+-microburstinterval 0.5
+-mtu 1360 : 1400 byte on IP level
+-rand 50 : frame sizes vary +/-1 50% from the nominal (uniform distribution)
+
+| RTT [ms]  | 0 TCP | 1 TCP | 2 TCP | 3 TCP | 4 TCP |
+| :- |:-:|:-:|:-:|:-:|:-:|
+| 5 | 70 | 48 | 30 | 25 | 18 |
+| 10 | 68 | 50 | 36 | 28 | 18 |
+| 25 | 68 | 50 | 44 | 32 | 25 |
+| 50 | 66 | 46 | 38 | 30 | 23 |
+| 100 | 64 | 48 | 38 | 26 | 21 |
+
+![First 20s only SCreAM then 1 TCP Prague added every 20s](https://github.com/EricssonResearch/scream/blob/master/images/L4S-100Mbps-25ms-r-50-0-4-TCP.png)
+First 20s only SCreAM then 1 TCP Prague added every 20s
+
+
+### Summary
+The results do no differ greatly from the test 2024-10-28, this means that the introduced cubic emulation with L4S gives more stable bitrate and less delay spikes and still manages to compete with TCP Prague in the given test range.
+SCReAM gets a larger share of the link capacity than is fair. Possibly the algorithm can be tuned a bit more conservative to trade bitrate against a even more stable behavior.
+
 
 ## Test activity 2024-10-28
 SCReAM test with 100Mbps bottleneck with DualPi2 AQM
