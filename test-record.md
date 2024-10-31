@@ -26,7 +26,7 @@ The test is run with 5 different values of RTT and up to 4 additional TCP loads
 ![First 20s only SCreAM then 1 TCP Prague added every 20s](https://github.com/EricssonResearch/scream/blob/master/images/L4S-100Mbps-25ms-0-4-TCP.png)
 First 20s only SCreAM then 1 TCP Prague added every 20s
 
-![First 20s only SCreAM then 4 TCP Prague for 20s](https://github.com/EricssonResearch/scream/blob/master/images/L4S-100Mbps-25ms-0-4-TCP.png)
+![First 20s only SCreAM then 4 TCP Prague for 20s](https://github.com/EricssonResearch/scream/blob/master/images/L4S-100Mbps-25ms-0-4-0-TCP.png)
 First 20s only SCreAM then 4 TCP Prague for 20s
 
 
