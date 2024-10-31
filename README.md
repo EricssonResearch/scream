@@ -3,6 +3,11 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-10-31 :
+  - Added cubic emulation for L4S. This stabilizes the bitrate and also reduces delay spikes.
+  - Delay based congestion control modified
+  - Default microburstinterval = 0.5ms
+  - Release dates for SCReAM BW test changed, expect a difference in performance (rate and delay variation) compared to previous version. 
 - 2024-10-28 :
   - Fixed wrong RTT scaling.
   - Release dates for SCReAM BW test changed. Performance differences against previous 2024-07-04 version is however minimal. 

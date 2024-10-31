@@ -11,7 +11,7 @@ using namespace std;
  */
 
 const float l4sThLo = 0.004f;
-const float l4sThHi = 0.006f;
+const float l4sThHi = 0.008f;
 NetQueueItem::NetQueueItem() {
 	packet = 0;
 	used = false;

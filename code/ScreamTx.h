@@ -443,17 +443,6 @@ extern "C" {
 		void autoTuneMinCwnd(bool isAutotune) {
 			isAutoTuneMinCwnd = isAutotune;
 		}
-
-		/*
-		* Limit CWND growth speed when it is very small. This can reduce rate oscillation at low
-		* throughput.
-		* The drawback is that SCReAM can have more difficulties to compete with Prague 
-		*  over the same bottleneck
-		*/
-		void limitGrowthOnSmallCwnd(bool isLimitGrowthOnSmallCwnd_) {
-			isLimitGrowthOnSmallCwnd = isLimitGrowthOnSmallCwnd_;
-		}
-
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -739,7 +728,6 @@ extern "C" {
 		bool isAutoTuneMinCwnd;
 		bool enableRateUpdate;
 		bool isUseExtraDetailedLog;
-		bool isLimitGrowthOnSmallCwnd;
 
 		float sRtt;
 		uint32_t sRtt_ntp;

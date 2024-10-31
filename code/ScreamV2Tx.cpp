@@ -111,7 +111,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	isAutoTuneMinCwnd(false),
 	enableRateUpdate(true),
 	isUseExtraDetailedLog(false),
-	isLimitGrowthOnSmallCwnd(false),
 
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
@@ -770,11 +769,14 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* Use the average queue delay to avoid over reaction to lower later retransmissions
 			*/
 
-			if ((queueDelayAvg > queueDelayTarget / 4.0f) && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
+			if ((queueDelayAvg > queueDelayTarget / 2.0f) && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
 				virtualCeEvent = true;
 				/*
 				* A virtual L4S alpha is calculated based on the estimated queue delay
 				*/
+				virtualL4sAlpha = std::min(std::min(1.0f, l4sAlphaLim * 4),
+					std::max(l4sAlphaLim, (queueDelayAvg - queueDelayTarget / 2) / (queueDelayTarget / 2)));
+
 				virtualL4sAlpha = std::min(1.0f, l4sAlphaLim + std::max(0.0f, (queueDelayAvg - queueDelayTarget / 4.0f) / (3* queueDelayTarget / 4)));
 			}
 		}
@@ -1512,6 +1514,19 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		lastSlowUpdateT_ntp = time_ntp;
 	}
 
+	float cwndScaleFactorBase = kLowCwndScaleFactor;
+	float cwndScaleFactorExt = (multiplicativeIncreaseScalefactor * cwnd)/ getMss();
+
+	/*
+	* Compute scale factor based on relation between CWND and last known 
+	* max CWND
+	*/
+	float sclI = 1.0;
+	float tmp = (cwnd - cwndI) / float(cwndI);
+	tmp *= 4;
+	tmp = tmp * tmp;
+	sclI = std::max(0.1f, std::min(1.0f, tmp));
+
 	/*
 	* At very low congestion windows (just a few MSS) the up and down scaling
 	* of CWND is scaled down. This is needed as there are just a few packets in flight
@@ -1520,10 +1535,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Reducing the MSS when bitrate is low is the best option if fast reaction to congestion
 	* is desired
 	*/
-	
-	float cwndScaleFactorBase = kLowCwndScaleFactor;
-	float cwndScaleFactorExt = (multiplicativeIncreaseScalefactor * cwnd)/ getMss();
-	
 	if (lossEvent) {
 		/*
 		* Update inflexion point
@@ -1561,6 +1572,15 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     		* with a corresponding reduction in CWND growth
 		    */
 			backOff *= std::max(0.5f, 1.0f - cwndRatio);
+
+			/*
+			 * Scale down backoff if close to the last known max
+			 * This is complemented with a scale down of the CWND increase
+			 * Don't scale down back off if queueDelay is large
+			 */
+			if (queueDelay < queueDelayTarget * 0.25f) {
+				backOff *= std::max(0.25f, sclI);
+			}
 
 			if (time_ntp - lastCongestionDetectedT_ntp > 65536 * 5.0f) {
 				/*
@@ -1630,12 +1650,18 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	int bytesAckedMinusCe = bytesNewlyAcked - bytesNewlyAckedCe;
 	float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio;
 
-	float sclI = 1.0;
-	float tmp = (cwnd - cwndI) / float(cwndI);
-	tmp *= 4;
-	tmp = tmp * tmp;
-	sclI = std::max(0.1f, std::min(1.0f,tmp));
-	if (!isL4sActive) {
+	/*
+	 * Scale the increment more cautious when close the last
+	 * know max CWND. This essentially scales the CWND increase so that it can be as
+	 * small as 0.1MSS per RTT.
+	 */
+	if (isL4sActive) {
+		/*
+		* This downscaling is complemented with a similar downscaling of
+		* the CWND back off.
+		*/
+		increment *= std::max(0.25f, sclI);
+	} else {
 		increment *= sclI;
 	}
 

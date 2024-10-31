@@ -32,15 +32,15 @@ const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-//#define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_flat.txt"
+#define TRACEFILE "../traces/trace_no_key.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2
 */
 const int mode = 0x1;// 0x0F;
 
-const float RTT = 0.030f;
+const float RTT = 0.025f;
 
 #include "ScreamTx.h"
 int main(int argc, char* argv[])
@@ -55,7 +55,6 @@ int main(int argc, char* argv[])
 	//screamTx->autoTuneMinCwnd(true);
 	//screamTx->setMaxTotalBitrate(40e6);
 	screamTx->setLogTag((char*)log_tag);
-	screamTx->limitGrowthOnSmallCwnd(true);
 
 	FILE* fp = fopen("log.txt", "w");
 	screamTx->setDetailedLogFp(fp);
@@ -65,7 +64,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 5e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 10e6, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);

@@ -29,8 +29,8 @@ using namespace std;
 
 #define BUFSIZE 2048
 
-float minPaceInterval = 0.001f;
-int minPaceIntervalUs = 1000;
+float minPaceInterval = 0.0005f;
+int minPaceIntervalUs = 500;
 
 #define ECN_CAPABLE
 /*
@@ -68,7 +68,6 @@ float multiplicativeIncreaseFactor = 0.05f;
 float postCongestionDelay = 4.0f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
-bool isLimitGrowthOnSmallCwnd = false;
 
 
 uint16_t seqNr = 0;
@@ -588,7 +587,6 @@ int setup() {
 			openWindow,
 			false,
 			enableClockDriftCompensation);
-		screamTx->limitGrowthOnSmallCwnd(isLimitGrowthOnSmallCwnd);
 	}
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow((mtu+12)*2);
@@ -643,7 +641,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-10-28 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-10-31 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -674,7 +672,6 @@ int main(int argc, char* argv[]) {
 		cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << endl;
 		cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << endl;
 		cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << endl;
-		cerr << "     -slowonsmallcwnd         limit CWND growth on small CWND " << endl;
 		cerr << "     -fps value               set the frame rate (default 50)" << endl;
 		cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
 		cerr << "                               receiver end clock is faster" << endl;
@@ -685,7 +682,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -append                  append logfile" << endl;
 		cerr << "     -itemlist                add item list in beginning of log file" << endl;
 		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
-		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 1ms)" << endl;
+		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 0.5ms)" << endl;
 		cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
 		exit(-1);
@@ -879,13 +876,6 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 		
-		if (strstr(argv[ix], "-slowonsmallcwnd")) {
-			isLimitGrowthOnSmallCwnd = true;
-			ix++;
-			continue;
-		}
-
-
 		if (strstr(argv[ix], "-mulincrease")) {
 			multiplicativeIncreaseFactor = atof(argv[ix + 1]);
 			ix += 2;

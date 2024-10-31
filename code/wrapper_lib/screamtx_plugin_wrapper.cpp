@@ -561,11 +561,6 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
           openWindow,
           false,
           enableClockDriftCompensation);
-      /*
-      * Set limit growth on small windows true as it is beneficial 
-      * especially at very low bitrates
-      */
-      screamTx->limitGrowthOnSmallCwnd(true);
 
       screamTx->setCwndMinLow(5000);
       if (logFile) {
