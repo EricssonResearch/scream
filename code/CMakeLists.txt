@@ -41,3 +41,6 @@ TARGET_LINK_LIBRARIES (
 scream_bw_test_rx
 ${screamLibs} pthread
 )
+
+add_subdirectory(wrapper_lib)
+
