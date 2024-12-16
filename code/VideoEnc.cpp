@@ -8,7 +8,6 @@
 
 using namespace std;
 
-static const int kMaxRtpSize = 1360;//1360;
 static const int kRtpOverHead = 12;
 
 uint32_t SSRC = 1;
@@ -56,8 +55,8 @@ int VideoEnc::encode(float time) {
 	//nominalBitrate = 0.95*nominalBitrate + 0.05*frameSize[ix] * frameRate * 8;
     ix++; if (ix == nFrames) ix = 0;
     while (tmp2 > 0) {
-        int rtpSize = std::min(kMaxRtpSize, tmp2);
-        bool isMarker = rtpSize < kMaxRtpSize;
+        int rtpSize = std::min(mss, tmp2);
+        bool isMarker = rtpSize < mss;
         tmp2 -= rtpSize;
         rtpSize += kRtpOverHead;
         rtpBytes += rtpSize;

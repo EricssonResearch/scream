@@ -153,7 +153,7 @@ int main(int argc, char* argv[])
 	unsigned char buf[BUFSIZE];
 	unsigned char buf_rtcp[BUFSIZE];
 	if (argc <= 1) {
-		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2024-10-28 " << endl;
+		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2024-12-16 " << endl;
 		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
 		cerr << "     -ipv6               IPv6" << endl;
 		cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;

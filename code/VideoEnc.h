@@ -11,6 +11,10 @@ public:
 
     void setTargetBitrate(float targetBitrate);
 
+    void setMss(int mss_) {
+        mss = mss_;
+    }
+
     RtpQueue* rtpQueue;
     float frameSize[MAX_FRAMES];
     int nFrames;
@@ -20,6 +24,7 @@ public:
     unsigned int seqNr;
     unsigned long timeStamp;
     int ix;
+    int mss;
 
     float sluggishness;
     float bytes;

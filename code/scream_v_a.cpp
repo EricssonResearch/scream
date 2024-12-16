@@ -20,7 +20,7 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 10;
+const float Tmax = 100;
 const bool isChRate = false;
 const bool printLog = false;
 const bool ecnCapable = true;
@@ -42,6 +42,9 @@ const int mode = 0x1;// 0x0F;
 
 const float RTT = 0.025f;
 
+int mssList[5] = { 300,500,800,1000,1300 };
+int nMssListItems = 6;
+
 #include "ScreamTx.h"
 int main(int argc, char* argv[])
 {
@@ -49,9 +52,10 @@ int main(int argc, char* argv[])
 	int tick = (int)(65536.0f / FR);
 	ScreamV2Tx* screamTx = new ScreamV2Tx(0.7f, 0.8f, 0.06f, 10000, 1.5f, 1.5f, 2.0f, 0.05f, isL4s, false, false, false);
 
-	screamTx->setCwndMinLow(1500);
+	screamTx->setCwndMinLow(1000);
 	screamTx->setPostCongestionDelay(4.0);
 	screamTx->enablePacketPacing(enablePacing);
+	screamTx->setMssListMinPacketsInFlight(mssList, nMssListItems, 5);
 	//screamTx->autoTuneMinCwnd(true);
 	//screamTx->setMaxTotalBitrate(40e6);
 	screamTx->setLogTag((char*)log_tag);
@@ -64,7 +68,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 10e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 20.0e6, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -101,7 +105,7 @@ int main(int argc, char* argv[])
 		screamTx->setTimeString(s);
 
 		time_ntp = n + 0;
-		time_ntp_rx = n + time_ntp_rx_plus + 2*n/16384;
+		time_ntp_rx = n + time_ntp_rx_plus + 0*n/16384;
 		float retVal = -1.0;
 		time = n / 65536.0f;
 		if (n % 65536 == 0) {
@@ -115,13 +119,16 @@ int main(int argc, char* argv[])
 		bool isEvent = false;
 
 		bool isFrame = false;
+		int recommendedMss = screamTx->getRecommendedMss(time_ntp);
 		if (n % tick == 0) {
 			//cerr << time << " " << screamTx->getStatisticsItem(LOSS_RATE) << " " << screamTx->getStatisticsItem(LOSS_RATE_LONG) << " " << screamTx->getStatisticsItem(CE_RATE) << " " << screamTx->getStatisticsItem(CE_RATE_LONG) << " " << screamTx->getStatisticsItem(AVG_RTT) << " " << screamTx->getStatisticsItem(AVG_QUEUE_DELAY) << endl;
 			// "Encode" audio + video frame
 			if (mode & 0x01) {
+				//cerr << recommendedMss << endl;
 				float br = screamTx->getTargetBitrate(time_ntp, 10);
 				//if (time > 15 && time < 20)
 				//	br /= 4;
+				videoEnc[0]->setMss(recommendedMss);
 				videoEnc[0]->setTargetBitrate(br);
 				int bytes = videoEnc[0]->encode(time);
 				screamTx->newMediaFrame(time_ntp, 10, bytes, true);
@@ -130,18 +137,21 @@ int main(int argc, char* argv[])
 		}
 		if (n % (tick * FR_DIV) == 0) {
 			if (mode & 0x02) {
+				videoEnc[1]->setMss(recommendedMss);
 				videoEnc[1]->setTargetBitrate(screamTx->getTargetBitrate(time_ntp, 11));
 				int bytes = videoEnc[1]->encode(time);
 				screamTx->newMediaFrame(time_ntp, 11, bytes, true);
 				isFrame = true;
 			}
 			if (mode & 0x04) {
+				videoEnc[2]->setMss(recommendedMss);
 				videoEnc[2]->setTargetBitrate(screamTx->getTargetBitrate(time_ntp, 12));
 				int bytes = videoEnc[2]->encode(time);
 				screamTx->newMediaFrame(time_ntp, 12, bytes, true);
 				isFrame = true;
 			}
 			if (mode & 0x08) {
+				videoEnc[3]->setMss(recommendedMss);
 				videoEnc[3]->setTargetBitrate(screamTx->getTargetBitrate(time_ntp, 13));
 				int bytes = videoEnc[3]->encode(time);
 				screamTx->newMediaFrame(time_ntp, 13, bytes, true);

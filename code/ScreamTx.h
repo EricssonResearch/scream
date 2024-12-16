@@ -105,6 +105,7 @@ extern "C" {
 	static const int kRelFrameSizeHistBins = 50;
 	static const int kMaxBytesInFlightHistSize = 20;
 	static const int kCwndIHistSize = 9;
+	static const int kMssListSize = 10;
 
 	enum StatisticsItem {
 		AVG_RATE,          // [bps]
@@ -443,6 +444,23 @@ extern "C" {
 		void autoTuneMinCwnd(bool isAutotune) {
 			isAutoTuneMinCwnd = isAutotune;
 		}
+
+		/*
+		* Set recommended list of MSSs and a min number of packets in-flight 
+		* This feature allows to adapt the MSS so that a min number of packets 
+		* in-flight is maintained. This can improve L4S congestion control stability 
+		* when the throughput is low.
+		* The mssList should be in decreasing order, for instance 300,500,800,1300. 
+		* The steps should be sufficiently large to avoid a case that mss jumps up and down.
+		* Note that smaller mss comes at a cost of larger packet overhead
+		*/
+		void setMssListMinPacketsInFlight(int* mssList, int nMssListItems, int minPacketsInFlight);
+
+		/*
+		* Get recommended MSS
+		*/
+		int getRecommendedMss(uint32_t time_ntp);
+
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -759,6 +777,12 @@ extern "C" {
 
 		int mss; // Maximum Segment Size
 		int prevMss;
+
+		int mssList[kMssListSize];
+		int nMssListItems;
+		int mssIndex;
+		int minPacketsInFlight;
+
 		int cwnd; // congestion window
 		int cwndMin;
 		int cwndMinLow;
@@ -848,6 +872,9 @@ extern "C" {
 		uint32_t lastL4sAlphaUpdateT_ntp;
 		uint32_t lastBaseDelayRefreshT_ntp;
 		uint32_t lastRateLimitT_ntp;
+		uint32_t lastMssChange_ntp;
+
+
 	};
 }
 #endif

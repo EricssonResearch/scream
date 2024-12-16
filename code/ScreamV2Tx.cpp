@@ -78,6 +78,10 @@ static const int kPacketOverhead = 12 + 8; // RTP + UDP
 static const float kBytesInFlightLimit = 0.9f;
 static const float kMaxBytesInFlightLimitCompensation = 1.5f;
 
+// Default recommended mss
+static const int kRecommendedMss = 1200;
+
+static const uint32_t kMssHoldTime = 10 * 65536;
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -142,6 +146,10 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 
 	mss(kInitMss),
 	prevMss(kInitMss),
+	nMssListItems(1),
+	mssIndex(0),
+	minPacketsInFlight(0),
+
 	cwnd(kInitMss * 2),
 	cwndMin(kInitMss * 2),
 	cwndMinLow(0),
@@ -244,6 +252,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	for (int n = 0; n < kCwndIHistSize; n++) 
 		cwndIHist[n] = 0;
 
+	mssList[0] = kRecommendedMss;
 }
 
 ScreamV2Tx::~ScreamV2Tx() {
@@ -1254,6 +1263,7 @@ void ScreamV2Tx::initialize(uint32_t time_ntp) {
 	lastCongestionDetectedT_ntp = 0;
 	lastQueueDelayAvgUpdateT_ntp = time_ntp;
 	lastRateLimitT_ntp = time_ntp;
+	lastMssChange_ntp = time_ntp;
 }
 
 float ScreamV2Tx::getTotalTargetBitrate() {
@@ -1738,7 +1748,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Scale down based on weigthed average high percentile of frame sizes
 	*/
-	rateLeft /= relFrameSizeHigh;
+	rateLeft /= std::max(1.1f,relFrameSizeHigh);
 
 	/*
 	* Compensation for packetization overhead, important when MSS is small
@@ -2048,4 +2058,47 @@ ScreamV2Tx::Stream* ScreamV2Tx::getPrioritizedStream(uint32_t time_ntp) {
 int ScreamV2Tx::getMss() {
 	return std::max(mss, prevMss);
 }
+
+void ScreamV2Tx::setMssListMinPacketsInFlight(int* mssList_, int nMssListItems_, int minPacketsInFlight_) {
+	minPacketsInFlight = minPacketsInFlight_;
+	nMssListItems = nMssListItems_;
+	memcpy(mssList, mssList_, nMssListItems*sizeof(int));
+	mssIndex = nMssListItems - 1;
+}
+
+int ScreamV2Tx::getRecommendedMss(uint32_t time_ntp) {
+	if (minPacketsInFlight == 0) {
+		mssIndex = nMssListItems - 1;
+	} else {
+		/*
+		* Compute a max mss given the current cwnd and the min desired packets in flight
+		*/
+		double maxMss = cwnd / ((double)minPacketsInFlight);
+		/*
+		* Step with a hysteresis to avoid that mss jumps up and down often
+		*/
+		if (maxMss > mssList[mssIndex]) {
+			/*
+			* Step up only if the preferred mss is higher than the next higher value
+			*/
+			if (time_ntp - lastMssChange_ntp > kMssHoldTime &&
+				mssIndex < nMssListItems - 1 && 
+				maxMss > mssList[mssIndex + 1]) {
+				mssIndex++;
+				lastMssChange_ntp = time_ntp;
+			}
+		} else if (maxMss < mssList[mssIndex]) {
+			/*
+			* Step down only if the preferred mss is higher than the next lower value
+			*/
+			if (mssIndex > 0 && maxMss < mssList[mssIndex - 1]) {
+				mssIndex--;
+				lastMssChange_ntp = time_ntp;
+			}
+		}
+	}
+
+	return mssList[mssIndex];
+}
+
 

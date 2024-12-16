@@ -70,15 +70,22 @@ float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
 
 
+
+
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
-int mtu = 1200;
+
 float runTime = -1.0;
 bool stopThread = false;
 pthread_t create_rtp_thread = 0;
 pthread_t transmit_rtp_thread = 0;
 pthread_t rtcp_thread = 0;
 
+int mtu = 1200;
+int mtuList[10];
+int nMtuListItems = 1;
+
+int minPktsInFlight = 0;
 
 float delayTarget = 0.06f;
 bool printSummary = true;
@@ -343,6 +350,11 @@ void* createRtpThread(void* arg) {
 
 		uint32_t ts = (uint32_t)(time_ntp / 65536.0 * 90000);
 		float rateTx = screamTx->getTargetBitrate(time_ntp, SSRC) * rateScale;
+
+		mtu = screamTx->getRecommendedMss(time_ntp);
+
+		screamTx->setCwndMinLow((mtu+12)*2);
+
 		float randVal = float(rand()) / RAND_MAX - 0.5;
 		int bytes = (int)(rateTx / FPS / 8 * (1.0 + randVal * randRate));
 
@@ -591,6 +603,7 @@ int setup() {
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow((mtu+12)*2);
 	screamTx->setPostCongestionDelay(postCongestionDelay);
+	screamTx->setMssListMinPacketsInFlight(mtuList, nMtuListItems, minPktsInFlight);
 
 	if (disablePacing)
 		screamTx->enablePacketPacing(false);
@@ -632,6 +645,7 @@ void stopAll(int signum)
 
 int main(int argc, char* argv[]) {
 
+    mtuList[0] = mtu;
 	struct timeval tp;
 	gettimeofday(&tp, NULL);
 	t0 = tp.tv_sec + tp.tv_usec * 1e-6 - 1e-3;
@@ -641,7 +655,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-10-31 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-12-16 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -680,6 +694,9 @@ int main(int argc, char* argv[]) {
 		cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
 		cerr << "     -ntp                     use NTP timestamp in logfile" << endl;
 		cerr << "     -append                  append logfile" << endl;
+		cerr << "     -mtu values              list of mtu values separated by , without space"  << endl;
+		cerr << "                               list should be in increasing order (default 1200)" << endl;
+		cerr << "     -minpktsinflight value   min pkts in flight (default 0) << endl";
 		cerr << "     -itemlist                add item list in beginning of log file" << endl;
 		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
 		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 0.5ms)" << endl;
@@ -748,10 +765,31 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (strstr(argv[ix], "-mtu")) {
-			mtu = atoi(argv[ix + 1]);
+			char s[100];
+			strcpy(s,argv[ix + 1]);
+            char *t = strtok(s,",");
+            nMtuListItems = 0;
+            cerr << t << endl;
+            mtuList[nMtuListItems++] = atoi(t);
+            while (t != 0) {
+            	t = strtok(0,",");
+            	if (t != 0) {
+                   mtuList[nMtuListItems++] = atoi(t);
+            	}
+            }
+
+            mtu = mtuList[0];
+
 			ix += 2;
 			continue;
 		}
+
+		if (strstr(argv[ix], "-minpktsinflight")) {
+			minPktsInFlight = atoi(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+
 		if (strstr(argv[ix], "-fixedrate")) {
 			fixedRate = atoi(argv[ix + 1]);
 			ix += 2;
@@ -952,7 +990,7 @@ int main(int argc, char* argv[]) {
 					char s[500];
 					screamTx->getStatistics(time_s, s);
 
-					cout << s << endl;
+					cout << s << ", MTU = " << mtu <<endl;
 				}
 				lastLogT_ntp = time_ntp;
 			}
