@@ -9,7 +9,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 	  example: -mtu 300,500,800,1000,1400
 	- -minpktsinflight sets the min number of packets in flight 
 	  example: -minpktsinflight 6
- - Release dates for SCReAM BW test changed. No difference in SCReAM algorith besides adaptive MTU option
+  - Release dates for SCReAM BW test changed. No difference in SCReAM algorith besides adaptive MTU option
 
 - 2024-10-31 :
   - Added cubic emulation for L4S. This stabilizes the bitrate and also reduces delay spikes.
