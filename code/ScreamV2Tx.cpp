@@ -767,7 +767,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		* Compute an average expected l4sAlpha if the channel is congested at this bitrate
 		* And allow fake CE marking
 		*/
-		float l4sAlphaLim = 2 / this->getTotalTargetBitrate() * getMss() * 8 / sRtt;
+		float l4sAlphaLim = 2 / getTotalTargetBitrate() * getMss() * 8 / sRtt;
 		if ((l4sAlpha < l4sAlphaLim * 0.1 || !isL4sActive)) {
 			/*
 			* This code fakes ECN-CE events when either ECN or L4S is not enabled or in case packets are not
@@ -778,14 +778,11 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* Use the average queue delay to avoid over reaction to lower later retransmissions
 			*/
 
-			if ((queueDelayAvg > queueDelayTarget / 2.0f) && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
+			if ((queueDelayAvg > queueDelayTarget / 4.0f) && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
 				virtualCeEvent = true;
 				/*
 				* A virtual L4S alpha is calculated based on the estimated queue delay
 				*/
-				virtualL4sAlpha = std::min(std::min(1.0f, l4sAlphaLim * 4),
-					std::max(l4sAlphaLim, (queueDelayAvg - queueDelayTarget / 2) / (queueDelayTarget / 2)));
-
 				virtualL4sAlpha = std::min(1.0f, l4sAlphaLim + std::max(0.0f, (queueDelayAvg - queueDelayTarget / 4.0f) / (3* queueDelayTarget / 4)));
 			}
 		}
