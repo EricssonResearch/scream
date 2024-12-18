@@ -2071,6 +2071,14 @@ int ScreamV2Tx::getRecommendedMss(uint32_t time_ntp) {
 		* Compute a max mss given the current cwnd and the min desired packets in flight
 		*/
 		double maxMss = cwnd / ((double)minPacketsInFlight);
+
+		/*
+		* Balance against a fixed virtual RTT when RTT is large. 
+		* The reason is that RTT can inflate at lower throughput due to e.g, 
+		* serialization delay, increased inter-scheduling time etc.
+		*/
+		maxMss *= std::min(1.0f, kSrttVirtual / sRtt);
+
 		/*
 		* Step with a hysteresis to avoid that mss jumps up and down often
 		*/

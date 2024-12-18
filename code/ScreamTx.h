@@ -461,6 +461,20 @@ extern "C" {
 		*/
 		int getRecommendedMss(uint32_t time_ntp);
 
+		/*
+		* Get CWND
+		*/
+		int getCwnd() {
+			return cwnd;
+		}
+
+		/*
+		* Get SRtt
+		*/
+		int getSRtt() {
+			return sRtt;
+		}
+
 	private:
 		/*
 		* Struct for list of RTP packets in flight

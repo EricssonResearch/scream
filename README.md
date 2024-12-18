@@ -3,6 +3,10 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2024-12-18 :
+  - Modified the adaptive MTU to balance against a fixed RTT 25ms when above this value.
+  - Added getCwnd and getSRtt methods  
+	 
 - 2024-12-16 :
   - Added option to set list of MTUs for adaptive setting of MTU to keep a minimum number of packets in flight. This feature can be beneficial for L4S operation. 
 	- -mtu sets a list of one or more MTU sizes in increasing order, separated by comma (,)
