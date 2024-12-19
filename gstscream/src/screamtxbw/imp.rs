@@ -72,7 +72,7 @@ impl Screamtxbw {
     fn sink_event(&self, pad: &gst::Pad, _element: &super::Screamtxbw, event: gst::Event) -> bool {
         gst::log!(
             CAT,
-            obj: pad,
+            obj = pad,
             "gstscream Handling event {:?} {:?}",
             event,
             event.type_()
@@ -96,7 +96,7 @@ impl Screamtxbw {
         _element: &super::Screamtxbw,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst::log!(CAT, obj: pad, "gstscream Handling query {:?}", query);
+        gst::log!(CAT, obj = pad, "gstscream Handling query {:?}", query);
         self.srcpad.peer_query(query)
     }
 
@@ -116,7 +116,7 @@ impl Screamtxbw {
 
             gst::info!(
                 CAT,
-                obj: pad,
+                obj = pad,
                 "gstscreamtxbw src Handling event {:?} {:?}",
                 event,
                 event.type_()
@@ -124,7 +124,7 @@ impl Screamtxbw {
         }
         gst::log!(
             CAT,
-            obj: pad,
+            obj = pad,
             "gstscream src Handling event {:?} {:?}",
             event,
             event.type_()
@@ -147,7 +147,7 @@ impl Screamtxbw {
         _element: &super::Screamtxbw,
         query: &mut gst::QueryRef,
     ) -> bool {
-        gst::log!(CAT, obj: pad, "gstscream Handling src query {:?}", query);
+        gst::log!(CAT, obj = pad, "gstscream Handling src query {:?}", query);
         self.sinkpad.peer_query(query)
     }
 }
@@ -332,7 +332,7 @@ impl ObjectImpl for Screamtxbw {
                 };
                 gst::info!(
                     CAT,
-                    imp: self,
+                    imp = self,
                     "Changing params  to {}",
                     settings.params.as_ref().unwrap()
                 );
@@ -349,7 +349,7 @@ impl ObjectImpl for Screamtxbw {
                 let rate = value.get().expect("type checked upstream");
                 gst::info!(
                     CAT,
-                    imp: self,
+                    imp = self,
                     "Changing bitrate from {} to {}",
                     settings.bitrate,
                     rate
@@ -444,7 +444,7 @@ impl ElementImpl for Screamtxbw {
         &self,
         transition: gst::StateChange,
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
-        gst::info!(CAT, imp: self, "Changing state {:?}", transition);
+        gst::info!(CAT, imp = self, "Changing state {:?}", transition);
 
         // Call the parent class' implementation of ::change_state()
         self.parent_change_state(transition)

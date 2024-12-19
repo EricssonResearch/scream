@@ -8,11 +8,11 @@ edition = "2018"
 description = "Rust Gstscream Scream Plugin"
 
 [dependencies]
-gst = { package = "gstreamer", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
-gst-base = { package = "gstreamer-base", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
-gst-video = { package = "gstreamer-video", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
-gst-sys = { package = "gstreamer-sys", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
-gst-rtp = { package = "gstreamer-rtp", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs" }
+gst = { package = "gstreamer", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs.git" }
+gst-base = { package = "gstreamer-base", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs.git" }
+gst-video = { package = "gstreamer-video", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs.git" }
+gst-sys = { package = "gstreamer-sys", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs.git" }
+gst-rtp = { package = "gstreamer-rtp", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs.git" }
 
 once_cell = "1.0"
 array-init = "0.1.1"
