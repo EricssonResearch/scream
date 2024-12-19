@@ -53,16 +53,13 @@ Based on patch [https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_reque
 cd scream/..
 git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git
 cd gstreamer
-meson setup \
-   --prefix==/path/to/install/prefix build
+meson setup --prefix=/path/to/install/prefix build
 
 # to build x264, you might want to add to meson setup
 -Dgst-plugins-ugly:x264=enabled -Dgpl=enabled  
 
 meson compile -C build
 patch -p1 < scream/gstscream/udp_ecn_diff.txt
-# manually modify gstnvbaseenc.c to fix issue with  nvenc bitrate changes run time 
-# [https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189]
 meson compile -C build
 meson install -C build
 ```
@@ -79,7 +76,5 @@ If export GST_DEBUG="screamrx:7" is set, the following trace log should be displ
 screamrx src/screamrx/imp.rs ..... ecn_ce 1 
 
 # Issues
-[Issues with nvenc bitrate changes run time](with https://github.com/EricssonResearch/scream/issues/44#issuecomment-1150002189 )
-
 [Issues with using tc](https://github.com/EricssonResearch/scream/issues/44#issuecomment-1112448356 )
 

@@ -124,7 +124,7 @@ impl ScreamRx {
         if self.ackDiff == 1 {
             return true;
         }
-        for (_, it) in self.streams.iter_mut() {
+        for (_, it) in &mut self.streams {
             if it.checkIfFlushAck(self.ackDiff) {
                 return true;
             }
@@ -133,7 +133,7 @@ impl ScreamRx {
     }
 
     pub fn isFeedback(&mut self, _time_ntp: u32) -> bool {
-        for (_, it) in self.streams.iter_mut() {
+        for (_, it) in &mut self.streams {
             if it.nRtpSinceLastRtcp >= 1 {
                 return true;
             }
@@ -160,11 +160,11 @@ impl ScreamRx {
              * Media rate computation (for all medias) is done at least every 100ms
              * This is used for RTCP feedback rate calculation
              */
-            let delta: f64 = ((time_ntp - self.lastRateComputeT_ntp) as f64) * ntp2SecScaleFactor;
+            let delta: f64 = f64::from(time_ntp - self.lastRateComputeT_ntp) * ntp2SecScaleFactor;
             self.lastRateComputeT_ntp = time_ntp;
             self.averageReceivedRate = f64::max(
                 0.95 * self.averageReceivedRate,
-                (self.bytesReceived * 8) as f64 / delta,
+                f64::from(self.bytesReceived * 8) / delta,
             );
             /*
              * The RTCP feedback rate depends on the received media date
@@ -288,7 +288,7 @@ impl Stream {
      *  not possible
      */
     pub fn checkIfFlushAck(&self, ackDiff: i32) -> bool {
-        let diff: i32 = self.highestSeqNr as i32 - self.highestSeqNrTx as i32;
+        let diff: i32 = i32::from(self.highestSeqNr) - i32::from(self.highestSeqNrTx);
         if diff <= ackDiff {
             /*
                         trace!(
@@ -346,7 +346,7 @@ impl Stream {
             highestSeqNrExt += 65536;
         }
 
-        let diff: i32 = seqNr as i32 - self.lastSn as i32;
+        let diff: i32 = i32::from(seqNr) - i32::from(self.lastSn);
         if diff != 1 {
             gst::debug!(CAT,
                 "Packet(s) lost or reordered time_ntp {} : {} was received, previous rcvd is {}, nRecvRtpPackets {}, ssrc {}",
@@ -495,7 +495,7 @@ impl ScreamRx {
             let mut minT_ntp: u32 = u32::MAX;
             let mut diffT_ntp: u32;
             let mut nRtpSinceLastRtcp: i32;
-            for (_, it) in self.streams.iter_mut() {
+            for (_, it) in &mut self.streams {
                 diffT_ntp = time_ntp - it.lastFeedbackT_ntp;
                 nRtpSinceLastRtcp = it.nRtpSinceLastRtcp;
                 if ((it).nRtpSinceLastRtcp >= cmp::min(8,self.ackDiff) || diffT_ntp > 655 ||
@@ -563,5 +563,5 @@ static t0: Lazy<std::time::Instant> = Lazy::new(std::time::Instant::now);
 pub fn getTimeInNtp() -> u32 {
     let time = t0.elapsed().as_secs_f64();
     let ntp64: u64 = (time * 65536.0) as u64;
-    (0xFFFFFFFF & ntp64) as u32 // NTP in Q16
+    (0xFFFF_FFFF & ntp64) as u32 // NTP in Q16
 }
