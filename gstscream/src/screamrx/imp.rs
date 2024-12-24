@@ -11,7 +11,6 @@ use once_cell::sync::Lazy;
 
 use super::ScreamRx;
 
-#[cfg(feature = "ecn-enabled")]
 use super::ecn;
 
 struct ClockWait {
@@ -59,30 +58,8 @@ impl Screamrx {
         let ssrc = rtp_buffer.ssrc();
         let marker = rtp_buffer.is_marker();
         drop(rtp_buffer);
-        #[cfg(feature = "ecn-enabled")]
-        let ecn_ce: u8;
-        #[cfg(not(feature = "ecn-enabled"))]
-        let ecn_ce: u8 = 0; 
-        #[cfg(feature = "ecn-enabled")]
-        {
-            let ecn_meta: *mut ecn::GstNetEcnMeta;
-            unsafe {
-                ecn_meta = gst_sys::gst_buffer_get_meta(
-                    buffer.as_mut_ptr(),
-                    ecn::gst_net_ecn_meta_api_get_type(),
-                ) as *mut ecn::GstNetEcnMeta;
-            }
-            
-            if ecn_meta.is_null() {
-                gst::debug!(CAT, obj = pad, "Buffer did not contain an ECN meta");
-                ecn_ce = 0_u8;
-            } else {
-                unsafe {
-                    ecn_ce = (*ecn_meta).cp as u8;
-                }
-            }
-        }
 
+        let ecn_ce = ecn::get_ecn(buffer.clone(), pad);
         let size: u32 = buffer.size().try_into().unwrap();
         gst::trace!(
             CAT,
