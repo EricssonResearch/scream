@@ -1146,14 +1146,14 @@ void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
 
 void ScreamV2Tx::getLogHeader(char* s) {
 	sprintf(s,
-		"LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
+		"LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,curMss,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
 }
 
 void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 	int inFlightMax = bytesInFlight;
-	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, ",
+	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, %d,",
 		logTag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
-		cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f, 0);
+        cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f, 0, mssList[mssIndex]);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
