@@ -118,6 +118,12 @@ bool detailed = false;
 
 double t0=0;
 
+int mtu = 1200;
+int mtuList[10];
+int nMtuListItems = 1;
+
+int minPktsInFlight = 0;
+
 uint32_t getTimeInNtp(){
   struct timeval tp;
   gettimeofday(&tp, NULL);
@@ -348,8 +354,6 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     std::cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << std::endl;
     std::cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << std::endl;
     std::cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << std::endl;
-    std::cerr << "     -mtu value               set the max RTP payload size (default 1200 byte)" << std::endl;
-    std::cerr << "     -fps value               set the frame rate (default 50)" << std::endl;
     std::cerr << "     -clockdrift              enable clock drift compensation for the case that the" << std::endl;
     std::cerr << "                               receiver end clock is faster" << std::endl;
     std::cerr << "     -verbose                 print a more extensive log" << std::endl;
@@ -357,6 +361,9 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     std::cerr << "     -log logfile             save detailed per-ACK log to file" << std::endl;
     std::cerr << "     -ntp                     use NTP timestamp in logfile" << std::endl;
     std::cerr << "     -append                  append logfile" << std::endl;
+    std::cerr << "     -mtu values              list of mtu values separated by , without space"  << std::endl;
+    std::cerr << "     -minpktsinflight value   min pkts in flight (default 0) << std::endl";
+    std::cerr << "                               list should be in increasing order (default 1200)" << std::endl;
     std::cerr << "     -itemlist                add item list in beginning of log file" << std::endl;
     std::cerr << "     -detailed                detailed log, per ACKed RTP" << std::endl;
     std::cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << std::endl;
@@ -539,6 +546,30 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
         }
         continue;
     }
+    if (strstr(argv[ix], "-mtu")) {
+        char s[100];
+        strcpy(s,argv[ix + 1]);
+        char *t = strtok(s,",");
+        nMtuListItems = 0;
+        std::cerr << t << std::endl;
+        mtuList[nMtuListItems++] = atoi(t);
+        while (t != 0) {
+            t = strtok(0,",");
+            if (t != 0) {
+                mtuList[nMtuListItems++] = atoi(t);
+            }
+        }
+
+        mtu = mtuList[0];
+        std::cout << " mtu " << mtu << std::endl;
+        ix += 2;
+        continue;
+    }
+    if (strstr(argv[ix], "-minpktsinflight")) {
+        minPktsInFlight = atoi(argv[ix + 1]);
+        ix += 2;
+        continue;
+    }
 
     std::cerr << "unexpected arg " << argv[ix] << std::endl;
     exit(0);
@@ -562,7 +593,10 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
           false,
           enableClockDriftCompensation);
 
-      screamTx->setCwndMinLow(5000);
+      screamTx->setCwndMinLow((mtu+12)*2);
+      screamTx->setPostCongestionDelay(postCongestionDelay);
+      screamTx->setMssListMinPacketsInFlight(mtuList, nMtuListItems, minPktsInFlight);
+
       if (logFile) {
           if (append)
               fp_log = fopen(logFile,"a");
@@ -765,6 +799,7 @@ void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force
      * Poll rate change for all media sources
      */
     uint32_t time_ntp = getTimeInNtp();
+    mtu = screamTx->getRecommendedMss(time_ntp);
     float rate = screamTx->getTargetBitrate(time_ntp, ssrc);
     if (rate <= 0) {
         // printf("rate 0 %s %d ssrc %u \n", __FUNCTION__, __LINE__, ssrc);
