@@ -351,8 +351,8 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     std::cerr << "     -delaytarget value       Set a queue delay target (default = 0.06s) " << std::endl;
     std::cerr << "     -paceheadroom value      Set a packet pacing headroom (default = 1.5) " << std::endl;
     std::cerr << "     -adaptivepaceheadroom value Set adaptive packet pacing headroom (default = 1.5) " << std::endl;
-    std::cerr << "     -relaxedpacing           Allow increased pacing rate when max rate reached (default = false) " << endl;
-    std::cerr << "     -windowheadroom value    How much bytes in flight can exceed cwnd  (default = 5.0) " << endl;
+    std::cerr << "     -relaxedpacing           Allow increased pacing rate when max rate reached (default = false) " << std::endl;
+    std::cerr << "     -windowheadroom value    How much bytes in flight can exceed cwnd  (default = 5.0) " << std::endl;
     std::cerr << "     -inflightheadroom value  Set a bytes in flight headroom (default = 2.0) " << std::endl;
     std::cerr << "     -mulincrease val         Multiplicative increase factor for (default 0.05)" << std::endl;
     std::cerr << "     -clockdrift              Enable clock drift compensation for the case that the" << std::endl;
