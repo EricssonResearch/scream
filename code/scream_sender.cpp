@@ -804,7 +804,7 @@ int main(int argc, char* argv[]) {
 		}
 		if (strstr(argv[ix], "-windowheadroom")) {
 			windowHeadroom = atof(argv[ix + 1]);
-			ix++;
+			ix += 2;
 			continue;
 		}
 		if (strstr(argv[ix], "-nopace")) {

@@ -446,7 +446,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
     }
     if (strstr(argv[ix], "-windowheadroom")) {
         windowHeadroom = atof(argv[ix + 1]);
-        ix++;
+        ix += 2;
         continue;
     }
     if (strstr(argv[ix],"-nopace")) {
