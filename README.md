@@ -3,6 +3,15 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2025-01-29 :
+  - -relaxedpacing option added. Enables increased pacing rate when max rate reached
+  - -postcongestiondelay option removed, replaced with a constant
+  - -openwindow option replaced with windowheadroom option
+  - More conservative CWND increase when max rate reached
+  - Bytes inflight restriction to target rate enabled only when queue detected
+  - Max feedback interval set to 10ms (was 5ms) 
+  - Release dates for SCReAM BW test changed 
+
 - 2024-12-18 :
   - Modified the adaptive MTU to balance against a fixed RTT 25ms when above this value.
   - Added getCwnd and getSRtt methods  
@@ -13,7 +22,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 	  example: -mtu 300,500,800,1000,1400
 	- -minpktsinflight sets the min number of packets in flight 
 	  example: -minpktsinflight 6
-  - Release dates for SCReAM BW test changed. No difference in SCReAM algorith besides adaptive MTU option
+  - Release dates for SCReAM BW test changed. No difference in SCReAM algorithm besides adaptive MTU option
 
 - 2024-10-31 :
   - Added cubic emulation for L4S. This stabilizes the bitrate and also reduces delay spikes.

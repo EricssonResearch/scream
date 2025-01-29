@@ -36,7 +36,7 @@ subplot(4,1,2);
 plot(T,a(ix,5)/1e3,'-R',T,a(ix,4)/1e3,'.-B');
 set(gca,'FontSize',12);grid on;
 set(gca,'XTickLabel',[]);grid on;
-title('CWND/B) and bytes in flight(R) [kByte]');
+title('CWND(B) and bytes in flight(R) [kByte]');
 xlim(Tlim);
 
 

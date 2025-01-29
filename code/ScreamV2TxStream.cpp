@@ -5,7 +5,7 @@
 
 static const uint32_t kMinRtpQueueDiscardInterval_ntp = 16384; // 0.25s in NTP doain
 static const float kRelFrameSizeHistDecay = 1.0f / 1024;
-static const float kRelFrameSizeHighPercentile = 0.75f;
+static const float kRelFrameSizeHighPercentile = 0.8f;
 static const int kRelFrameSizeHistPreamble = 50;
 static const float kRelFrameSizeHistRange = 3.0f;
 
@@ -83,6 +83,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	lossEpoch = false;
 	frameSize = 0;
 	frameSizeAcc = 0;
+	frameSizePrev = 0;
 	frameSizeAvg = 0.0f;
 	adaptivePacingRateScale = 1.0f;
 	framePeriod = 0.02f;
@@ -197,8 +198,19 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 		* the RTP queue builds up when the video encoder generates frames with very varying sizes.
 		*/
 		if (frameSizeAcc > frameSizeAvg && enableFrameSizeOverhead) {
+
+			float diff = frameSizeAcc - frameSizeAvg;
+			/*
+			 * Extra precaution for a case that the video encoder is sluggish i.e
+			 * takes a while to reach a given target bitrate
+			 */
+			if (frameSizeAcc > 0) {
+				diff = std::max(0.0f, std::min(diff, (float)(frameSizeAcc - frameSizePrev)));
+			}
+			frameSizePrev = frameSizeAcc;
+
 			int ix = std::max(0, std::min(kRelFrameSizeHistBins - 1,
-				(int)((frameSizeAcc - frameSizeAvg) / (frameSizeAvg * (kRelFrameSizeHistRange - 1.0)) * kRelFrameSizeHistBins)));
+				(int)((diff) / (frameSizeAvg * (kRelFrameSizeHistRange - 1.0)) * kRelFrameSizeHistBins)));
 
 			relFrameSizeHist[ix]++;
 			for (int n = 0; n < kRelFrameSizeHistBins; n++) {

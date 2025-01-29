@@ -427,7 +427,7 @@ void ScreamRx::receive(uint32_t time_ntp,
 		rate = std::min(100.0f, std::max(10.0f, rate));
 
 		rtcpFbInterval_ntp = uint32_t(65536.0f / rate); // Convert to NTP domain (Q16)
-		rtcpFbInterval_ntp = std::min(uint32_t(0.005f * 65536.0f), rtcpFbInterval_ntp);
+		rtcpFbInterval_ntp = std::min(uint32_t(0.010f * 65536.0f), rtcpFbInterval_ntp);
 	}
 
 	if (!streams.empty()) {

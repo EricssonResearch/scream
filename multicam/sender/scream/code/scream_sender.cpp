@@ -83,6 +83,7 @@ float rateMin[MAX_SOURCES]={3000,3000,1000,1000};
 float rateMax[MAX_SOURCES]={30000,30000,10000,10000};
 ScreamV2Tx *screamTx = 0;
 float pacingHeadroom = 1.5;
+bool relaxedPacing = false;
 float multiplicativeIncreaseFactor = 0.05;
 float rateScale[MAX_SOURCES]={1.0,1.0,1.0,1.0};
 bool ntp = false;
@@ -190,6 +191,7 @@ int main(int argc, char* argv[]) {
         cerr << "                      is static for long periods. " << endl;
         cerr << " -maxtotalrate val  : Set max total bitrate [kbps], default 100000." << endl;
         cerr << " -pacingheadroom val: Set packet pacing headroom, default 1.5." << endl;
+        cerr << " -relaxedpacing     : Allow increased pacing rate when max rate reached (default = false) " << endl;
         cerr << " -log log_file      : Save detailed per-ACK log to file" << endl;
         cerr << " -ratemax list      : Set max rate [kbps] for streams" << endl;
         cerr << "    example -ratemax 30000:20000" << endl;
@@ -298,6 +300,12 @@ int main(int argc, char* argv[]) {
             multiplicativeIncreaseFactor = atof(argv[ix + 1]);
             ix += 2;
             nExpectedArgs += 2;
+            continue;
+        }
+        if (strstr(argv[ix], "-relaxedpacing")) {
+            relaxedPacing = true;
+            ix++;
+            nExpectedArgs += 1;
             continue;
         }
         fprintf(stderr, "unexpected arg %s\n", argv[ix]);
@@ -933,7 +941,6 @@ int setup() {
         cerr << "Listen on port " << out_port << " to receive RTCP from encoder " << endl;
     }
 
-#ifdef V2
     screamTx = new ScreamV2Tx(
         congestionScaleFactor,
         congestionScaleFactor,
@@ -944,46 +951,20 @@ int setup() {
         2.0f,
         multiplicativeIncreaseFactor,
         ect == 1,
-        false,
+        5.0f,
         false,
         false);
-        screamTx->setPostCongestionDelay(4.0);
-#else
-    screamTx = new ScreamV1Tx(
-        congestionScaleFactor,
-        congestionScaleFactor,
-        delayTarget,
-        false,
-        1.0f,
-        10.0f,
-        12500,
-        pacingHeadroom,
-        bytesInFlightHistSize,
-        (ect == 1),
-        false,
-        false,
-        2.0f,
-        isNewCc);
-        screamTx->setPostCongestionDelay(1.0);
-        screamTx->setFastIncreaseFactor(fastIncreaseFactor);
-#endif
+
     screamTx->setCwndMinLow(10000); // ~1.5Mbps at RTT = 50ms
     screamTx->setMaxTotalBitrate(maxTotalRate);
+    screamTx->enableRelaxedPacing(relaxedPacing);
+
 
     for (int n = 0; n < nSources; n++) {
         rtpQueue[n] = new RtpQueue();
-
-#ifdef V2
         screamTx->registerNewStream(rtpQueue[n],
             in_ssrc[n], priority[n],
             rateMin[n]*1000, rateInit[n]*1000, rateMax[n]*1000, 0.2f,false);
-#else
-        screamTx->registerNewStream(rtpQueue[n],
-            in_ssrc[n], priority[n],
-            rateMin[n]*1000, rateInit[n]*1000, rateMax[n]*1000, rateIncrease[n]*1000, 0.5f,
-            0.1f, 0.1f, 0.2f,
-            congestionScaleFactor, congestionScaleFactor, true);
-#endif
     }
     return 1;
 }

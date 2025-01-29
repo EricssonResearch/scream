@@ -59,13 +59,13 @@ bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 bool pushTraffic = false;
-bool openWindow = false;
+float windowHeadroom = 5.0f;
+bool relaxedPacing = false;
 float packetPacingHeadroom = 1.5f;
 float scaleFactor = 0.7f;
 ScreamV2Tx* screamTx = 0;
 float bytesInFlightHeadroom = 2.0f;
 float multiplicativeIncreaseFactor = 0.05f;
-float postCongestionDelay = 4.0f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
 
@@ -581,7 +581,7 @@ int setup() {
 			2.0f,
 			0.05f,
 			ect == 1,
-			true,
+			5.0,
 			false,
 			enableClockDriftCompensation);
 	}
@@ -596,13 +596,13 @@ int setup() {
 			bytesInFlightHeadroom,
 			multiplicativeIncreaseFactor,
 			ect == 1,
-			openWindow,
+			windowHeadroom,
 			false,
 			enableClockDriftCompensation);
 	}
 	rtpQueue = new RtpQueue();
 	screamTx->setCwndMinLow((mtu+12)*2);
-	screamTx->setPostCongestionDelay(postCongestionDelay);
+	screamTx->enableRelaxedPacing(relaxedPacing);
 	screamTx->setMssListMinPacketsInFlight(mtuList, nMtuListItems, minPktsInFlight);
 
 	if (disablePacing)
@@ -655,52 +655,52 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-12-16 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-01-29 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
-		cerr << "     -if name                 bind to specific interface" << endl;
+		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
-		cerr << "     -time value              run for time seconds (default infinite)" << endl;
-		cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << endl;
+		cerr << "     -time value              Run for time seconds (default infinite)" << endl;
+		cerr << "     -burst val1 val2         Burst media for a given time and then sleeps a given time" << endl;
 		cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << endl;
-		cerr << "     -nopace                  disable packet pacing" << endl;
-		cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << endl;
+		cerr << "     -nopace                  Disable packet pacing" << endl;
+		cerr << "     -fixedrate value         Set a fixed 'coder' bitrate " << endl;
 		cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << endl;
 		cerr << "                                must be used with -fixedrate option" << endl;
-		cerr << "     -key val1 val2           set a given key frame interval [s] and size multiplier " << endl;
+		cerr << "     -key val1 val2           Set a given key frame interval [s] and size multiplier " << endl;
 		cerr << "                               example -key 2.0 5.0 " << endl;
-		cerr << "     -rand value              framesizes vary randomly around the nominal " << endl;
+		cerr << "     -rand value              Framesizes vary randomly around the nominal " << endl;
 		cerr << "                               example -rand 10 framesize vary +/- 10% " << endl;
-		cerr << "     -initrate value          set a start bitrate [kbps]" << endl;
+		cerr << "     -initrate value          Set a start bitrate [kbps]" << endl;
 		cerr << "                               example -initrate 2000 " << endl;
-		cerr << "     -minrate  value          set a min bitrate [kbps], default 1000kbps" << endl;
+		cerr << "     -minrate  value          Set a min bitrate [kbps], default 1000kbps" << endl;
 		cerr << "                               example -minrate 1000 " << endl;
-		cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << endl;
+		cerr << "     -maxrate value           Set a max bitrate [kbps], default 200000kbps" << endl;
 		cerr << "                               example -maxrate 10000 " << endl;
 		cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
 		cerr << "                               -1 for not-ECT (default)" << endl;
-		cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.7) " << endl;
-		cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << endl;
-		cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << endl;
-		cerr << "     -openwindow              override SCReAMs window limitation  (default = false) " << endl;
-		cerr << "     -adaptivepaceheadroom value set adaptive packet pacing headroom (default = 1.5) " << endl;
-		cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << endl;
-		cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << endl;
-		cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << endl;
-		cerr << "     -fps value               set the frame rate (default 50)" << endl;
-		cerr << "     -clockdrift              enable clock drift compensation for the case that the" << endl;
+		cerr << "     -scale value             Scale factor in case of loss or ECN event (default 0.7) " << endl;
+		cerr << "     -delaytarget value       Set a queue delay target (default = 0.06s) " << endl;
+		cerr << "     -paceheadroom value      Set a packet pacing headroom (default = 1.5) " << endl;
+		cerr << "     -windowheadroom value    How much bytes in flight can exceed cwnd  (default = 5.0) " << endl;
+		cerr << "     -adaptivepaceheadroom value Set adaptive packet pacing headroom (default = 1.5) " << endl;
+		cerr << "     -relaxedpacing           Allow increased pacing rate when max rate reached (default = false) " << endl;
+		cerr << "     -inflightheadroom value  Set a bytes in flight headroom (default = 2.0) " << endl;
+		cerr << "     -mulincrease val         Multiplicative increase factor for (default 0.05)" << endl;
+		cerr << "     -fps value               Set the frame rate (default 50)" << endl;
+		cerr << "     -clockdrift              Enable clock drift compensation for the case that the" << endl;
 		cerr << "                               receiver end clock is faster" << endl;
-		cerr << "     -verbose                 print a more extensive log" << endl;
-		cerr << "     -nosummary               don't print summary" << endl;
-		cerr << "     -log logfile             save detailed per-ACK log to file" << endl;
-		cerr << "     -ntp                     use NTP timestamp in logfile" << endl;
-		cerr << "     -append                  append logfile" << endl;
-		cerr << "     -mtu values              list of mtu values separated by , without space"  << endl;
+		cerr << "     -verbose                 Print a more extensive log" << endl;
+		cerr << "     -nosummary               Don't print summary" << endl;
+		cerr << "     -log logfile             Save detailed per-ACK log to file" << endl;
+		cerr << "     -ntp                     Use NTP timestamp in logfile" << endl;
+		cerr << "     -append                  Append logfile" << endl;
+		cerr << "     -mtu values              List of mtu values separated by , without space"  << endl;
 		cerr << "                               list should be in increasing order (default 1200)" << endl;
-		cerr << "     -minpktsinflight value   min pkts in flight (default 0) << endl";
-		cerr << "     -itemlist                add item list in beginning of log file" << endl;
-		cerr << "     -detailed                detailed log, per ACKed RTP" << endl;
-		cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 0.5ms)" << endl;
-		cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << endl;
+		cerr << "     -minpktsinflight value   Min pkts in flight (default 0) << endl";
+		cerr << "     -itemlist                Add item list in beginning of log file" << endl;
+		cerr << "     -detailed                Detailed log, per ACKed RTP" << endl;
+		cerr << "     -microburstinterval      Microburst interval [ms] for packet pacing (default 0.5ms)" << endl;
+		cerr << "     -hysteresis              Inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
 		exit(-1);
 	}
@@ -752,13 +752,7 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		if (strstr(argv[ix], "-postcongestiondelay")) {
-			postCongestionDelay = atof(argv[ix + 1]);
-			ix += 2;
-			continue;
-		}
-
-		if (strstr(argv[ix], "-infligtheadroom")) {
+		if (strstr(argv[ix], "-inflightheadroom")) {
 			bytesInFlightHeadroom = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
@@ -808,13 +802,18 @@ int main(int argc, char* argv[]) {
 			ix += 3;
 			continue;
 		}
-		if (strstr(argv[ix], "-openwindow")) {
-			openWindow = true;
+		if (strstr(argv[ix], "-windowheadroom")) {
+			windowHeadroom = atof(argv[ix + 1]);
 			ix++;
 			continue;
 		}
 		if (strstr(argv[ix], "-nopace")) {
 			disablePacing = true;
+			ix++;
+			continue;
+		}
+		if (strstr(argv[ix], "-relaxedpacing")) {
+			relaxedPacing = true;
 			ix++;
 			continue;
 		}

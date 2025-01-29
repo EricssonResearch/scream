@@ -78,16 +78,16 @@ int maxRate = 200000;
 float rateMultiply = 1.0;
 bool enableClockDriftCompensation = false;
 float priority = 1.0;
-bool openWindow = false;
+float windowHeadroom = 5.0f;
 const char *scream_version = "V2";
 float packetPacingHeadroom = 1.5f;
 float scaleFactor = 0.7f;
 ScreamV2Tx *screamTx = 0;
 float bytesInFlightHeadroom = 2.0f;
 float multiplicativeIncreaseFactor = 0.05f;
+bool relaxedPacing = false;
 
 float hysteresis = 0.0f;
-float postCongestionDelay = 4.0f;
 float adaptivePaceHeadroom = 1.5f;
 
 uint32_t lastKeyFrameT_ntp = 0;
@@ -327,48 +327,49 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
   if (argc <= 1) {
     std::cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2024-07-03 " << std::endl;
     std::cerr << "Usage : " << std::endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << std::endl;
-    std::cerr << "     -if name                 bind to specific interface" << std::endl;
-    std::cerr << "     -time value              run for time seconds (default infinite)" << std::endl;
-    std::cerr << "     -burst val1 val2         burst media for a given time and then sleeps a given time" << std::endl;
+    std::cerr << "     -if name                 Bind to specific interface" << std::endl;
+    std::cerr << "     -time value              Run for time seconds (default infinite)" << std::endl;
+    std::cerr << "     -burst val1 val2         Burst media for a given time and then sleeps a given time" << std::endl;
     std::cerr << "         example -burst 1.0 0.2 burst media for 1s then sleeps for 0.2s " << std::endl;
-    std::cerr << "     -nopace                  disable packet pacing" << std::endl;
-    std::cerr << "     -fixedrate value         set a fixed 'coder' bitrate " << std::endl;
-    std::cerr << "     -pushtraffic             just pushtraffic at a fixed bitrate, no feedback needed" << std::endl;
+    std::cerr << "     -nopace                  Disable packet pacing" << std::endl;
+    std::cerr << "     -fixedrate value         Set a fixed 'coder' bitrate " << std::endl;
+    std::cerr << "     -pushtraffic             Just pushtraffic at a fixed bitrate, no feedback needed" << std::endl;
     std::cerr << "                                must be used with -fixedrate option" << std::endl;
-    std::cerr << "     -key val1 val2           set a given key frame interval [s] and size multiplier " << std::endl;
+    std::cerr << "     -key val1 val2           Set a given key frame interval [s] and size multiplier " << std::endl;
     std::cerr << "                               example -key 2.0 5.0 " << std::endl;
-    std::cerr << "     -rand value              framesizes vary randomly around the nominal " << std::endl;
+    std::cerr << "     -rand value              Framesizes vary randomly around the nominal " << std::endl;
     std::cerr << "                               example -rand 10 framesize vary +/- 10% " << std::endl;
-    std::cerr << "     -initrate value          set a start bitrate [kbps]" << std::endl;
+    std::cerr << "     -initrate value          Set a start bitrate [kbps]" << std::endl;
     std::cerr << "                               example -initrate 2000 " << std::endl;
-    std::cerr << "     -minrate  value          set a min bitrate [kbps], default 1000kbps" << std::endl;
+    std::cerr << "     -minrate  value          Set a min bitrate [kbps], default 1000kbps" << std::endl;
     std::cerr << "                               example -minrate 1000 " << std::endl;
-    std::cerr << "     -maxrate value           set a max bitrate [kbps], default 200000kbps" << std::endl;
+    std::cerr << "     -maxrate value           Set a max bitrate [kbps], default 200000kbps" << std::endl;
     std::cerr << "                               example -maxrate 10000 " << std::endl;
     std::cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << std::endl;
     std::cerr << "                               -1 for not-ECT (default)" << std::endl;
-    std::cerr << "     -scale value             scale factor in case of loss or ECN event (default 0.9) " << std::endl;
-    std::cerr << "     -delaytarget value       set a queue delay target (default = 0.06s) " << std::endl;
-    std::cerr << "     -paceheadroom value      set a packet pacing headroom (default = 1.5) " << std::endl;
-    std::cerr << "     -adaptivepaceheadroom value set adaptive packet pacing headroom (default = 1.5) " << std::endl;
-    std::cerr << "     -inflightheadroom value  set a bytes in flight headroom (default = 2.0) " << std::endl;
-    std::cerr << "     -mulincrease val         multiplicative increase factor for (default 0.05)" << std::endl;
-    std::cerr << "     -postcongestiondelay val post congestion delay (default 4.0s)" << std::endl;
-    std::cerr << "     -clockdrift              enable clock drift compensation for the case that the" << std::endl;
+    std::cerr << "     -scale value             Scale factor in case of loss or ECN event (default 0.9) " << std::endl;
+    std::cerr << "     -delaytarget value       Set a queue delay target (default = 0.06s) " << std::endl;
+    std::cerr << "     -paceheadroom value      Set a packet pacing headroom (default = 1.5) " << std::endl;
+    std::cerr << "     -adaptivepaceheadroom value Set adaptive packet pacing headroom (default = 1.5) " << std::endl;
+    std::cerr << "     -relaxedpacing           Allow increased pacing rate when max rate reached (default = false) " << endl;
+    std::cerr << "     -windowheadroom value    How much bytes in flight can exceed cwnd  (default = 5.0) " << endl;
+    std::cerr << "     -inflightheadroom value  Set a bytes in flight headroom (default = 2.0) " << std::endl;
+    std::cerr << "     -mulincrease val         Multiplicative increase factor for (default 0.05)" << std::endl;
+    std::cerr << "     -clockdrift              Enable clock drift compensation for the case that the" << std::endl;
     std::cerr << "                               receiver end clock is faster" << std::endl;
-    std::cerr << "     -verbose                 print a more extensive log" << std::endl;
-    std::cerr << "     -nosummary               don't print summary" << std::endl;
-    std::cerr << "     -log logfile             save detailed per-ACK log to file" << std::endl;
-    std::cerr << "     -ntp                     use NTP timestamp in logfile" << std::endl;
-    std::cerr << "     -append                  append logfile" << std::endl;
-    std::cerr << "     -mtu values              list of mtu values separated by , without space"  << std::endl;
-    std::cerr << "     -minpktsinflight value   min pkts in flight (default 0) << std::endl";
+    std::cerr << "     -verbose                 Print a more extensive log" << std::endl;
+    std::cerr << "     -nosummary               Don't print summary" << std::endl;
+    std::cerr << "     -log logfile             Save detailed per-ACK log to file" << std::endl;
+    std::cerr << "     -ntp                     Use NTP timestamp in logfile" << std::endl;
+    std::cerr << "     -append                  Append logfile" << std::endl;
+    std::cerr << "     -mtu values              List of mtu values separated by , without space"  << std::endl;
     std::cerr << "                               list should be in increasing order (default 1200)" << std::endl;
-    std::cerr << "     -itemlist                add item list in beginning of log file" << std::endl;
-    std::cerr << "     -detailed                detailed log, per ACKed RTP" << std::endl;
-    std::cerr << "     -periodicdropinterval    interval [s] between periodic drops in rate (default 60s)" << std::endl;
-    std::cerr << "     -microburstinterval      microburst interval [ms] for packet pacing (default 1ms)" << std::endl;
-    std::cerr << "     -hysteresis              inhibit updated target rate to encoder if the rate change is small" << std::endl;
+    std::cerr << "     -minpktsinflight value   Min pkts in flight (default 0) << std::endl";
+    std::cerr << "     -itemlist                Add item list in beginning of log file" << std::endl;
+    std::cerr << "     -detailed                Detailed log, per ACKed RTP" << std::endl;
+    std::cerr << "     -periodicdropinterval    Interval [s] between periodic drops in rate (default 60s)" << std::endl;
+    std::cerr << "     -microburstinterval      Microburst interval [ms] for packet pacing (default 1ms)" << std::endl;
+    std::cerr << "     -hysteresis              Inhibit updated target rate to encoder if the rate change is small" << std::endl;
     std::cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << std::endl;
     exit(-1);
   }
@@ -422,13 +423,11 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
         ix += 2;
         continue;
     }
-
-    if (strstr(argv[ix], "-postcongestiondelay")) {
-        postCongestionDelay = atof(argv[ix + 1]);
-        ix += 2;
+    if (strstr(argv[ix], "-relaxedpacing")) {
+        relaxedPacing = true;
+        ix++;
         continue;
     }
-
     if (strstr(argv[ix], "-infligtheadroom")) {
         bytesInFlightHeadroom = atof(argv[ix + 1]);
         ix += 2;
@@ -445,8 +444,8 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       ix+=2;
 			continue;
     }
-    if (strstr(argv[ix], "-openwindow")) {
-        openWindow = true;
+    if (strstr(argv[ix], "-windowheadroom")) {
+        windowHeadroom = atof(argv[ix + 1]);
         ix++;
         continue;
     }
@@ -521,8 +520,7 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
       ix++;
 			continue;
     }
-
-   if (strstr(argv[ix],"-forceidr")) {
+    if (strstr(argv[ix],"-forceidr")) {
       forceidr = true;
       ix++;
 			continue;
@@ -589,12 +587,12 @@ int tx_plugin_main(int argc, char* argv[], uint32_t ssrc)
           bytesInFlightHeadroom,
           multiplicativeIncreaseFactor,
           ect == 1,
-          openWindow,
+          windowHeadroom,
           false,
           enableClockDriftCompensation);
 
       screamTx->setCwndMinLow((mtu+12)*2);
-      screamTx->setPostCongestionDelay(postCongestionDelay);
+      screamTx->enableRelaxedPacing(relaxedPacing);
       screamTx->setMssListMinPacketsInFlight(mtuList, nMtuListItems, minPktsInFlight);
 
       if (logFile) {

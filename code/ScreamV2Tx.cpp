@@ -62,9 +62,6 @@ static const float kSrttVirtual = 0.025f;
 // Time constant for CE dentity averaging
 static const float kCeDensityAlpha = 1.0f / 16;
 
-// Max overshoot for bytes in flight
-static const float kCwndOverhead = 1.5f;
-
 // Min additive increase scaling
 static const float kLowCwndScaleFactor = 1.0f;
 
@@ -80,8 +77,14 @@ static const float kMaxBytesInFlightLimitCompensation = 1.5f;
 
 // Default recommended mss
 static const int kRecommendedMss = 1200;
-
 static const uint32_t kMssHoldTime = 10 * 65536;
+
+// Post congestion delay [RTT]
+static const int kPostCongestionDelayRtts = 200;
+
+static const float kRelaxedPacingLimitLow = 0.8f;
+static const float kRelaxedPacingLimitHigh = 1.0f;
+static const float kMaxRelaxedPacingFactor = 5.0f;
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -93,7 +96,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	float bytesInFlightHeadRoom_,
 	float multiplicativeIncreaseScalefactor_,
 	bool isL4s_,
-	bool openWindow_,
+	float windowHeadroom_,
 	bool enableSbd_,
 	bool enableClockDriftCompensation_
 ) :
@@ -107,7 +110,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	bytesInFlightHeadRoom(bytesInFlightHeadRoom_),
 	multiplicativeIncreaseScalefactor(multiplicativeIncreaseScalefactor_),
 	isL4s(isL4s_),
-	openWindow(openWindow_),
+	windowHeadroom(windowHeadroom_),
 	enableSbd(enableSbd_),
 	enableClockDriftCompensation(enableClockDriftCompensation_),
 
@@ -115,6 +118,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	isAutoTuneMinCwnd(false),
 	enableRateUpdate(true),
 	isUseExtraDetailedLog(false),
+	isEnableRelaxedPacing(false),
 
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRtt_ntp(3277),
@@ -182,7 +186,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	ceDensity(1.0f),
 	virtualL4sAlpha(0.0f),
 	postCongestionScale(1.0f),
-	postCongestionDelay(0.1f),
 
 	rateTransmitted(0.0f),
 	rateRtpAvg(0.0f),
@@ -430,10 +433,7 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 	* Determine if window is large enough to transmit
 	* an RTP packet
 	*/
-	bool exit = false;
-	if (!openWindow) {
-		exit = (bytesInFlight + sizeOfNextRtp) > cwnd * kCwndOverhead * relFrameSizeHigh + getMss();
-	}
+	bool exit = (bytesInFlight + sizeOfNextRtp) > cwnd * windowHeadroom * relFrameSizeHigh + getMss();
 
 	/*
 	* Enforce packet pacing
@@ -778,12 +778,16 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* Use the average queue delay to avoid over reaction to lower later retransmissions
 			*/
 
-			if ((queueDelayAvg > queueDelayTarget / 4.0f) && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
+			if ((queueDelayAvg > queueDelayTarget / 2.0f) && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
 				virtualCeEvent = true;
 				/*
-				* A virtual L4S alpha is calculated based on the estimated queue delay
-				*/
-				virtualL4sAlpha = std::min(1.0f, l4sAlphaLim + std::max(0.0f, (queueDelayAvg - queueDelayTarget / 4.0f) / (3* queueDelayTarget / 4)));
+				 * A virtual L4S alpha is calculated based on the estimated queue delay
+				 * Virtual L4S marking sets in with increased back-off as soon as the queue delay
+				 * exceeds queueDelayTarget/2. With a queueDelayTarget=60ms this gives a 30ms margin
+				 * against clock drift and clock skipping errors
+				 */
+				virtualL4sAlpha = std::min(std::min(1.0f, l4sAlphaLim * 4),
+					std::max(l4sAlphaLim, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
 			}
 		}
 
@@ -1083,7 +1087,6 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 				stream->bytesLost += tmp->size;
 				stream->packetLost++;
 				tmp->isUsed = false;
-				//printf("%2.3f Late LOSS \n", time_ntp / 65536.0);
 				stream->repairLoss = true;
 			}
 			else if (tmp->isAcked) {
@@ -1318,9 +1321,11 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 	float lossDistanceScale = std::max(0.0f,std::min(1.0f,
                              ((time_ntp - lastLossEventT_ntp)/65536.0f/sRtt-4.0f)/4.0f));
-	postCongestionScale = std::max(0.0f, 
-	     std::min(1.0f, 
-             ((time_ntp - lastCongestionDetectedT_ntp) / 65536.0f-0.0f*postCongestionDelay)/postCongestionDelay));
+	postCongestionScale = 
+		std::max(0.0f, 
+	             std::min(1.0f, 
+                          float(time_ntp - lastCongestionDetectedT_ntp)/
+		    		      (kPostCongestionDelayRtts*sRtt_ntp)));
 
 	queueDelayMin = std::min(queueDelayMin, queueDelay);
 
@@ -1363,21 +1368,26 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			adaptivePacingRateScale = tmp1 / tmp2;
 		}
 
-		float headroom = packetPacingHeadroom * adaptivePacingRateScale;
-		if (lastCongestionDetectedT_ntp == 0) {
-			/*
-			* Increase packet pacing headroom until 1st congestion event, reduces problem
-			* with initial queueing in the RTP queue
-			*/
-			headroom = std::max(headroom, 1.5f);
-		}
-
 		float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtpAvg);
 	
-		pacingBitrate = std::max(50e3f, headroom * pacingBitrate);
+		pacingBitrate = std::max(50e3f, packetPacingHeadroom * adaptivePacingRateScale * pacingBitrate);
 		if (maxTotalBitrate > 0) {
 			pacingBitrate = std::min(pacingBitrate, maxTotalBitrate * packetPacingHeadroom);
 		}
+
+		if (isEnableRelaxedPacing && getTotalTargetBitrate() > kRelaxedPacingLimitLow * getTotalMaxBitrate()) {
+			/*
+			 * Relax packet pacing when close to rate limited. The pacing rate can be increased
+			 * by up to a factor MAX_RELAXED_PACING_FACTOR when target bitrate > RELAXED_PACING_LIMIT_LOW * max bitrate
+			 */
+			float nominalRate = getTotalTargetBitrate() / getTotalMaxBitrate();
+			float relaxedPacingScale = std::min(1.0f,
+				(nominalRate - kRelaxedPacingLimitLow) / (kRelaxedPacingLimitHigh - kRelaxedPacingLimitLow));
+			double tmp = std::min(1.0f, std::max(1.0f / kMaxRelaxedPacingFactor, 1.0f - relaxedPacingScale));
+			pacingBitrate /= tmp;
+		}
+
+
 		float tp = (getMss() * 8.0f) / pacingBitrate;
 		paceInterval = std::max(kMinPaceInterval, tp);
 	}
@@ -1521,8 +1531,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		lastSlowUpdateT_ntp = time_ntp;
 	}
 
-	float cwndScaleFactorBase = kLowCwndScaleFactor;
-	float cwndScaleFactorExt = (multiplicativeIncreaseScalefactor * cwnd)/ getMss();
 
 	/*
 	* Compute scale factor based on relation between CWND and last known 
@@ -1530,7 +1538,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	*/
 	float sclI = 1.0;
 	float tmp = (cwnd - cwndI) / float(cwndI);
-	tmp *= 4;
+	tmp *= 8;
 	tmp = tmp * tmp;
 	sclI = std::max(0.1f, std::min(1.0f, tmp));
 
@@ -1567,6 +1575,17 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		if (time_ntp - lastCwndIUpdateT_ntp > sRtt_ntp) {
 			lastCwndIUpdateT_ntp = time_ntp;
 			updateCwndI(cwnd);
+
+			if (time_ntp - lastCongestionDetectedT_ntp > 5 * sRtt_ntp) {
+				/*
+				 * A long while since last congested, update entire cwndInflectionPointHist
+				 * to current value
+				 */
+				for (int n = 0; n < kCwndIHistSize; n++) {
+					cwndIHist[n] = cwnd;
+				}
+			}
+
 		}
 		/*
 		* CE event detected, decrease congestion window
@@ -1605,14 +1624,14 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 				* but as this function should kick in relatively seldom
 				* it should not be to too big concern
 				*/
-				backOff = std::max(backOff, 0.25f);
+				backOff = std::max(backOff, 0.5f);
 
 				/*
 				* In addition, bump up l4sAlpha to a more credible value
 				* This may over react but it is better than
 				* excessive queue delay
 				*/
-				l4sAlpha = std::max(l4sAlpha,0.25f);
+				l4sAlpha = std::max(l4sAlpha,0.5f);
 
 			}
 			/*
@@ -1688,24 +1707,22 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Calculate relative growth of CWND
 	*/
-	float tmp2 = cwndScaleFactorBase+cwndScaleFactorExt;
+	float tmp2 = 1.0+ (multiplicativeIncreaseScalefactor * cwnd) / getMss();
 	/*
 	* Limit multiplicative increase when congestion occured
 	* recently
 	*/
-	if (tmp2 > cwndScaleFactorBase && postCongestionDelay > 0.2f) {
-		tmp2 = cwndScaleFactorBase + ((tmp2 - cwndScaleFactorBase) * postCongestionScale) * sclI;
-	}
+	tmp2 = 1.0 + ((tmp2 - 1.0) * postCongestionScale) * sclI;
 	increment *= tmp2;
 
 	/*
-	* Increase CWND only if bytes in flight is large enough
-	* Quite a lot of slack is allowed here to avoid that bitrate locks to
-	* low values.
+    * Allow the CWND to increase beyond the bytes in flight
+	* limited by MAX_BYTES_IN_FLIGHT_HEADROOM
+	* Limit increase if max bitrate reached, as there is no point increasing it
 	*/
 	double maxAllowed = getMss() + std::max(maxBytesInFlight, maxBytesInFlightPrev) * bytesInFlightHeadRoom;
 	int cwndTmp = cwnd + (int)(increment + 0.5f);
-	if (cwndTmp <= maxAllowed)
+	if (cwndTmp <= maxAllowed && getTotalTargetBitrate() < getTotalMaxBitrate())
 		cwnd = cwndTmp;
 
 	cwnd = std::max(cwndMin, cwnd);
@@ -1729,9 +1746,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
 	/*
 	* Make the rate estimation more cautious when the window is almost full or overfilled
-	* This is only enabled when L4S is neither enabled, nor active
+	* This is only enabled when queue delay is high
 	*/
-	if (!isL4sActive && bytesInFlightRatio > kBytesInFlightLimit) {
+	if (getQueueDelayFraction() > 0.5 && bytesInFlightRatio > kBytesInFlightLimit) {
 		rateLeft /= std::min(kMaxBytesInFlightLimitCompensation, bytesInFlightRatio / kBytesInFlightLimit);
 	}
 

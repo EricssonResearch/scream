@@ -194,7 +194,7 @@ extern "C" {
 		* multiplicativeIncreaseScaleFactor, indicates how fast CWND can increase when link capacity
 		*  increases. E.g 0.05 increases up tp 5% of the CWND per RTT.
 		* isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
-		* openWindow = true removes the congestion window limitation, this feature may be useful in combination with L4S
+		* windowHeadroom, sets how much bytes in flight can exceed the congestion window
 		* enableSbd increases the delay target if competing buffer building flows are detected
 		* enableClockDriftCompensation = true compensates for the case where the endpoints clocks drift relative to one
 		*  another. Note though that clock drift is not always montonous IRL
@@ -209,7 +209,7 @@ extern "C" {
 			float bytesInFlightHeadRoom = kBytesInFlightHeadRoom,
 			float multiplicativeIncreaseScalefactor = kMultiplicativeIncreaseScalefactor,
 			bool isL4s = false,
-			bool openWindow = false,
+			float windowHeadroom = 5.0f,
 			bool enableSbd = kEnableSbd,
 			bool enableClockDriftCompensation = false);
 
@@ -421,15 +421,6 @@ extern "C" {
 		bool isLossEpoch(uint32_t ssrc);
 
 		/*
-		* Set the post congestion delay i.e how fast SCReAM should attempt
-		*  to rampup again after congestion, this complements the rampup speed
-		*  and does something simlar
-		*/
-		void setPostCongestionDelay(float a) {
-			postCongestionDelay = a;
-		}
-
-		/*
 		* Enable/disable packet pacing
 		*/
 		void enablePacketPacing(bool isEnable) {
@@ -455,6 +446,15 @@ extern "C" {
 		* Note that smaller mss comes at a cost of larger packet overhead
 		*/
 		void setMssListMinPacketsInFlight(int* mssList, int nMssListItems, int minPacketsInFlight);
+
+		/**
+		* Enable relaxed pacing. Pacing rate is increased considerably 
+		* when media rate is close to the max. This reduces e2e delay when 
+		* link capacity is high
+		*/
+		void enableRelaxedPacing(bool enable) {
+			isEnableRelaxedPacing = enable;
+		}
 
 		/*
 		* Get recommended MSS
@@ -616,6 +616,7 @@ extern "C" {
 
 			int frameSize;
 			int frameSizeAcc;
+			int frameSizePrev;
 			float frameSizeAvg;
 			float framePeriod;
 
@@ -752,7 +753,7 @@ extern "C" {
 		float bytesInFlightHeadRoom;
 		float multiplicativeIncreaseScalefactor;
 		bool isL4s;
-		bool openWindow;
+		float windowHeadroom;
 		bool enableSbd;
 		bool enableClockDriftCompensation;
 
@@ -760,6 +761,7 @@ extern "C" {
 		bool isAutoTuneMinCwnd;
 		bool enableRateUpdate;
 		bool isUseExtraDetailedLog;
+		bool isEnableRelaxedPacing;
 
 		float sRtt;
 		uint32_t sRtt_ntp;
@@ -830,7 +832,6 @@ extern "C" {
 		float ceDensity;
 		float virtualL4sAlpha;
 		float postCongestionScale;
-		float postCongestionDelay;
 		
 		float rateTransmitted;
 		float rateRtpAvg;
