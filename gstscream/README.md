@@ -45,6 +45,20 @@ sudo ./scripts/sysctl.sh
 # second window
 ./scripts/sender_bw.sh
 ```
+# To use unattended machine:
+```shell
+#ssh-1 window
+systemctl isolate multi-user.target
+sudo Xorg
+
+#ssh-2 window
+export DISPLAY=:0
+./receiver_run.sh
+#ssh-3 window
+export DISPLAY=:0
+./sender_run.sh
+```
+
 # __Be aware of legal implications of using software build with gpl=enabled__
 
 # Modifying gstreamer to use L4S
