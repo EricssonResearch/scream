@@ -3,6 +3,7 @@ use gst::glib;
 use gst::glib::translate::IntoGlibPtr;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
+use gst::EventView;
 
 use core::result::Result;
 use std::convert::TryInto;
@@ -57,6 +58,19 @@ static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
         Some("Screamtx Element"),
     )
 });
+
+fn get_tags_from_event(event: &gst::Event) -> String {
+    let mut output = String::new();
+    if let EventView::Tag(tag_event) = event.view() {
+        let tags = tag_event.tag();
+        output.push_str("Received tag event:\n");
+        for (tag, value) in tags.iter_generic() {
+            output.push_str(&format!("  {}: {:?}\n", tag, value));
+        }
+    }
+    output
+}
+
 impl Screamtx {
     // Called whenever a new buffer is passed to our sink pad. Here buffers should be processed and
     // whenever some output buffer is available have to push it out of the source pad.
@@ -77,34 +91,34 @@ impl Screamtx {
         let timestamp = rtp_buffer.timestamp();
         let ssrc = rtp_buffer.ssrc();
         let marker = u8::from(rtp_buffer.is_marker());
-
-        gst::trace!(
-            CAT,
-            obj = pad,
-            "gstscream Handling rtp buffer seq {} payload_type {} timestamp {} ",
-            seq,
-            payload_type,
-            timestamp
-        );
         drop(rtp_buffer);
+        if marker == 0 {
+            gst::trace!(
+                CAT,
+                obj = pad,
+                "gstscream Handling rtp buffer ssrc {ssrc}, seq {seq}, payload_type {payload_type}, timestamp {timestamp}, marker {marker} ");
+        } else {
+            gst::log!(
+                CAT,
+                obj = pad,
+                "gstscream Handling rtp buffer ssrc {ssrc}, seq {seq}, payload_type {payload_type}, timestamp {timestamp}, marker {marker} ");
+        }
         let mut rate: u32 = 0;
         let mut force_idr: u32 = 0;
         let mut settings = self.settings.lock().unwrap();
         if settings.ssrc == 0 {
             settings.ssrc = ssrc;
-            println!("imp.rs ssrc {}", ssrc);
             let s0 = settings.params.as_ref().unwrap().as_str().to_owned();
             let s = CString::new(s0).expect("CString::new failed");
             START.call_once(|| unsafe {
-                println!("imp.rs ScreamSenderGlobalPluginInit 1 ");
+                gst::info!(CAT, obj = pad, "ScreamSenderGlobalPluginInit");
                 ScreamSenderGlobalPluginInit(ssrc, s.as_ptr(), self, callback);
-                println!("imp.rs ScreamSenderGlobalPluginInit 2 ");
             });
 
             unsafe {
                 ScreamSenderPluginInit(ssrc, s.as_ptr(), self, callback);
             }
-            println!("imp.rs ScreamSenderPluginInit Done ssrc {}", ssrc);
+            gst::info!(CAT, obj = pad, "ScreamSenderPluginInit Done ssrc {ssrc}");
         }
         unsafe {
             let size = buffer.size().try_into().unwrap();
@@ -117,11 +131,10 @@ impl Screamtx {
                 ssrc,
                 marker,
             );
-            // println!("imp.rs push rtp size {} ssrc {}", size, ssrc);
             ScreamSenderGetTargetRate(ssrc, &mut rate, &mut force_idr);
             // println!("ScreamSenderGetTargetRate ssrc {}, rate {}, force_idr {} ", ssrc, rate, force_idr);
-            // println!("imp.rs push rtp rate {} {}", rate, force_idr);
         }
+
         //        rate = 100000; force_idr = 1;
         if rate != 0 {
             rate /= 1000;
@@ -134,16 +147,15 @@ impl Screamtx {
                 element.notify("current-max-bitrate");
             }
         } else {
-            // println!("imp.rs rate 0");
+            gst::trace!(CAT, obj = pad, "rate 0");
         }
         if force_idr != 0 {
             let event = gst_video::UpstreamForceKeyUnitEvent::builder()
                 .all_headers(true)
                 .build();
             let rc = self.sinkpad.push_event(event);
-            println!("imp.rs: force_idr rc {} enabled 1 ", rc);
+            gst::info!(CAT, obj = pad, "force_idr rc {rc} enabled 1 ");
         }
-        // println!("imp.rs push rtp cont");
         gst::FlowSuccess::Ok
     }
 
@@ -158,9 +170,10 @@ impl Screamtx {
         gst::log!(
             CAT,
             obj = pad,
-            "gstscream Handling event {:?} {:?}",
+            "gstscream Handling event {:?} {:?} \n {}",
             event,
-            event.type_()
+            event.type_(),
+            get_tags_from_event(&event),
         );
         // println!("gstscream Handling sink event {:?}", event);
         self.srcpad.push_event(event)
@@ -196,16 +209,16 @@ impl Screamtx {
         let bmrsl = bmr.as_slice();
         let bmrslprt = bmrsl.as_ptr();
         let buffer_size: u32 = buffer.size().try_into().unwrap();
-        gst::trace!(
-            CAT,
-            obj = pad,
-            "gstscream Handling rtcp buffer size {} ",
-            buffer_size
-        );
         let res = unsafe { ScreamSenderRtcpPush(bmrslprt, buffer_size) };
         drop(bmr);
         if res == 0 {
             self.rtcp_srcpad.push(buffer).unwrap();
+        } else {
+            gst::log!(
+                CAT,
+                obj = pad,
+                "gstscream Handling rtcp buffer size {buffer_size} "
+            );
         }
         gst::FlowSuccess::Ok
     }
@@ -322,34 +335,43 @@ impl Screamtx {
     }
 }
 #[allow(improper_ctypes_definitions)]
-extern "C" fn callback(stx: *const Screamtx, buf: gst::Buffer, is_push: u8) {
-    /*
-        trace!(
-            CAT,
-            "gstscream Handling buffer from scream {:?} is_push  {}",
-            buf,
-            is_push
-        );
-    */
+extern "C" fn callback(stx: *const Screamtx, buffer: gst::Buffer, is_push: u8) {
     if is_push == 1 {
-        // println!("imp.rs push before");
         unsafe {
             let fls = (*stx).srcpad.pad_flags();
             if fls.contains(gst::PadFlags::EOS) {
-                println!("screamtx EOS {:?}", fls);
-                drop(buf);
+                gst::info!(CAT, obj = (*stx).srcpad, "EOS {:?}", fls);
+                drop(buffer);
             } else if fls.contains(gst::PadFlags::FLUSHING) {
-                println!("screamtx FL {:?}", fls);
-                drop(buf);
+                gst::info!(CAT, obj = (*stx).srcpad, "FL {:?}", fls);
+                drop(buffer);
             } else {
+                let rtp_buffer = gst_rtp::RTPBuffer::from_buffer_readable(&buffer).unwrap();
+                let seq = rtp_buffer.seq();
+                let payload_type = rtp_buffer.payload_type();
+                let timestamp = rtp_buffer.timestamp();
+                let ssrc = rtp_buffer.ssrc();
+                let marker = u8::from(rtp_buffer.is_marker());
+                if marker == 0 {
+                    gst::trace!(
+                        CAT,
+                        obj = (*stx).srcpad,
+                        "gstscream Handling rtp buffer ssrc {ssrc}, seq {seq}, payload_type {payload_type}, timestamp {timestamp}, marker {marker} ");
+                } else {
+                    gst::log!(
+                        CAT,
+                        obj = (*stx).srcpad,
+                        "gstscream Handling rtp buffer ssrc {ssrc}, seq {seq}, payload_type {payload_type}, timestamp {timestamp}, marker {marker} ");
+                }
+                drop(rtp_buffer);
                 (*stx)
                     .srcpad
-                    .push(buf)
+                    .push(buffer)
                     .expect("Screamtx callback srcpad.push failed");
             }
         }
     } else {
-        drop(buf);
+        drop(buffer);
     }
 }
 #[link(name = "scream")]

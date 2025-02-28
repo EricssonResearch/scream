@@ -58,21 +58,19 @@ impl Screamrx {
         let ssrc = rtp_buffer.ssrc();
         let marker = rtp_buffer.is_marker();
         drop(rtp_buffer);
-
         let ecn_ce = ecn::get_ecn(buffer.clone(), pad);
         let size: u32 = buffer.size().try_into().unwrap();
-        gst::trace!(
-            CAT,
-            obj = pad,
-            "gstscream Handling rtp buffer seq {} ssrc {}, payload_type {} timestamp {} marker {} ecn_ce {} ",
-            seq,
-            ssrc,
-            payload_type,
-            timestamp,
-            marker,
-            ecn_ce
-        );
-
+        if marker {
+            gst::log!(
+                CAT,
+                obj = pad,
+                "Handling rtp buffer ssrc {ssrc}, seq {seq}, payload_type {payload_type}, timestamp {timestamp}, marker {marker}, ecn_ce {ecn_ce} ");
+        } else {
+            gst::trace!(
+                CAT,
+                obj = pad,
+                "Handling rtp buffer ssrc {ssrc}, seq {seq}, payload_type {payload_type}, timestamp {timestamp}, marker {marker}, ecn_ce {ecn_ce} ");
+        }
         {
             let mut screamrx = self.lib_data.lock().unwrap();
             screamrx.ScreamReceiver(size, seq, payload_type, timestamp, ssrc, marker, ecn_ce);

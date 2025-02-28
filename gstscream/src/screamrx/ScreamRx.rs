@@ -228,7 +228,11 @@ impl ScreamRx {
         if self.checkIfFlushAck() || marker {
             let mut bytes = Vec::with_capacity(300);
             let isFeedback = self.createStandardizedFeedback(getTimeInNtp(), marker, &mut bytes);
-            gst::trace!(CAT, "isFeedback {} marker  {}", isFeedback, marker);
+            if isFeedback {
+                gst::log!(CAT,   "isFeedback ssrc {ssrc}, isFeedback {isFeedback}, marker {marker}, seq {seqNr}, ssrc {ssrc}, EcnCe {EcnCe}");
+            } else {
+                gst::trace!(CAT, "isFeedback ssrc {ssrc}, isFeedback {isFeedback}, marker {marker}, seq {seqNr}, ssrc {ssrc}, EcnCe {EcnCe}");
+            }
             if isFeedback {
                 let buffer = gst::Buffer::from_mut_slice(bytes);
                 let rtcp_srcpad = &self.rtcp_srcpad.as_ref().unwrap().lock().unwrap();
@@ -249,9 +253,9 @@ impl ScreamRx {
             let mut bytes = Vec::with_capacity(300);
             let isFeedback = self.createStandardizedFeedback(time_ntp, true, &mut bytes);
             if isFeedback {
-                gst::trace!(CAT, "periodic_flush ");
                 let buffer = gst::Buffer::from_mut_slice(bytes);
                 let rtcp_srcpad = &self.rtcp_srcpad.as_ref().unwrap().lock().unwrap();
+                gst::log!(CAT, obj = rtcp_srcpad, "periodic_flush");
                 rtcp_srcpad.push(buffer).unwrap();
             }
         }
@@ -435,7 +439,7 @@ impl Stream {
         gst::log!(CAT, "getStandardizedFeedback time_diff  {} begin_seq {}, num_reports {} , end_seq {} nRecvRtpPackets {} ",
                    time_ntp - self.lastFeedbackT_ntp, sn_lo,  self.nReportedRtpPackets,  self.highestSeqNr, self.nRecvRtpPackets);
         for k in 0..self.nReportedRtpPackets {
-            let sn: u16 = ((sn_lo as u32 + k as u32) & u16::MAX as u32) as u16;
+            let sn: u16 = ((u32::from(sn_lo) + k as u32) & u32::from(u16::MAX)) as u16;
 
             let ix = (sn as usize) % kRxHistorySize;
             let mut ato: u32 = time_ntp - self.rxTimeHist[ix];
@@ -447,7 +451,7 @@ impl Stream {
             let mut tmp_s: u16 = 0x0000;
             if self.seqNrHist[ix] == sn && self.rxTimeHist[ix] != 0 {
                 tmp_s = (0x8000_u32
-                    | (((self.ceBitsHist[ix] & 0x03) as u32) << 13)
+                    | (u32::from(self.ceBitsHist[ix] & 0x03) << 13)
                     | (ato & (0x01FFF_u32))) as u16;
             }
 
@@ -552,11 +556,6 @@ impl ScreamRx {
         true
     }
 }
-/*
-static t0: Lazy<std::time::Instant> = Lazy::new(||
-    std::time::Instant::now()
-);
-*/
 
 static t0: Lazy<std::time::Instant> = Lazy::new(std::time::Instant::now);
 

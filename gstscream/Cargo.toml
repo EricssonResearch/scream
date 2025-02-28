@@ -4,7 +4,7 @@ version = "0.6.0"
 authors = ["Jacob Teplitsky"]
 repository = "https://github.com/EricssonResearch/scream.git"
 license = "BSD 2-clause"
-edition = "2018"
+edition = "2021"
 description = "Rust Gstscream Scream Plugin"
 
 [dependencies]

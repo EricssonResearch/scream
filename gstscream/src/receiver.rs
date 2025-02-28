@@ -19,6 +19,8 @@ struct Arguments {
     #[arg(env)]
     /// The gstreamer pipeline to use for the receiver application.
     recvpipeline: String,
+    #[arg(env)]
+    enc_id: u32,
 }
 
 fn main() {
@@ -41,6 +43,23 @@ fn start(main_loop: &glib::MainLoop, args: Arguments) -> Result<(), Error> {
     let bin = pipeline.upcast::<gst::Bin>();
     let rtpbin = bin.by_name("r").unwrap();
     rtpbin.connect("new-jitterbuffer", false, move |_values| None);
+    rtpbin.connect("request-pt-map", false, move |values| {
+        let encoder_name = if args.enc_id == 265 { "H265" } else { "H264" };
+        let pt = values[2].get::<u32>().expect("Invalid argument");
+        println!("got pt: {pt}");
+        match pt {
+            96 => Some(
+                gst::Caps::builder("application/x-rtp")
+                    .field("media", "video")
+                    .field("clock-rate", 90000i32)
+                    .field("encoding-name", encoder_name)
+                    .field("rtcp-fb-nack-pli", true)
+                    .build()
+                    .to_value(),
+            ),
+            _ => None,
+        }
+    });
 
     let pipeline = bin.upcast::<gst::Element>();
     pipeline

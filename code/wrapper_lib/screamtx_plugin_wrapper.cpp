@@ -24,6 +24,10 @@ typedef struct  stream_s {
 
 } stream_t;
 
+uint32_t rtp_received = 0;
+uint32_t rtp_tx = 0;
+uint32_t rtcp_received = 0;
+uint32_t frames_received = 0;
 stream_t streams[kMaxStreams];
 
 /*
@@ -143,6 +147,7 @@ float accumulatedPaceTime = 0.0f;
  * then start a timer.
  */
 void *transmitRtpThread(void *arg) {
+  static bool first = false;
   int size;
   uint16_t seqNr;
   uint32_t ts;
@@ -198,7 +203,12 @@ void *transmitRtpThread(void *arg) {
            stream->rtpQueue->pop(&buf, size, ssrc, seqNr, isMark,ts);
            pthread_mutex_unlock(&stream->lock_rtp_queue);
            if (buf) {
+               rtp_tx++;
                stream->cb(stream->cb_data, (uint8_t *)buf, 1);
+               if (!first) {
+                   first = true;
+                   printf("%s %u first seq %u\n", __FUNCTION__, __LINE__, seqNr);
+               }
            }
            if ((cur_n_streams > 1) && (sleeps++ < 120)) {
                usleep(500);
@@ -717,7 +727,7 @@ ScreamSenderPluginUpdate (uint32_t ssrc, const char *arg_string)
             ix+=2;
 			continue;
         }
-        printf("\nunsupported params %s\n", argv[ix]);
+        fprintf(stderr, "\n%s %d unsupported params %s\n", __FUNCTION__, __LINE__, argv[ix]);
         exit (255);
     }
     pthread_mutex_lock(&lock_scream);
@@ -746,12 +756,21 @@ void ScreamSenderPush (uint8_t *buf_rtp, uint32_t recvlen, uint16_t seq,
         printf("%s %u time %u  first %u\n", __FUNCTION__, __LINE__, ntp, seq);
     }
     pthread_mutex_lock(&stream->lock_rtp_queue);
+    rtp_received++;
     rc = stream->rtpQueue->push(buf_rtp, recvlen, ssrc, seq, (marker != 0), (ntp)/65536.0f,timestamp);
     pthread_mutex_unlock(&stream->lock_rtp_queue);
     if (!rc) {
         stream->rtpqueue_full++;
         stream->cb(stream->cb_data, (uint8_t *)buf_rtp, 0);
-        std::cerr << log_tag << " RtpQueue is full " << std::endl;
+        if (marker != 0) {frames_received++;}
+        printf("RtpQueue is full %s %s %u recvlen %u, seq %u, payload_type %u, timestamp %u, ssrc %u, marker %u rtp_received %u, rtp_tx %u , rtcp_received %u frames_received %u\n",
+               log_tag, __FUNCTION__, __LINE__,
+               recvlen, seq, payload_type, timestamp, ssrc, marker, rtp_received, rtp_tx, rtcp_received, frames_received);
+/*
+        printf("RtpQueue is full %s %s %u recvlen %u, seq %u, payload_type %u, timestamp %u, ssrc %u, marker %u\n",
+               log_tag, __FUNCTION__, __LINE__,
+               recvlen, seq, payload_type, timestamp, ssrc, marker);
+*/
     }
     if (rc) {
         pthread_mutex_lock(&lock_scream);
@@ -781,7 +800,7 @@ uint8_t ScreamSenderRtcpPush(uint8_t*buf_rtcp, uint32_t recvlen) {
     }
     pthread_mutex_lock(&lock_scream);
     screamTx->setTimeString(s);
-
+    rtcp_received++;
     screamTx->incomingStandardizedFeedback(time_ntp, buf_rtcp, recvlen);
 
     pthread_mutex_unlock(&lock_scream);
