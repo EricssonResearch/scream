@@ -211,6 +211,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	nStreams(0),
 
 	fp_log(0),
+	fp_txrxlog(0),
 	completeLogItem(false),
 
 	isInitialized(false),
@@ -904,6 +905,20 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 			tmp->isAcked = true;
 			ackedOwd = timestamp - tmp->timeTx_ntp;
 
+			if (fp_txrxlog) {
+				/*
+				* Special trick with writing time stamps to avoid 
+				* single precision (float) issues
+				*/ 
+				fprintf(fp_txrxlog, "%s, %d, %d.%04d, %d.%04d, %d.%04d\n", timeString, seqNr,
+					    tmp->timeTx_ntp >> 16,
+					    uint32_t((tmp->timeTx_ntp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5),
+					    timestamp >> 16, 
+					    uint32_t((timestamp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5),
+					    ackedOwd >> 16,
+					    uint32_t((ackedOwd & 0xFFFF)*ntp2SecScaleFactor*10000+0.5));
+            }
+
 			/*
 			* Compute the queue delay i NTP domain (Q16)
 			*/
@@ -1019,6 +1034,12 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 				if (time_ntp - lastLossEventT_ntp > sRtt_ntp && lossBeta < 1.0f) {
 					lossEvent = true;
 				}
+				if (fp_txrxlog) {
+				   fprintf(fp_txrxlog, "%s, %d, %d.%04d, -1.0, -1.0\n", timeString, tmp->seqNr,
+					    tmp->timeTx_ntp >> 16,
+					    uint32_t((tmp->timeTx_ntp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5));
+            	}
+
 				stream->bytesLost += tmp->size;
 				stream->packetLost++;
 				tmp->isUsed = false;

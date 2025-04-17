@@ -124,6 +124,7 @@ pthread_mutex_t lock_rtp_queue;
 pthread_mutex_t lock_pace;
 
 FILE* fp_log = 0;
+FILE* fp_txrxlog = 0;
 
 char* ifname = 0;
 
@@ -655,7 +656,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-01-29 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-04-17 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -692,11 +693,12 @@ int main(int argc, char* argv[]) {
 		cerr << "     -verbose                 Print a more extensive log" << endl;
 		cerr << "     -nosummary               Don't print summary" << endl;
 		cerr << "     -log logfile             Save detailed per-ACK log to file" << endl;
+		cerr << "     -txrxlog logfile         Save tx and rx timestamp for RTP packets" << endl;
 		cerr << "     -ntp                     Use NTP timestamp in logfile" << endl;
 		cerr << "     -append                  Append logfile" << endl;
 		cerr << "     -mtu values              List of mtu values separated by , without space"  << endl;
 		cerr << "                               list should be in increasing order (default 1200)" << endl;
-		cerr << "     -minpktsinflight value   Min pkts in flight (default 0) << endl";
+		cerr << "     -minpktsinflight value   Min pkts in flight (default 0)" << endl;
 		cerr << "     -itemlist                Add item list in beginning of log file" << endl;
 		cerr << "     -detailed                Detailed log, per ACKed RTP" << endl;
 		cerr << "     -microburstinterval      Microburst interval [ms] for packet pacing (default 0.5ms)" << endl;
@@ -707,6 +709,7 @@ int main(int argc, char* argv[]) {
 	int ix = 1;
 	bool verbose = false;
 	char* logFile = 0;
+	char* txRxLogFile = 0;
 	/* First find options */
 	while (strstr(argv[ix], "-")) {
 		if (strstr(argv[ix], "-ect")) {
@@ -857,6 +860,11 @@ int main(int argc, char* argv[]) {
 			ix += 2;
 			continue;
 		}
+		if (strstr(argv[ix], "-txrxlog")) {
+			txRxLogFile = argv[ix + 1];
+			ix += 2;
+			continue;
+		}
 		if (strstr(argv[ix], "-ntp")) {
 			ntp = true;
 			ix++;
@@ -933,6 +941,12 @@ int main(int argc, char* argv[]) {
 		else
 			fp_log = fopen(logFile, "w");
 	}
+	if (txRxLogFile) {
+		if (append)
+			fp_txrxlog = fopen(txRxLogFile, "a");
+		else
+			fp_txrxlog = fopen(txRxLogFile, "w");
+	}
 	if (minRate > initRate)
 		initRate = minRate;
 	DECODER_IP = argv[ix];ix++;
@@ -953,6 +967,7 @@ int main(int argc, char* argv[]) {
 
 	screamTx->setDetailedLogFp(fp_log);
 	screamTx->useExtraDetailedLog(detailed);
+	screamTx->setTxRxLogFp(fp_txrxlog);
 
 	pthread_mutex_init(&lock_scream, NULL);
 	pthread_mutex_init(&lock_rtp_queue, NULL);
@@ -1022,4 +1037,6 @@ int main(int argc, char* argv[]) {
 	close(fd_outgoing_rtp);
 	if (fp_log)
 		fclose(fp_log);
+	if (fp_txrxlog)
+		fclose(fp_txrxlog);
 }

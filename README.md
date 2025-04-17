@@ -3,8 +3,10 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2025-04-17 :
+  - Added option -txrxlog that logs time, sequence_number, tx_time, rx_time, rx_time-tx_time for each RTP packet.   
 - 2025-01-29 :
-  - -relaxedpacing option added. Enables increased pacing rate when max rate reached  
+  - -relaxedpacing option added. Enables increased pacing rate when max rate reached
   - -postcongestiondelay option removed, replaced with a constant
   - -openwindow option replaced with windowheadroom option
   - More conservative CWND increase when max rate reached

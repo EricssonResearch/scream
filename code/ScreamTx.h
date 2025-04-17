@@ -368,6 +368,13 @@ extern "C" {
 			fp_log = fp;
 		}
 
+		/*
+		* Set file pointer for TX and RX timestamop 
+		*/
+		void setTxRxLogFp(FILE* fp) {
+			fp_txrxlog = fp;
+		}
+
 		void setTimeString(char* s) {
 			strcpy(timeString, s);
 		}
@@ -861,6 +868,7 @@ extern "C" {
 		int nStreams;
 
 		FILE* fp_log;
+		FILE* fp_txrxlog;
 		bool completeLogItem;
 		char timeString[100];
 		char detailedLogExtraData[256];
