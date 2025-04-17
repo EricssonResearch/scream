@@ -4,7 +4,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 
 ## News
 - 2025-01-29 :
-  - -relaxedpacing option added. Enables increased pacing rate when max rate reached
+  - -relaxedpacing option added. Enables increased pacing rate when max rate reached  
   - -postcongestiondelay option removed, replaced with a constant
   - -openwindow option replaced with windowheadroom option
   - More conservative CWND increase when max rate reached
