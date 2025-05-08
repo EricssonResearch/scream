@@ -1170,7 +1170,7 @@ void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
 
 void ScreamV2Tx::getLogHeader(char* s) {
 	sprintf(s,
-		"LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,curMss,rtpQueueDelay,bytes,size,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
+		"LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,curMss,rtpQueueDelay,rtpQueueBytes,rtpQueueSize,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
 }
 
 void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {

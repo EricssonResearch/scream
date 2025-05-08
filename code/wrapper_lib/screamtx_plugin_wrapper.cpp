@@ -17,7 +17,7 @@ typedef struct  stream_s {
     uint8_t *cb_data;
     uint64_t rtpqueue_full;
     uint64_t force_idr;
-    uint64_t rate_updates;
+    uint64_t bitrate_updates;
     uint32_t prev_encoder_rate;
     uint32_t encoder_rate;
     float lastLossEpochT;
@@ -91,7 +91,7 @@ float bytesInFlightHeadroom = 2.0f;
 float multiplicativeIncreaseFactor = 0.05f;
 bool relaxedPacing = false;
 
-float hysteresis = 0.0f;
+float hysteresis = 0.05f;
 float adaptivePaceHeadroom = 1.5f;
 
 uint32_t lastKeyFrameT_ntp = 0;
@@ -834,7 +834,7 @@ void ScreamSenderGetTargetRate (uint32_t ssrc, uint32_t *rate_p, uint32_t *force
         stream->prev_encoder_rate = stream->encoder_rate;
         stream->encoder_rate = *rate_p;
         if (stream->prev_encoder_rate != stream->encoder_rate) {
-            stream->rate_updates++;
+            stream->bitrate_updates++;
         }
     }
     // cerr << " rate " << *rate_p << endl;
@@ -874,19 +874,20 @@ void ScreamSenderStats(char     *s,
         return;
     }
     screamTx->getLog(time_s, s, ssrc, clear != 0);
-    snprintf(buffer, 50, ",%lu,%lu,%lu", stream->rtpqueue_full, stream->force_idr, stream->rate_updates);
+    snprintf(buffer, 50, ",%lu,%lu,%lu,%u", stream->rtpqueue_full, stream->force_idr, stream->bitrate_updates,rtcp_received);
     strcat(s, buffer);
     *len = strlen(s);
     if (clear) {
         stream->rtpqueue_full = 0;
         stream->force_idr = 0;
-        stream->rate_updates = 0;
+        stream->bitrate_updates = 0;
+        rtcp_received = 0;
     }
 }
 void ScreamSenderStatsHeader(char     *s,
                              uint32_t *len)
 {
-    const char *extra = ",rtpqueue_full,force_idr,rate_updates";
+    const char *extra = ",rtpqueue_full,force_idr,bitrate_updates,rtcp_received";
     screamTx->getLogHeader(s);
     strcat(s, extra);
     *len = strlen(s);

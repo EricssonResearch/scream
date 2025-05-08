@@ -19,7 +19,8 @@ struct Arguments {
     #[arg(env)]
     /// The gstreamer pipeline to use for the receiver application.
     recvpipeline: String,
-    #[arg(env)]
+    /// Encoder Id , such as 264, 265
+    #[arg(env, default_value_t = 264)]
     enc_id: u32,
 }
 
