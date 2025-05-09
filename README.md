@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2025-05-09 : 
+  - Added new user guide for the SCReAM BW test tool with examples
 - 2025-04-17 :
   - Added option -txrxlog that logs time, sequence_number, tx_time, rx_time, rx_time-tx_time for each RTP packet.   
 - 2025-01-29 :
@@ -159,7 +161,7 @@ For more information on how to use the code in multimedia clients or in experime
 ### Feedback format
 The feedback format is according to [9]. The feedback interval depends heavily on the media bitrate.
 
-### Build SCReAM BW test application
+### Build SCReAM BW test tool
 The SCReAM BW test application runs on e.g Ubuntu 16.04 and later. The build steps are:
 
 ```
@@ -169,7 +171,7 @@ make
 
 You need git, cmake, make and g++ installed
 
-To enable SCReAM V2, change SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread") to SET(CMAKE_CXX_FLAGS "-fPIC -fpermissive -pthread -DV2") in CMakeLists.txt
+A SCReAM BW test tool user guide is found at [https://github.com/EricssonResearch/scream/blob/master/SCReAM-BW-test-tool.docx](https://github.com/EricssonResearch/scream/blob/master/SCReAM-BW-test-tool.docx?raw=true)
 
 
 # References
