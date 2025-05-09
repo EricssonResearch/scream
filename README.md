@@ -5,6 +5,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 ## News
 - 2025-05-09 : 
   - Added new user guide for the SCReAM BW test tool with examples
+  - SCReAM BW test, added end of session summary 
 - 2025-04-17 :
   - Added option -txrxlog that logs time, sequence_number, tx_time, rx_time, rx_time-tx_time for each RTP packet.   
 - 2025-01-29 :

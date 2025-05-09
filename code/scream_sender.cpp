@@ -656,7 +656,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-04-17 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-05-09 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -1039,4 +1039,5 @@ int main(int argc, char* argv[]) {
 		fclose(fp_log);
 	if (fp_txrxlog)
 		fclose(fp_txrxlog);
+	screamTx->printFinalSummary();
 }

@@ -377,7 +377,7 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 			rateTransmitted += streams[n]->rateTransmitted;
 			rateRtpAvg += streams[n]->rateRtpAvg;
 			if (n == 0)
-				statistics->add(streams[0]->rateTransmitted, streams[0]->rateLost, streams[0]->rateCe, sRtt, queueDelay);
+				statistics->add(time_ntp, streams[0]->rateTransmitted, streams[0]->rateLost, streams[0]->rateCe, sRtt, queueDelay);
 		}
 		rateTransmittedAvg = 0.8f * rateTransmittedAvg + 0.2f * rateTransmitted;
 		lastRateUpdateT_ntp = time_ntp;

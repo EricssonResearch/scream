@@ -130,9 +130,10 @@ extern "C" {
 		public:
 			Statistics(ScreamTx* parent);
 			void getSummary(float time, char s[]);
-			void add(float rateTx, float rateLost, float rateCe, float rtt, float queueDelay);
+			void add(uint32_t time_ntp, float rateTx, float rateLost, float rateCe, float rtt, float queueDelay);
 			void addEcn(uint8_t ecn);
 			float getStatisticsItem(StatisticsItem item);
+    		void printFinalSummary();
 		private:
 			float lossRateHist[kLossRateHistSize];
 			float ceRateHist[kLossRateHistSize];
@@ -141,8 +142,15 @@ extern "C" {
 			int rateLostN;
 			int lossRateHistPtr;
 			float avgRateTx;
+			float minRate;
+			float maxRate;
 			float avgRtt;
+			float sumRtt;
+			float minRtt;
+			float maxRtt;
 			float avgQueueDelay;
+			float maxQueueDelay;
+			float sumQueueDelay;
 			float sumRateTx;
 			float sumRateLost;
 			float sumRateCe;
@@ -150,6 +158,7 @@ extern "C" {
 			float ceRate;
 			float lossRateLong;
 			float ceRateLong;
+			int nStatisticsItems;
 			int n00; // Number of not-ECT packets
 			int n10; // Number of ECT(0) packets
 			int n01; // Number of ECT(1) packets
@@ -158,6 +167,7 @@ extern "C" {
 			ScreamTx* parent;
 		};
 		Statistics* statistics;
+	public:
 
 		/*
 		* Get overall simplified statistics
@@ -168,6 +178,11 @@ extern "C" {
 		* Get statisticts items indexed by enum StatisticsItem
 		*/
 		float getStatisticsItem(StatisticsItem item);
+
+		/*
+		* Print final summary on stdout
+		*/
+		void printFinalSummary();
 
 		void setLogTag(char* logTag_) {
 			logTag = logTag_;
