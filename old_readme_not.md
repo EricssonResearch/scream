@@ -21,19 +21,14 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 Older version history is found here https://github.com/EricssonResearch/scream/blob/master/version-history.md 
 ## What is SCReAM
 SCReAM (**S**elf-**C**locked **R**at**e** **A**daptation for **M**ultimedia) is a congestion control algorithm devised mainly for Video.
-Congestion control for WebRTC media is currently being standardized in the IETF RMCAT WG, the scope of the working group was to define requirements for congestion control and also to standardize a few candidate solutions.
+Congestion control for WebRTC media is currently being standardized in the IETF RMCAT WG, the scope of the working group is to define requirements for congestion control and also to standardize a few candidate solutions.
 SCReAM is a congestion control candidate solution for WebRTC developed at Ericsson Research and optimized for good performance in wireless access.  
 
 The algorithm is an IETF experimental standard [1], a Sigcomm paper [2] and [3] explains the rationale behind the design of the algorithm in more detail. Because SCReAM as most other congestion control algorithms are continously improved over time, the current implementation available here has deviated from what is described in the papers and IETF RFC. The most important new development is addition of L4S support. In addition the algorithm has been modified to become more stable.
 
-As mentioned above, SCReAM was originally devised for WebRTC but is sofar not incorporated into that platform. Instead, SCReAM has found use as congestion control for remote controlled vehicles, cloud gaming demos and benchmarking of 5G networks with and without L4S support.
+As mentioned above, SCReAM was originally devised for WebRTC but did not make it into being incorporated into that platform. Instead, SCReAM has found use as congestion control for remote controlled vehicles, cloud gaming demos and benchmarking of 5G networks with and without L4S support.
 
-Since standardization in RFC8298, SCReAM has undergone changes and a new V2 is described in https://datatracker.ietf.org/doc/draft-johansson-ccwg-rfc8298bis-screamv2/
-
-Test report(s) for SCReAM V2 is found here https://github.com/EricssonResearch/scream/blob/master/test-record.md 
-
-A test report at CableLabs L4S interop test in november 2024 shows that SCReAM V2 works fine when subject to competing flows over the same bottleneck. 
-https://github.com/EricssonResearch/scream/blob/master/CableLabs-L4S-interop-nov-2024-Ericsson.pdf 
+Test report(s) for SCReAM is found here https://github.com/EricssonResearch/scream/blob/master/test-record.md 
 
 ## What is L4S ?
 L4S is short for **L**ow **L**atency **L**ow **L**oss **S**calable thorughput, L4S is specified in [4]. A network node that is L4S capable can remark packets that have the ECT(1) code point set to CE. The marking threshold is set very low (milliseconds).
@@ -57,7 +52,7 @@ The fact that SCReAM maintains a RTP queue on the sender side opens up for furth
 ### SCReAM performance and behavior
 SCReAM has been evaluated in a number of experiments over the years. Some of these are exemplified below.
 
-
+A comparison against GCC (Google Congestion Control) is shown in [5]. Final presentations are found in [6] and [7].
 A short [video](https://www.youtube.com/watch?v=_jBFu-Y0wwo) exemplifies the use of SCReAM in a small vehicle, remote controlled over a public LTE network. [8] explains the rationale behind the use of SCReAM in remote controlled applications over LTE/5G.
 
 #### ECN (Explicit Congestion Notification)
@@ -65,7 +60,7 @@ SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result
 
 In addition SCReAM also supports L4S, i.e that the sending rate is reduced proportional to the fraction of the RTP packets that are ECN-CE marked. This enables lower network queue delay.  
 
-Below is shown two simulation examples with a simple 50Mbps 25ms. The video trace is from a video encoder.
+Below is shown two simulation examples with a simple 50Mbps bottleneck that changes to 25Mbps between 50 and 70s, the min RTT is 25ms. The video trace is from a video encoder.
 
 L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, considering the varying output rate of the video encoder. This is self-adjusting by inherent design because the larger frames hit the L4S enabled queue more and thus causes more marking. The average bitrate would increase if the frame size variations are smaller.
 
@@ -73,25 +68,46 @@ L4S gives a somewhat lower media rate, the reason is that a larger headroom is a
 Figure 2 : SCReAM V2 without L4S support
 
 ![Simple bottleneck simulation SCReAM with L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-V2-L4S.png)
-Figure 3 : SCReAM V2 with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
-
-Another example with the SCreAM BW test tool over a 50Mbps, 25ms bottleneck with DualPi2 AQM 
-![SCReAM V2 no L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-DualPi2-50Mbps-25ms-noL4S.png)
-Figure 4 : SCReAM V2 without L4S support
-
-![SCReAM V2 L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-DualPi2-50Mbps-25ms-L4S.png)
-Figure 5 : SCReAM V2 with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
-
-SCReAM is also implemented in a remote controlled car prototype. The two videos below show how it works in different situations
-- [Boliden Kankberg mine](https://www.youtube.com/watch?v=r7QxdTP3jB0 "Boliden Kankberg mine")
-- [Winter wonderland](https://www.youtube.com/watch?v=eU1crtEvMv4 "Winter wonderland")
-
-SCReAM V2 was also implemented for MWC 2023 demo in collaboration between Ericsson, DT and Vay. https://vay.io/press-release/mwc-ericsson-deutsche-telekom-and-vay-show-live-teledrive-technology-demo-with-5g/
+Figure 3 : SCReAM with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
 
 ----------
 
-A older comparison against GCC (Google Congestion Control) is shown in [5]. Final presentations are found in [6] and [7].that show how SCReAM performs
+Below are a few older examples that show how SCReAM performs
 
+The two videos below show a simple test with a simple 3Mbps bottleneck (CoDel AQM, ECN cabable). The first video is with ECN disabled in the sender, the other is with ECN enabled. SCReAM is here used with a Panasonic WV-SBV111M IP camera. One may argue that one can disable CoDel to avoid the packet losses, unfortunately one then lose the positive properties with CoDel, mentioned earlier.
+
+[Without ECN](https://www.youtube.com/watch?v=J0po78q1QkU "Without ECN")
+
+[With ECN](https://www.youtube.com/watch?v=qIe0ubw9jPw "With ECN")
+
+The green areas that occur due to packet loss is an artifact in the conversion of the RTP dump.
+#### Real life test
+A real life test of SCReAM is performed with the following setup in a car:
+
+- Sony Camcorder placed on dashboard, HDMI output used
+- Antrica ANT-35000A video encoder with 1000-8000kbps encoding range and 1080p50 mode
+- Laptop with a SCReAM sender running
+- Sony Xperia phone in WiFi tethering mode
+
+A SCReAM receiver that logged the performance and stored the received RTP packets was running in an office. The video traffic was thus transmitted in LTE uplink.The video was played out to file with GStreamer, the jitter buffer was disabled to allow for the visibility of the delay jitter artifacts,
+
+Below is a graph that shows the bitrate, the congestion window and the queue delay.
+
+![Log from ](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM_LTE_UL.png)
+
+Figure 5 : Trace from live drive test
+
+The graph shows that SCReAM manages high bitrate video streaming with low e2e delay despite demanding conditions both in terms of variable throughput and in a changing output bitrate from the video encoder. Packet losses occur relatively frequently, the exact reason is unknown but seem to be related to handover events, normally packet loss should not occure in LTE-UL, however this seems to be the case with the used cellphone.
+The delay increases between 1730 and 1800s, the reason here is that the available throughput was lower than the lowest possible coder bitrate. An encoder with a wider rate range would be able to make it possible to keep the delay low also in this case.
+
+A video from the experiment is found at the link below. The artifacts and overall video quality can be correlated aginst the graph above.
+
+Link to video : [SCReAM live demo](https://youtu.be/YYaox26WhKo "SCReAM Live demo")
+
+SCReAM is also implemented in a remote controlled car prototype. The two videos below show how it works in different situations
+
+- [Boliden Kankberg mine](https://www.youtube.com/watch?v=r7QxdTP3jB0 "Boliden Kankberg mine")
+- [Winter wonderland](https://www.youtube.com/watch?v=eU1crtEvMv4 "Winter wonderland")
 
 SCReAM has been successfully be used on more recent experiments, examples will be added later.
 
@@ -107,7 +123,7 @@ The SCReAM code comes in two (three) applications
 The main SCReAM algorithm components are found in the C++ classes:
 
 - ScreamTx : SCReAM sender algorithm
-  - ScreamV1Tx : Older version, removed
+  - ScreamV1Tx : Older version
   - ScreamV2Tx, ScreamV2Stream : Version
 
 - ScreamRx : SCReAM receiver algorithm

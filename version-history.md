@@ -1,4 +1,22 @@
 # Older version history
+- 2024-12-18 :
+  - Modified the adaptive MTU to balance against a fixed RTT 25ms when above this value.
+  - Added getCwnd and getSRtt methods  
+- 2024-12-16 :
+  - Added option to set list of MTUs for adaptive setting of MTU to keep a minimum number of packets in flight. This feature can be beneficial for L4S operation. 
+	- -mtu sets a list of one or more MTU sizes in increasing order, separated by comma (,)
+	  example: -mtu 300,500,800,1000,1400
+	- -minpktsinflight sets the min number of packets in flight 
+	  example: -minpktsinflight 6
+  - Release dates for SCReAM BW test changed. No difference in SCReAM algorithm besides adaptive MTU option
+- 2024-10-31 :
+  - Added cubic emulation for L4S. This stabilizes the bitrate and also reduces delay spikes.
+  - Delay based congestion control modified
+  - Default microburstinterval = 0.5ms
+  - Release dates for SCReAM BW test changed, expect a difference in performance (rate and delay variation) compared to previous version. 
+- 2024-10-28 :
+  - Fixed wrong RTT scaling.
+  - Release dates for SCReAM BW test changed. Performance differences against previous 2024-07-04 version is however minimal. 
 - 2024-10-03 :
   - Features that more cautiously increases CWND are removed/refined as these deviated too much from the principle of two marked packets per RTT at steady state.
 - 2024-09-27 :
