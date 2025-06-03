@@ -77,10 +77,10 @@ Figure 3 : SCReAM V2 with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms
 
 Another example with the SCreAM BW test tool over a 50Mbps, 25ms bottleneck with DualPi2 AQM 
 ![SCReAM V2 no L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-DualPi2-50Mbps-25ms-noL4S.png)
-Figure 4 : SCReAM V2 without L4S support
+Figure 4 : SCReAM V2 without L4S support, 50Mbps, 25ms bottleneck with DualPi2 AQM 
 
 ![SCReAM V2 L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-DualPi2-50Mbps-25ms-L4S.png)
-Figure 5 : SCReAM V2 with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
+Figure 5 : SCReAM V2 with L4S support, 50Mbps, 25ms bottleneck with DualPi2 AQM 
 
 SCReAM is also implemented in a remote controlled car prototype. The two videos below show how it works in different situations
 - [Boliden Kankberg mine](https://www.youtube.com/watch?v=r7QxdTP3jB0 "Boliden Kankberg mine")
