@@ -17,7 +17,8 @@ else
     SCREAMTX0_RTCP=""
 fi
 
-VIDEOSRC="videotestsrc is-live=true pattern=snow ! video/x-raw,format=I420,width=1280,height=720,framerate=50/1"
+# VIDEOSRC="videotestsrc is-live=true pattern=snow ! video/x-raw,format=I420,width=1280,height=720,framerate=50/1"
+VIDEOSRC="v4l2src device=/dev/video4 ! image/jpeg, width=1280, height=720, framerate=30/1 ! jpegdec"
 
 export SENDPIPELINE="rtpbin name=r \
 $VIDEOSRC ! $ENCODER name=encoder0 bitrate=$INIT_ENC_BITRATE ! rtph${ENC_ID}pay config-interval=-1 ! $SCREAMTX0 r.send_rtp_sink_0 r.send_rtp_src_0 ! udpsink host=$RECEIVER_IP port=$PORT0_RTP sync=false $SET_ECN \
