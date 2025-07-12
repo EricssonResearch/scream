@@ -785,7 +785,7 @@ uint8_t ScreamSenderRtcpPush(uint8_t*buf_rtcp, uint32_t recvlen) {
     }
     uint8_t pt = buf_rtcp[1];
     uint8_t fmt = buf_rtcp[0];
-    if ((pt != 205) || (fmt != 0x80)) {
+    if ((pt != 205) || (fmt != 0x8b)) {
         return 0;
     }
     uint32_t time_ntp = getTimeInNtp(); // We need time in microseconds, roughly ms granularity is OK
