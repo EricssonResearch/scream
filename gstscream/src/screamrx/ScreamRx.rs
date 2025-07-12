@@ -473,7 +473,7 @@ impl ScreamRx {
         isMark: bool,
         bytes: &mut Vec<u8>,
     ) -> bool {
-        bytes.push(0x80); // TODO FMT = CCFB in 5 LSB
+        bytes.push(0x8b);
         bytes.push(205);
         /* Padding */
         bytes.push(0);
