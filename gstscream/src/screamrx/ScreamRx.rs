@@ -423,9 +423,9 @@ impl Stream {
         };
         bytes.extend_from_slice(&tmp_s.to_be_bytes());
         /*
-         * Write number of reports- 1
+         * Write number of reports
          */
-        let tmp_s: u16 = (self.nReportedRtpPackets - 1).try_into().unwrap();
+        let tmp_s: u16 = (self.nReportedRtpPackets).try_into().unwrap();
         bytes.extend_from_slice(&tmp_s.to_be_bytes());
 
         /*
