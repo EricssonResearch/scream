@@ -8,6 +8,7 @@
 		"target": "devcontainer"
 	},
 	"runArgs": ["--network=host"],
+	"mounts": ["type=bind,source=/dev,target=/dev"],
 	"customizations": {
 		"vscode": {
 			"extensions": [
@@ -22,7 +23,6 @@
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	"features": {
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/devcontainers/features/rust:1": {}
 		},
 	}
 

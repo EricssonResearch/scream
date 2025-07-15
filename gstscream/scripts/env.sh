@@ -1,20 +1,20 @@
-export ECN_ENABLED=0
+export ECN_ENABLED=1
 if (($ECN_ENABLED == 1)); then
 export SET_ECN="set-ecn=1"
 export SCREAMTX_PARAM_ECT="-ect 1"
 export RETRIEVE_ECN="retrieve-ecn=true"
-MY_GST_INSTALL=$(readlink -f $SCRIPT_DIR/../../../udp_gstreamer/install)
+MY_GST_INSTALL=$(readlink -f /usr/local)
 echo "MY_GST_INSTALL=$MY_GST_INSTALL"
-export GST_PLUGIN_PATH=$MY_GST_INSTALL/lib/x86_64-linux-gnu
-export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:$MY_GST_INSTALL/lib/x86_64-linux-gnu/gstreamer-1.0
-export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:/usr/lib/x86_64-linux-gnu/gstreamer-1.0
+export GST_PLUGIN_PATH=$MY_GST_INSTALL/lib/
+export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:$MY_GST_INSTALL/lib/gstreamer-1.0
+export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:/usr/lib/gstreamer-1.0
 
-export LD_LIBRARY_PATH=$MY_GST_INSTALL/lib/x86_64-linux-gnu
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$MY_GST_INSTALL/lib/x86_64-linux-gnu/gstreamer-1.0
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu/gstreamer-1.0
+export LD_LIBRARY_PATH=$MY_GST_INSTALL/lib/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$MY_GST_INSTALL/lib/gstreamer-1.0
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/gstreamer-1.0
 
 export PATH=$MY_GST_INSTALL/bin:$PATH
-export PKG_CONFIG_PATH=$MY_GST_INSTALL/lib/x86_64-linux-gnu/pkgconfig
+export PKG_CONFIG_PATH=$MY_GST_INSTALL/lib/pkgconfig
 export PYTHONPATH=${PYTHONPATH}:$MY_GST_INSTALL/lib/python3/site-packages/
 LP=$(pkg-config --libs-only-L  gstreamer-1.0 )
 export RUSTFLAGS="$LP $RUSTFLAGS"
@@ -30,8 +30,8 @@ echo "GST_PLUGIN_PATH=$GST_PLUGIN_PATH"
 
 export ENC_ID=264
 
-SENDER_IP=127.0.0.2
-RECEIVER_IP=127.0.0.1
+SENDER_IP=127.0.0.1
+RECEIVER_IP=127.0.0.2
 
 PORT0_RTP=30112
 PORT0_RTCP=30113

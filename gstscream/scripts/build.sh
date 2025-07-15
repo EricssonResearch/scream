@@ -4,13 +4,13 @@ SCRIPT_DIR=$(dirname  $SCRIPT_PATH)
 source $SCRIPT_DIR/env.sh
 SCREAMLIB_DIR=$SCRIPT_DIR/../../code/wrapper_lib
 cd $SCREAMLIB_DIR; cmake .; make
-cd $SCRIPT_DIR
 export RUSTFLAGS="$RUSTFLAGS -L$SCREAMLIB_DIR"
+CARGO_MANIFEST="$SCRIPT_DIR/../Cargo.toml"
 if (($ECN_ENABLED == 1)); then
-    cargo build --features ecn-enabled,screamtxbw-enabled
-    cargo clippy --features ecn-enabled,screamtxbw-enabled
+    cargo build --manifest-path "$CARGO_MANIFEST" --features ecn-enabled,screamtxbw-enabled
+    cargo clippy --manifest-path "$CARGO_MANIFEST" --features ecn-enabled,screamtxbw-enabled
 else
-    cargo build --features screamtxbw-enabled
-    cargo clippy --features screamtxbw-enabled
-fi    
+    cargo build --manifest-path "$CARGO_MANIFEST" --features screamtxbw-enabled
+    cargo clippy --manifest-path "$CARGO_MANIFEST" --features screamtxbw-enabled
+fi
 
