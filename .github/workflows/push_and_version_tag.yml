@@ -1,0 +1,93 @@
+name: Push and version tag
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+  release:
+    types: [published]
+
+concurrency: production # Only allow sequential builds
+
+env:
+  DOCKERFILE: .devcontainer/Dockerfile
+  IMAGE_REPO: git.ri.se:4567/astazero/
+  IMAGE_NAME: az-scream
+
+jobs:
+  push_and_version_tagg:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+    - name: Checkout 
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    # Do a dry run versioning to get the new version number for the build
+    - name: Dry run versioning
+      id: AutoTaggerDryRun
+      uses: anothrNick/github-tag-action@1.61.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BRANCH: dev
+        INITIAL_VERSION: "0.1.0"
+        DEFAULT_BUMP: patch
+        DRY_RUN: true
+
+    - name: echo new tag
+      run: |
+        echo "The next tag version will be: ${{ steps.AutoTaggerDryRun.outputs.new_tag }}"
+    - name: echo tag
+      run: |
+        echo "The current tag is: ${{ steps.AutoTaggerDryRun.outputs.tag }}"
+    - name: echo part
+      run: |
+        echo "The version increment was: ${{ steps.AutoTaggerDryRun.outputs.part }}"
+
+    # BuildX allows creation of a managed and customizable BuildKit environment
+    # in a dedicated Docker container
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # Login to Docker Hub to be able to build and push
+    # ToDo: Fix so that this does not need individual user credentials
+    - name: Login to Docker Registry
+      uses: docker/login-action@v3
+      with:
+        registry: git.ri.se:4567
+        username: ${{ secrets.GITLAB_USERNAME }}
+        password: ${{ secrets.GITLAB_TOKEN }}
+
+    # Build docker images for merging to dev and push to Docker Hub
+    - name: Build and push for merging to dev
+      if: ${{ github.event.pull_request.merged == true }}
+      id: docker-build-merge
+      uses: docker/build-push-action@v5
+      with:
+        file: ${{ env.DOCKERFILE }}
+        push: true
+        tags: ${{ env.IMAGE_REPO }}${{ env.IMAGE_NAME }}:${{ steps.AutoTaggerDryRun.outputs.new_tag }},${{ env.IMAGE_REPO }}${{ env.IMAGE_NAME }}:latest
+
+    # Build docker images for release and push to Docker Hub
+    - name: Build and push for release
+      if: ${{ github.event_name == 'release' }}
+      id: docker-build-release
+      uses: docker/build-push-action@v5
+      with:
+        file: ${{ env.DOCKERFILE }}
+        push: true
+        tags: ${{ env.IMAGE_REPO }}${{ env.IMAGE_NAME }}:release_${{ github.event.release.tag_name }}
+
+    # If everything is successful do the actual tagging.
+    - name: Do the actual tagging
+      if: ${{ github.event.pull_request.merged == true }}
+      id: Create_tag
+      uses: anothrNick/github-tag-action@1.61.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BRANCH: dev
+        INITIAL_VERSION: "0.1.0"
+        DEFAULT_BUMP: patch

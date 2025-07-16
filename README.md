@@ -21,7 +21,7 @@ This fork adds a devcontainer and Dockerfile to build and run the SCReAM code in
 
 3. **Modify the entrypoint** 
   The image runs sender.sh by default with the parameters from az-scream/gstscream/scripts/env.sh and sender.sh. 
-  Its likely that you which to modify these scripts and you can override the files and entrypoint command like this
+  Its likely that you wish to modify these scripts and you can override the files and entrypoint command like this
     ```bash
     docker run --rm -it --mount type=bind,src=/dev,dst=/dev -p 30112:30112 -p 30113:30113 --privileged --network host \
     -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \

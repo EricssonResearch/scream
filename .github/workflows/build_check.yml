@@ -1,0 +1,36 @@
+name: Build Check
+
+on:
+  push:
+    branches: ["main*"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions: write-all
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # BuildX allows creation of a managed and customizable BuildKit environment
+      # in a dedicated Docker container
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build docker images
+      - name: Build
+        id: docker-build
+        uses: docker/build-push-action@v5
+        with:
+          file: .devcontainer/Dockerfile
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
