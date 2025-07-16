@@ -29,6 +29,9 @@ This fork adds a devcontainer and Dockerfile to build and run the SCReAM code in
     scream-runtime
     ```
 
+    There are several scripts that you can use. They have been created in pairs.
+    sender.sh has a corresponding receiver.sh and sender_3.sh has a receiver_3.sh and so forth.
+
 
 
 # SCReAM
