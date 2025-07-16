@@ -1,3 +1,35 @@
+# AstaZero Additions
+This fork adds a devcontainer and Dockerfile to build and run the SCReAM code in a containerized environment.
+
+# How to use the docker image
+1. **Build the Docker image**:
+
+    ```bash
+    docker build -t git.ri.se:4567/astazero/az-scream -f .devcontainer/Dockerfile  .
+    ```
+
+2. **Run the Docker container**:
+
+    ```bash
+    docker run --rm -it --mount type=bind,src=/dev,dst=/dev -p 30112:30112 -p 30113:30113 --privileged  --network host -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix scream-runtime
+    ```
+    You might need to allow docker to access xhost to run the receiver scripts. 
+
+    ```bash
+    xhost +local:docker
+    ```
+
+3. **Modify the entrypoint** 
+  The image runs sender.sh by default with the parameters from az-scream/gstscream/scripts/env.sh and sender.sh. 
+  Its likely that you which to modify these scripts and you can override the files and entrypoint command like this
+    ```bash
+    docker run --rm -it --mount type=bind,src=/dev,dst=/dev -p 30112:30112 -p 30113:30113 --privileged --network host \
+    -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
+    -v $PWD/gstscream/scripts:/app/scripts --entrypoint "receiver.sh" \
+    scream-runtime
+    ```
+
+
 
 # SCReAM
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.

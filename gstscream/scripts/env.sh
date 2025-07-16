@@ -7,6 +7,7 @@ MY_GST_INSTALL=$(readlink -f /usr/local)
 echo "MY_GST_INSTALL=$MY_GST_INSTALL"
 export GST_PLUGIN_PATH=$MY_GST_INSTALL/lib/
 export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:$MY_GST_INSTALL/lib/gstreamer-1.0
+export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:/usr/lib/x86_64-linux-gnu/gstreamer-1.0
 export GST_PLUGIN_PATH=$GST_PLUGIN_PATH:/usr/lib/gstreamer-1.0
 
 export LD_LIBRARY_PATH=$MY_GST_INSTALL/lib/
