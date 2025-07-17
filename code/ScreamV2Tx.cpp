@@ -579,7 +579,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		memcpy(&num_reports, buf + ptr, 2);
 		ptr += 2;
 		begin_seq = ntohs(begin_seq);
-		num_reports = ntohs(num_reports) + 1;
+		num_reports = ntohs(num_reports);
 		end_seq = begin_seq + num_reports - 1;
 
 		/*
