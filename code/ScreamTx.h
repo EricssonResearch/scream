@@ -76,8 +76,11 @@ extern "C" {
 	static const float kBytesInFlightHeadRoom = 2.0f;
 	// A multiplicative increase factor, 0.05 means that CWND can increase at most 5% per RTT
 	static const float kMultiplicativeIncreaseScalefactor = 0.05f;
+	// Packet reordering margin
+	static const float kReorderTime = 0.03f;    
 
 	static const float ntp2SecScaleFactor = 1.0f / 65536;
+	static const uint32_t sec2NtpScaleFactor = 65536u;
 
 	/*
 	* Max number of RTP packets in flight
@@ -478,6 +481,14 @@ extern "C" {
 			isEnableRelaxedPacing = enable;
 		}
 
+		/**
+		* Set packet reordering margin [s]
+		*/
+		void setReorderTime(float val) {
+			reorderTime = val;
+			reorderTime_ntp = uint32_t(val * sec2NtpScaleFactor + 0.5f);
+		}
+
 		/*
 		* Get recommended MSS
 		*/
@@ -854,6 +865,8 @@ extern "C" {
 		float ceDensity;
 		float virtualL4sAlpha;
 		float postCongestionScale;
+		uint32_t reorderTime_ntp;
+		float reorderTime;
 		
 		float rateTransmitted;
 		float rateRtpAvg;

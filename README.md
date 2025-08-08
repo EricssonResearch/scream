@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2025-08-08 :
+  - Reordering time (packet reodering margin) is made configurable 
 - 2025-05-09 : 
   - Added new user guide for the SCReAM BW test tool with examples
   - SCReAM BW test, added end of session summary 

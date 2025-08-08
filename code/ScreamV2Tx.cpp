@@ -31,8 +31,6 @@ static const uint32_t kSlowUpdateInterval_ntp = 3277; // 50ms in NTP domain
 static const uint32_t kRateUpdateInterval_ntp = 3277; // 50ms in NTP domain
 // Update period for MSS estimation
 static const int kMssUpdateInterval_ntp = 65536;      // 1s in NTP
-// Packet reordering margin (us)
-static const uint32_t kReordertime_ntp = 1966;        // 30ms in NTP domain
 
 // Update interval for base delay history
 static const uint32_t kBaseDelayUpdateInterval_ntp = 655360; // 10s in NTP doain
@@ -186,6 +184,8 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	ceDensity(1.0f),
 	virtualL4sAlpha(0.0f),
 	postCongestionScale(1.0f),
+	reorderTime(kReorderTime),
+	reorderTime_ntp(uint32_t(kReorderTime * sec2NtpScaleFactor + 0.5f)),
 
 	rateTransmitted(0.0f),
 	rateRtpAvg(0.0f),
@@ -1096,9 +1096,9 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 			* to determine if a packet is lost.
 			*/
 			uint32_t tsDiffCorrection = (uint32_t)(65536.0f * (stream->timeStampAckHigh - tmp->timeStamp) / stream->timeStampClockRate);
-			if (tmp->timeTx_ntp + kReordertime_ntp + tsDiffCorrection < stream->timeTxAck_ntp && !tmp->isAcked) {
+			if (tmp->timeTx_ntp + reorderTime_ntp + tsDiffCorrection < stream->timeTxAck_ntp && !tmp->isAcked) {
 				/*
-				* Packet ACK is delayed more than kReordertime_ntp after an ACK of a higher SN packet, 
+				* Packet ACK is delayed more than reorderTime_ntp after an ACK of a higher SN packet, 
 				* compensated for timestamp jumps for new frames.
 				* Raise a loss event and remove from TX list
 				*/
