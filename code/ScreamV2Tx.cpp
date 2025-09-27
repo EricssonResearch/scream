@@ -130,6 +130,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	queueDelay(0.0),
 	queueDelayFractionAvg(0.0f),
 	queueDelayTarget(queueDelayTargetMin),
+	isEnableDelayBasedCongestionControl(true),
 
 	queueDelaySbdVar(0.0f),
 	queueDelaySbdMean(0.0f),
@@ -177,7 +178,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	ecnCeEvent(false),
 	virtualCeEvent(false),
 	isCeThisFeedback(false),
-	isL4sActive(false),
 	fractionMarked(0.0f),
 	lastFractionMarked(0.0f),
 	l4sAlpha(0.1f),
@@ -327,7 +327,8 @@ void ScreamV2Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 	stream->newMediaFrame(time_ntp, bytesRtp, isMarker);
 	stream->updateTargetBitrate(time_ntp);
 
-	if (!isL4sActive && (time_ntp - lastBaseDelayRefreshT_ntp < sRtt_ntp * 2 && time_ntp > sRtt_ntp * 2)) {
+	if (isEnableDelayBasedCongestionControl && 
+		(time_ntp - lastBaseDelayRefreshT_ntp < sRtt_ntp * 2 && time_ntp > sRtt_ntp * 2)) {
 		/*
 		* _Very_ long periods of congestion can cause the base delay to increase
 		* with the effect that the queue delay is estimated wrong, therefore we seek to
@@ -769,7 +770,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		* And allow fake CE marking
 		*/
 		float l4sAlphaLim = 2 / getTotalTargetBitrate() * getMss() * 8 / sRtt;
-		if ((l4sAlpha < l4sAlphaLim * 0.1 || !isL4sActive)) {
+		if (isEnableDelayBasedCongestionControl) {
 			/*
 			* This code fakes ECN-CE events when either ECN or L4S is not enabled or in case packets are not
 			* marked in the network
@@ -829,7 +830,6 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		}
 
 	}
-	isL4sActive = isL4s && (time_ntp - lastCeEventT_ntp < (5 * 65535)) && lastCeEventT_ntp != 0; // L4S enabled and at least one CE event the last 10 seconds
 
 	float time = time_ntp * ntp2SecScaleFactor;
 
@@ -961,9 +961,9 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 			* Convert from NTP domain OWD to an OWD in [s]
 			*/
 			queueDelay = qDel * ntp2SecScaleFactor;
-			if (isL4sActive || queueDelay < 0.001f) {
+			if (queueDelay < 0.001f) {
 				/*
-				* Either L4S marking or that a long standing queue is avoided
+				* A long standing queue is avoided
 				* no need to refresh the base delay for a foreseeable future
 				*/
 				lastBaseDelayRefreshT_ntp = time_ntp - 3 * sRtt_ntp;
@@ -1124,7 +1124,7 @@ float ScreamV2Tx::getTargetBitrate(uint32_t time_ntp, uint32_t ssrc) {
 	* Check if queue delay is constantly high either because of clock drift
 	* or a standing queue. If that is the case, base delay history is reset.
 	*/
-	if (!isL4sActive || isL4sActive && queueDelayMinAvg > queueDelayTarget / 8) {
+	if (isEnableDelayBasedCongestionControl && queueDelayMinAvg > queueDelayTarget / 8) {
 		/*
 		* The base delay may slowly creep up when SCReAM operates only on 
 		* detection of estimated one way delay. The reason can be clock drift 
@@ -1701,16 +1701,10 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	 * Scale the increment more cautious when close the last
 	 * know max CWND. This essentially scales the CWND increase so that it can be as
 	 * small as 0.1MSS per RTT.
-	 */
-	if (isL4sActive) {
-		/*
-		* This downscaling is complemented with a similar downscaling of
-		* the CWND back off.
-		*/
-		increment *= std::max(0.25f, sclI);
-	} else {
-		increment *= sclI;
-	}
+	* This downscaling is complemented with a similar downscaling of
+	* the CWND back off.
+	*/
+	increment *= std::max(0.25f, sclI);
 
 	/*
 	* Reduce increment for very small RTTs

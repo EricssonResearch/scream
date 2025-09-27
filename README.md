@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2025-09-27 :
+  - Delay based congestion control (default enabled) can be selectable with function enableDelayBasedCongestionControl. With this change, delay based congestion congtrol (if enabled) runs fully in parallel with L4S. 
 - 2025-08-08 :
   - Reordering time (packet reodering margin) is made configurable 
 - 2025-05-09 : 

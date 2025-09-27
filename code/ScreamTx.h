@@ -508,6 +508,15 @@ extern "C" {
 			return sRtt;
 		}
 
+		/*
+		* Enable or disable delay based congestion control. In certain scenarios where L4S (or ECN) is known to be 
+		* supported along the transport path it can be beneficial to disable the delay based congestion control because
+		* of the issues with clock drift and clock skipping that can harm performance if L4S is supported. 
+		*/
+		void enableDelayBasedCongestionControl(bool enable) {
+			isEnableDelayBasedCongestionControl = enable;
+		}
+
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -808,6 +817,7 @@ extern "C" {
 		float queueDelay;
 		float queueDelayFractionAvg;
 		float queueDelayTarget;
+		bool isEnableDelayBasedCongestionControl;
 
 		float queueDelaySbdVar;
 		float queueDelaySbdMean;
@@ -858,7 +868,6 @@ extern "C" {
 		bool ecnCeEvent;
 		bool virtualCeEvent;
 		bool isCeThisFeedback;
-		bool isL4sActive;
 		float fractionMarked;
 		float lastFractionMarked;
 		float l4sAlpha;
