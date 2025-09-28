@@ -69,6 +69,7 @@ float multiplicativeIncreaseFactor = 0.05f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
 float reorderTime = 0.03f;
+float enableDelayBasedCc = true;
 
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
@@ -604,6 +605,7 @@ int setup() {
 	screamTx->enableRelaxedPacing(relaxedPacing);
 	screamTx->setMssListMinPacketsInFlight(mtuList, nMtuListItems, minPktsInFlight);
 	screamTx->setReorderTime(reorderTime);
+	screamTx->enableDelayBasedCongestionControl(enableDelayBasedCc);
 
 	if (disablePacing)
 		screamTx->enablePacketPacing(false);
@@ -655,7 +657,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-08-08 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-09-28 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -680,6 +682,7 @@ int main(int argc, char* argv[]) {
 		cerr << "                               -1 for not-ECT (default)" << endl;
 		cerr << "     -scale value             Scale factor in case of loss or ECN event (default 0.7) " << endl;
 		cerr << "     -delaytarget val         Set a queue delay target (default = 0.06s) " << endl;
+		cerr << "     -nodelaycc               Disable delay based congestion control " << endl;
 		cerr << "     -paceheadroom val        Set a packet pacing headroom (default = 1.5) " << endl;
 		cerr << "     -windowheadroom val      How much bytes in flight can exceed cwnd  (default = 5.0) " << endl;
 		cerr << "     -adaptivepaceheadroom val Set adaptive packet pacing headroom (default = 1.5) " << endl;
@@ -743,7 +746,11 @@ int main(int argc, char* argv[]) {
 			ix += 2;
 			continue;
 		}
-
+		if (strstr(argv[ix], "-nodelaycc")) {
+			enableDelayBasedCc = false;
+			ix ++;
+			continue;
+		}
 		if (strstr(argv[ix], "-paceheadroom")) {
 			packetPacingHeadroom = atof(argv[ix + 1]);
 			ix += 2;
