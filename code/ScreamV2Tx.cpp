@@ -64,7 +64,7 @@ static const float kCeDensityAlpha = 1.0f / 16;
 static const float kLowCwndScaleFactor = 1.0f;
 
 // Time constant for queue delay average
-static const float kQueueDelayAvgAlpha = 1.0f / 4;
+static const float kQueueDelayAvgAlpha = 1.0f / 2;
 
 // Packet overhead
 static const int kPacketOverhead = 12 + 8; // RTP + UDP
@@ -181,6 +181,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	fractionMarked(0.0f),
 	lastFractionMarked(0.0f),
 	l4sAlpha(0.1f),
+	l4sAlphaLim(0.1f),
 	ceDensity(1.0f),
 	virtualL4sAlpha(0.0f),
 	postCongestionScale(1.0f),
@@ -753,6 +754,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 					lastFractionMarked = fractionMarked;
 				}
 			}
+		} else {
+			l4sAlpha = 0.0f;
 		}
 
 		if (time_ntp - lastQueueDelayAvgUpdateT_ntp > std::min(1966u, sRtt_ntp)) {
@@ -769,7 +772,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		* Compute an average expected l4sAlpha if the channel is congested at this bitrate
 		* And allow fake CE marking
 		*/
-		float l4sAlphaLim = 2 / getTotalTargetBitrate() * getMss() * 8 / sRtt;
+		l4sAlphaLim = 2.0f / getTotalTargetBitrate() * getMss() * 8 / sRtt;
 		if (isEnableDelayBasedCongestionControl) {
 			/*
 			* This code fakes ECN-CE events when either ECN or L4S is not enabled or in case packets are not
@@ -780,16 +783,19 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* Use the average queue delay to avoid over reaction to lower later retransmissions
 			*/
 
-			if ((queueDelayAvg > queueDelayTarget / 2.0f) && time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
+			if (l4sAlpha < l4sAlphaLim &&
+				queueDelayAvg-queueDelayMinAvg > queueDelayTarget / 2.0f &&
+				time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
 				virtualCeEvent = true;
 				/*
 				 * A virtual L4S alpha is calculated based on the estimated queue delay
 				 * Virtual L4S marking sets in with increased back-off as soon as the queue delay
 				 * exceeds queueDelayTarget/2. With a queueDelayTarget=60ms this gives a 30ms margin
 				 * against clock drift and clock skipping errors
+				 * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim 
 				 */
-				virtualL4sAlpha = std::min(std::min(1.0f, l4sAlphaLim * 4),
-					std::max(l4sAlphaLim, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
+				virtualL4sAlpha = std::min(1.0f, 4.0f * l4sAlphaLim *
+					std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
 			}
 		}
 
@@ -818,6 +824,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			* or when a new frame arrives, in which case the packet pacing rate needs an update
 			*/
 			bytesInFlightRatio = std::min(1.0f, float(prevBytesInFlight) / cwnd);
+
 			updateCwnd(time_ntp);
 			for (int n = 0; n < nStreams; n++) {
 				Stream* tmp = streams[n];
@@ -1720,9 +1727,21 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	increment *= std::max(0.5f, 1.0f - cwndRatio);
 
 	/*
+     * Reduce CWND growth if L4S not enabled or non-functional and queue delay grows
+     */
+	if (isEnableDelayBasedCongestionControl && 
+		(!isL4s || l4sAlpha < l4sAlphaLim)) {
+		/*
+		* Keep at least a little increment to avoid getting stuck at a given rate
+		*/
+		increment *= std::max(0.1f, 1.0f - queueDelayAvg / (queueDelayTarget / 4.0f));
+	}
+
+	/*
 	* Calculate relative growth of CWND
 	*/
 	float tmp2 = 1.0+ (multiplicativeIncreaseScalefactor * cwnd) / getMss();
+
 	/*
 	* Limit multiplicative increase when congestion occured
 	* recently
@@ -1763,7 +1782,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Make the rate estimation more cautious when the window is almost full or overfilled
 	* This is only enabled when queue delay is high
 	*/
-	if (getQueueDelayFraction() > 0.5 && bytesInFlightRatio > kBytesInFlightLimit) {
+	if (getQueueDelayFraction() > 0.25 && bytesInFlightRatio > kBytesInFlightLimit) {
 		rateLeft /= std::min(kMaxBytesInFlightLimitCompensation, bytesInFlightRatio / kBytesInFlightLimit);
 	}
 

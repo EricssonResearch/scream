@@ -20,10 +20,10 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 10;
+const float Tmax = 15;
 const bool isChRate = false;
 const bool printLog = false;
-const bool ecnCapable = false;
+const bool ecnCapable = true;
 const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
@@ -32,8 +32,8 @@ const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-#define TRACEFILE "../traces/trace_no_key.txt"
-//#define TRACEFILE "../traces/trace_flat.txt"
+//#define TRACEFILE "../traces/trace_no_key.txt"
+#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2
@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 8.0e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 4.0e6, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -284,11 +284,11 @@ int main(int argc, char* argv[])
 		}
 
 		if (isChRate) {
-			if ((time > 10.0 && time < 20) && isChRate) {
-				netQueueRate->rate = 20000e3;
+			if ((time > 5.0 && time < 10) && isChRate) {
+				netQueueRate->rate = 8000e3;
 			}
 			else {
-				netQueueRate->rate = 10000e3;
+				netQueueRate->rate = 4000e3;
 			}
 		}
 

@@ -871,6 +871,7 @@ extern "C" {
 		float fractionMarked;
 		float lastFractionMarked;
 		float l4sAlpha;
+		float l4sAlphaLim;
 		float ceDensity;
 		float virtualL4sAlpha;
 		float postCongestionScale;
