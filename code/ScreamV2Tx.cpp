@@ -766,6 +766,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * queueDelay;
 			}
 			lastQueueDelayAvgUpdateT_ntp = time_ntp;
+			//std::cerr << time_ntp/65536.0 << " " << queueDelay << " " << queueDelayAvg << std::endl;
+
 		}
 
 		/*
@@ -796,6 +798,11 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				 */
 				virtualL4sAlpha = std::min(1.0f, 4.0f * l4sAlphaLim *
 					std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
+				//std::cerr << time_ntp/65536.0 << " " << queueDelay << " " << queueDelayAvg << " " << virtualL4sAlpha << std::endl;
+				/*
+				* Scale down backoff when sRtt is large as backoff happens every 1996u NTP 
+				*/
+				virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / 1996);
 			}
 		}
 
@@ -1618,69 +1625,77 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* CE event detected, decrease congestion window
 		*/
-		if (isL4s && !virtualCeEvent) {
-			float backOff = l4sAlpha / 2.0f;
+		if (ecnCeEvent) { //isL4s && !virtualCeEvent) {
+			if (isL4s) {
+				/*
+				* L4S back off
+				*/
+				float backOff = l4sAlpha / 2.0f;
 
-			/*
-			* Limit reduction when CWND becomes small, this is complemented
-    		* with a corresponding reduction in CWND growth
-		    */
-			backOff *= std::max(0.5f, 1.0f - cwndRatio);
+				/*
+				* Limit reduction when CWND becomes small, this is complemented
+				* with a corresponding reduction in CWND growth
+				*/
+				backOff *= std::max(0.5f, 1.0f - cwndRatio);
 
-			/*
-			 * Scale down backoff if close to the last known max
-			 * This is complemented with a scale down of the CWND increase
-			 * Don't scale down back off if queueDelay is large
-			 */
-			if (queueDelay < queueDelayTarget * 0.25f) {
-				backOff *= std::max(0.25f, sclI);
+				/*
+				 * Scale down backoff if close to the last known max
+				 * This is complemented with a scale down of the CWND increase
+				 * Don't scale down back off if queueDelay is large
+				 */
+				if (queueDelay < queueDelayTarget * 0.25f) {
+					backOff *= std::max(0.25f, sclI);
+				}
+
+				if (time_ntp - lastCongestionDetectedT_ntp > 65536 * 5.0f) {
+					/*
+					* A long time since last congested because link throughput
+					* exceeds max video bitrate.
+					* There is a certain risk that CWND has increased way above
+					* bytes in flight, so we reduce it here to get it better on track
+					* and thus the congestion episode is shortened
+					*/
+					cwnd = std::min(cwnd, maxBytesInFlightPrev);
+					/*
+					* Also, we back off a little extra if needed
+					* because alpha is quite likely very low
+					* This can in some cases be an over-reaction though
+					* but as this function should kick in relatively seldom
+					* it should not be to too big concern
+					*/
+					backOff = std::max(backOff, 0.5f);
+
+					/*
+					* In addition, bump up l4sAlpha to a more credible value
+					* This may over react but it is better than
+					* excessive queue delay
+					*/
+					l4sAlpha = std::max(l4sAlpha, 0.5f);
+
+				}
+				/*
+				* Scale down CWND based on l4sAlpha
+				*/
+				cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
+			} 
+			else {
+				/* Classic ECN
+				* Scale down CWND based on fixed Beta
+				*/
+				cwnd = std::max(cwndMin, (int)(ecnCeBeta * cwnd));
 			}
-
-			if (time_ntp - lastCongestionDetectedT_ntp > 65536 * 5.0f) {
-				/*
-				* A long time since last congested because link throughput
-				* exceeds max video bitrate.
-				* There is a certain risk that CWND has increased way above
-				* bytes in flight, so we reduce it here to get it better on track
-				* and thus the congestion episode is shortened
-				*/
-				cwnd = std::min(cwnd, maxBytesInFlightPrev);
-				/*
-				* Also, we back off a little extra if needed
-				* because alpha is quite likely very low
-				* This can in some cases be an over-reaction though
-				* but as this function should kick in relatively seldom
-				* it should not be to too big concern
-				*/
-				backOff = std::max(backOff, 0.5f);
-
-				/*
-				* In addition, bump up l4sAlpha to a more credible value
-				* This may over react but it is better than
-				* excessive queue delay
-				*/
-				l4sAlpha = std::max(l4sAlpha,0.5f);
-
-			}
-			/*
-			* Scale down CWND based on l4sAlpha
-			*/
-			cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
+			virtualCeEvent = false;
 		}
-		else if (virtualCeEvent) {
+		if (virtualCeEvent) {
 			/*
 			* Scale down CWND based on virtualL4sAlpha
 			*/
 			float backOff = virtualL4sAlpha / 2.0f;
 			cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
 		}
-		else {
-			/*
-			* Scale down CWND based on fixed Beta
-			*/
-			cwnd = std::max(cwndMin, (int)(ecnCeBeta * cwnd));
-		}
+		
 		ecnCeEvent = false;
+		virtualCeEvent = false;
 		lastCongestionDetectedT_ntp = time_ntp;
 
 		wasLossEvent = true;

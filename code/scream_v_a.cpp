@@ -23,7 +23,7 @@ const char* log_tag = "";
 const float Tmax = 15;
 const bool isChRate = false;
 const bool printLog = false;
-const bool ecnCapable = true;
+const bool ecnCapable = false;
 const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
@@ -40,10 +40,12 @@ int swprio = -1;
 */
 const int mode = 0x1;// 0x0F;
 
-const float RTT = 0.025f;
+const float RTT = 0.1f;
 
-int mssList[5] = { 300, 500, 800, 1000, 1300 };
-int nMssListItems = 5;
+//int mssList[5] = { 300, 500, 800, 1000, 1300 };
+//int nMssListItems = 5;
+int mssList[5] = { 1000 };
+int nMssListItems = 1;
 
 #include "ScreamTx.h"
 int main(int argc, char* argv[])
@@ -52,7 +54,7 @@ int main(int argc, char* argv[])
 	int tick = (int)(65536.0f / FR);
 	ScreamV2Tx* screamTx = new ScreamV2Tx(0.7f, 0.8f, 0.06f, 10000, 1.5f, 1.5f, 2.0f, 0.05f, isL4s, 5.0f, false, false);
 
-	screamTx->setCwndMinLow(5000);
+	screamTx->setCwndMinLow(2000);
 	screamTx->enablePacketPacing(enablePacing);
 	screamTx->enableRelaxedPacing(true);
 	screamTx->setMssListMinPacketsInFlight(mssList, nMssListItems, 5);
@@ -68,7 +70,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 4.0e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 0.6e6, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -76,7 +78,7 @@ int main(int argc, char* argv[])
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.1e6f, 2e6f, 10e6f, 0.1f, false, 0.1f, true);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.1e6f, 0.5e6f, 10e6f, 0.1f, false, 0.1f, true);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
