@@ -5,6 +5,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 ## News
 - 2025-10-14 :
   - Bug in congestion avoidance logic fixed
+  - Delay based and L4S CC stablity improved for large RTTs
 - 2025-09-27 - 28 :
   - Delay based congestion control (default enabled) can be selectable with function enableDelayBasedCongestionControl. With this change, delay based congestion congtrol (if enabled) runs fully in parallel with L4S. 
   - Option -nodelaycc added BW test tool to disable delay based congestion control.  

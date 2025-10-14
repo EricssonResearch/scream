@@ -57,6 +57,9 @@ static const int kTimeStampAtoScale = 1024;
 // Virtual SRTT, similar to Prague CC
 static const float kSrttVirtual = 0.025f;
 
+// Min congestion backoff interval 1966 = 30ms in NTP time
+static const uint32_t kMinCongestionBackOffInterval_ntp = 1966u;
+
 // Time constant for CE dentity averaging
 static const float kCeDensityAlpha = 1.0f / 16;
 
@@ -691,7 +694,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 	}
 
 	if (isLast) {
-		if (time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) { // CE event at least every 30ms
+		if (time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) { // CE event at least every 30ms
 			if (isCeThisFeedback) {
 				ecnCeEvent = true;
 				lastLossEventT_ntp = time_ntp;
@@ -758,7 +761,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			l4sAlpha = 0.0f;
 		}
 
-		if (time_ntp - lastQueueDelayAvgUpdateT_ntp > std::min(1966u, sRtt_ntp)) {
+		if (time_ntp - lastQueueDelayAvgUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
 			if (queueDelay < queueDelayAvg) {
 				queueDelayAvg = queueDelay;
 			}
@@ -766,8 +769,6 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * queueDelay;
 			}
 			lastQueueDelayAvgUpdateT_ntp = time_ntp;
-			//std::cerr << time_ntp/65536.0 << " " << queueDelay << " " << queueDelayAvg << std::endl;
-
 		}
 
 		/*
@@ -787,7 +788,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 
 			if (l4sAlpha < l4sAlphaLim &&
 				queueDelayAvg-queueDelayMinAvg > queueDelayTarget / 2.0f &&
-				time_ntp - lastLossEventT_ntp > std::min(1966u, sRtt_ntp)) {
+				time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
 				virtualCeEvent = true;
 				/*
 				 * A virtual L4S alpha is calculated based on the estimated queue delay
@@ -798,11 +799,10 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				 */
 				virtualL4sAlpha = std::min(1.0f, 4.0f * l4sAlphaLim *
 					std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
-				//std::cerr << time_ntp/65536.0 << " " << queueDelay << " " << queueDelayAvg << " " << virtualL4sAlpha << std::endl;
 				/*
-				* Scale down backoff when sRtt is large as backoff happens every 1996u NTP 
+				* Scale down backoff when sRtt is large as backoff happens every several times per RTT 
 				*/
-				virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / 1996);
+				virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 			}
 		}
 
@@ -822,7 +822,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		if (lastCwndUpdateT_ntp == 0)
 			lastCwndUpdateT_ntp = time_ntp;
 
-		if (time_ntp - lastCwndUpdateT_ntp > std::min(1966u, sRtt_ntp) ||
+		if (time_ntp - lastCwndUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp) ||
 			lossEvent || ecnCeEvent || virtualCeEvent || isNewFrame) {
 			/*
 			* There is no gain with a too frequent CWND update
@@ -1625,12 +1625,17 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* CE event detected, decrease congestion window
 		*/
-		if (ecnCeEvent) { //isL4s && !virtualCeEvent) {
+		if (ecnCeEvent) {
 			if (isL4s) {
 				/*
-				* L4S back off
+				* L4S backoff
 				*/
 				float backOff = l4sAlpha / 2.0f;
+
+				/*
+				* Scale down backoff when RTT is high as several backoff events occur per RTT
+				*/
+				backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 
 				/*
 				* Limit reduction when CWND becomes small, this is complemented
