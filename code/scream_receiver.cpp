@@ -289,7 +289,7 @@ int main(int argc, char* argv[])
 	}
 
 	if (ipv6) {
-		if (bind(fd_incoming_rtp, (struct sockaddr*)&incoming_rtp_addr6, sizeof(incoming_rtp_addr6)) < 0) {
+		if (::bind(fd_incoming_rtp, (struct sockaddr*)&incoming_rtp_addr6, sizeof(incoming_rtp_addr6)) < 0) {
 			perror("bind incoming_rtp_addr failed");
 			return 0;
 		}
@@ -298,7 +298,7 @@ int main(int argc, char* argv[])
 		}
 	}
 	else {
-		if (bind(fd_incoming_rtp, (struct sockaddr*)&incoming_rtp_addr, sizeof(incoming_rtp_addr)) < 0) {
+		if (::bind(fd_incoming_rtp, (struct sockaddr*)&incoming_rtp_addr, sizeof(incoming_rtp_addr)) < 0) {
 			perror("bind incoming_rtp_addr failed");
 			return 0;
 		}

@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <signal.h>
-#include <sys/timerfd.h>
 struct itimerval timer;
 struct sigaction sa;
 
@@ -284,26 +283,6 @@ void* transmitRtpThread(void* arg) {
 static int makePeriodic(unsigned int period, struct periodicInfo* info)
 {
 	int ret;
-	unsigned int ns;
-	unsigned int sec;
-	int fd;
-	struct itimerspec itval;
-
-	/* Create the timer */
-	fd = timerfd_create(CLOCK_MONOTONIC, 0);
-	info->wakeupsMissed = 0;
-	info->timer_fd = fd;
-	if (fd == -1)
-		return fd;
-
-	/* Make the timer periodic */
-	sec = period / 1000000;
-	ns = (period - (sec * 1000000)) * 1000;
-	itval.it_interval.tv_sec = sec;
-	itval.it_interval.tv_nsec = ns;
-	itval.it_value.tv_sec = sec;
-	itval.it_value.tv_nsec = ns;
-	ret = timerfd_settime(fd, 0, &itval, NULL);
 	return ret;
 }
 
@@ -500,7 +479,7 @@ int setup() {
 			}
 		}
 
-		if (bind(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr6, sizeof(incoming_rtcp_addr6)) < 0) {
+		if (::bind(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr6, sizeof(incoming_rtcp_addr6)) < 0) {
 			perror("bind outgoing_rtp_addr failed");
 			return 0;
 		}
@@ -537,7 +516,7 @@ int setup() {
 			}
 		}
 
-		if (bind(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr, sizeof(incoming_rtcp_addr)) < 0) {
+		if (::bind(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr, sizeof(incoming_rtcp_addr)) < 0) {
 			perror("bind outgoing_rtp_addr failed");
 			return 0;
 		}

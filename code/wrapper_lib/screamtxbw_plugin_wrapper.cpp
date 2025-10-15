@@ -5,7 +5,6 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include <sys/timerfd.h>
 static struct itimerval timer;
 
 typedef void (*ScreamTxBwPluginPushCallBack)(uint8_t *cb_data, uint32_t recvlen, uint16_t seqNr, uint32_t ts, uint8_t pt, uint8_t isMark, uint32_t ssrc);
@@ -41,32 +40,6 @@ static float rateScale = 0.5f;
 static uint32_t SSRC = 100;
 static uint64_t numframes = UINT64_MAX;
 static double t0=0;
-
-static int makePeriodic(unsigned int period, struct periodicInfo *info)
-{
-	int ret;
-	unsigned int ns;
-	unsigned int sec;
-	int fd;
-	struct itimerspec itval;
-
-	/* Create the timer */
-	fd = timerfd_create(CLOCK_MONOTONIC, 0);
-	info->wakeupsMissed = 0;
-	info->timer_fd = fd;
-	if (fd == -1)
-		return fd;
-
-	/* Make the timer periodic */
-	sec = period / 1000000;
-	ns = (period - (sec * 1000000)) * 1000;
-	itval.it_interval.tv_sec = sec;
-	itval.it_interval.tv_nsec = ns;
-	itval.it_value.tv_sec = sec;
-	itval.it_value.tv_nsec = ns;
-	ret = timerfd_settime(fd, 0, &itval, NULL);
-	return ret;
-}
 
 static void waitPeriod(struct periodicInfo *info)
 {
@@ -105,8 +78,6 @@ void *createRtpThread(void *arg) {
 	uint32_t dT_us = (uint32_t)(1e6 / FPS);
 	unsigned char PT = 98;
 	struct periodicInfo info;
-
-	makePeriodic(dT_us, &info);
 
 	/*
 	* Infinite loop that generates RTP packets

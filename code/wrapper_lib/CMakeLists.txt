@@ -1,6 +1,7 @@
 # source files
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
+cmake_minimum_required(VERSION 2.6)
 
 set(BUILD_SHARED_LIBS  on)
 
