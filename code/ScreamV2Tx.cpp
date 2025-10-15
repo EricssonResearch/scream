@@ -67,7 +67,7 @@ static const float kCeDensityAlpha = 1.0f / 16;
 static const float kLowCwndScaleFactor = 1.0f;
 
 // Time constant for queue delay average
-static const float kQueueDelayAvgAlpha = 1.0f / 2;
+static const float kQueueDelayAvgAlpha = 1.0f / 4;
 
 // Packet overhead
 static const int kPacketOverhead = 12 + 8; // RTP + UDP
@@ -798,7 +798,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				 * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim 
 				 */
 				virtualL4sAlpha = std::min(1.0f, 4.0f * l4sAlphaLim *
-					std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
+					std::max(0.0f, (queueDelayAvg- queueDelayMinAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
 				/*
 				* Scale down backoff when sRtt is large as backoff happens every several times per RTT 
 				*/

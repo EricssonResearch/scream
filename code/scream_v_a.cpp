@@ -20,7 +20,7 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 15;
+const float Tmax = 50;
 const bool isChRate = false;
 const bool printLog = false;
 const bool ecnCapable = false;
