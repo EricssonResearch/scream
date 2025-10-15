@@ -5,6 +5,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 ## News
 - 2025-10-15 :
   - Delay based CC modified slightly
+  - L4S based CC action after long non-congested period is modified
   - Build date for BW test tool changed
 - 2025-10-14 :
   - Bug in congestion avoidance logic fixed

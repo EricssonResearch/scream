@@ -23,7 +23,7 @@ const char* log_tag = "";
 const float Tmax = 50;
 const bool isChRate = false;
 const bool printLog = false;
-const bool ecnCapable = false;
+const bool ecnCapable = true;
 const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
@@ -32,15 +32,15 @@ const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-//#define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_flat.txt"
+#define TRACEFILE "../traces/trace_no_key.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2
 */
 const int mode = 0x1;// 0x0F;
 
-const float RTT = 0.1f;
+const float RTT = 0.02f;
 
 //int mssList[5] = { 300, 500, 800, 1000, 1300 };
 //int nMssListItems = 5;
@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 0.6e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 1.0e6, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.1e6f, 0.5e6f, 10e6f, 0.1f, false, 0.1f, true);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.1e6f, 0.5e6f, 20e6f, 0.1f, false, 0.1f, true);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
@@ -286,11 +286,11 @@ int main(int argc, char* argv[])
 		}
 
 		if (isChRate) {
-			if ((time > 5.0 && time < 10) && isChRate) {
-				netQueueRate->rate = 8000e3;
+			if ((time > 10.0 && time < 20) && isChRate) {
+				netQueueRate->rate = 4000e3;
 			}
 			else {
-				netQueueRate->rate = 4000e3;
+				netQueueRate->rate = 10000e3;
 			}
 		}
 

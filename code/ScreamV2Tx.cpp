@@ -1644,15 +1644,15 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 				backOff *= std::max(0.5f, 1.0f - cwndRatio);
 
 				/*
-				 * Scale down backoff if close to the last known max
-				 * This is complemented with a scale down of the CWND increase
-				 * Don't scale down back off if queueDelay is large
-				 */
+				* Scale down backoff if close to the last known max
+				* This is complemented with a scale down of the CWND increase
+				* Don't scaledown back off if queueDelay is large
+				*/
 				if (queueDelay < queueDelayTarget * 0.25f) {
 					backOff *= std::max(0.25f, sclI);
 				}
 
-				if (time_ntp - lastCongestionDetectedT_ntp > 65536 * 5.0f) {
+				if (time_ntp - lastCongestionDetectedT_ntp > 100*std::max(sRtt, kSrttVirtual)*65536) {
 					/*
 					* A long time since last congested because link throughput
 					* exceeds max video bitrate.
@@ -1661,14 +1661,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 					* and thus the congestion episode is shortened
 					*/
 					cwnd = std::min(cwnd, maxBytesInFlightPrev);
-					/*
-					* Also, we back off a little extra if needed
-					* because alpha is quite likely very low
-					* This can in some cases be an over-reaction though
-					* but as this function should kick in relatively seldom
-					* it should not be to too big concern
-					*/
-					backOff = std::max(backOff, 0.5f);
 
 					/*
 					* In addition, bump up l4sAlpha to a more credible value
@@ -1676,7 +1668,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 					* excessive queue delay
 					*/
 					l4sAlpha = std::max(l4sAlpha, 0.5f);
-
+					backOff = l4sAlpha / 2.0f;
 				}
 				/*
 				* Scale down CWND based on l4sAlpha
