@@ -1807,7 +1807,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		rtt += queueDelayTarget / 4.0f;
 	}
 
-	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, rtt + 0.0f));
+	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, rtt + 0.001f));
 
 	/*
 	* Make the rate estimation more cautious when the window is almost full or overfilled
