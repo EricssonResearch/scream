@@ -3,6 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2025-10-16 :
+  - Delay and L4S based CC further modified for increased stability  
+  - Build date for BW test tool changed
 - 2025-10-15 :
   - Delay based CC modified slightly
   - L4S based CC action after long non-congested period is modified

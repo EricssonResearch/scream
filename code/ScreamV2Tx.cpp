@@ -67,7 +67,7 @@ static const float kCeDensityAlpha = 1.0f / 16;
 static const float kLowCwndScaleFactor = 1.0f;
 
 // Time constant for queue delay average
-static const float kQueueDelayAvgAlpha = 1.0f / 4;
+static const float kQueueDelayAvgAlpha = 1.0f / 2;
 
 // Packet overhead
 static const int kPacketOverhead = 12 + 8; // RTP + UDP
@@ -122,6 +122,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	isEnableRelaxedPacing(false),
 
 	sRtt(0.05f), // Init SRTT to 50ms
+	sRttSh(0.05f),
 	sRtt_ntp(3277),
 	sRttSh_ntp(3277),
 	sRttShPrev_ntp(3277),
@@ -787,7 +788,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			*/
 
 			if (l4sAlpha < l4sAlphaLim &&
-				queueDelayAvg-queueDelayMinAvg > queueDelayTarget / 2.0f &&
+				queueDelayAvg > queueDelayTarget / 2.0f &&
 				time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
 				virtualCeEvent = true;
 				/*
@@ -797,8 +798,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				 * against clock drift and clock skipping errors
 				 * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim 
 				 */
-				virtualL4sAlpha = std::min(1.0f, 4.0f * l4sAlphaLim *
-					std::max(0.0f, (queueDelayAvg- queueDelayMinAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
+				virtualL4sAlpha = std::min(1.0f, 2.0f * l4sAlphaLim *
+					std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
 				/*
 				* Scale down backoff when sRtt is large as backoff happens every several times per RTT 
 				*/
@@ -995,6 +996,7 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 			if (rtt < 1000000 && isLast) {
 				sRttShPrev_ntp = sRttSh_ntp;
 				sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
+				sRttSh = sRttSh_ntp * ntp2SecScaleFactor;
 				if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
 					sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
 					lastSRttUpdateT_ntp = time_ntp;
@@ -1667,7 +1669,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 					* This may over react but it is better than
 					* excessive queue delay
 					*/
-					l4sAlpha = std::max(l4sAlpha, 0.5f);
+					l4sAlpha = 0.5f;
 					backOff = l4sAlpha / 2.0f;
 				}
 				/*
@@ -1688,6 +1690,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			* Scale down CWND based on virtualL4sAlpha
 			*/
 			float backOff = virtualL4sAlpha / 2.0f;
+
+			/*
+			* Limit reduction when CWND becomes small, this is complemented
+			* with a corresponding reduction in CWND growth
+			*/
+			backOff *= std::max(0.5f, 1.0f - cwndRatio);
+
 			cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
 		}
 		
@@ -1742,13 +1751,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
      * Reduce CWND growth if L4S not enabled or non-functional and queue delay grows
      */
 	if (isEnableDelayBasedCongestionControl && 
-		(!isL4s || l4sAlpha < l4sAlphaLim)) {
+		(!isL4s || l4sAlpha < 0.0001f)) {
 		/*
 		* Keep at least a little increment to avoid getting stuck at a given rate
 		*/
 		increment *= std::max(0.1f, 1.0f - queueDelayAvg / (queueDelayTarget / 4.0f));
 	}
-
+	
 	/*
 	* Calculate relative growth of CWND
 	*/
@@ -1788,7 +1797,17 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* accuracy that in turn can lead to a too high media bitrate. It is thus better to slightly over 
 	* estimate sRtt than under estimate it.
 	*/
-	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt + 0.001f));
+	float rtt = std::min(sRtt, sRttSh);
+
+	if (l4sAlpha < 0.0001f) {
+		/*
+		* Quite unlikely that packets are L4S marked, add a little extra RTT to make 
+		* delay based CC more stable
+		*/
+		rtt += queueDelayTarget / 4.0f;
+	}
+
+	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, rtt + 0.0f));
 
 	/*
 	* Make the rate estimation more cautious when the window is almost full or overfilled

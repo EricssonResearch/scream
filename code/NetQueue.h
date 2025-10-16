@@ -43,6 +43,10 @@ public:
 
     void updateRate(float time);
 
+    void addBytes(float time);
+
+    bool canExtract();
+
     NetQueueItem *items[NetQueueSize];
     int head; // Pointer to last inserted item
     int tail; // Pointer to the oldest item
@@ -59,6 +63,8 @@ public:
     float pDrop;
     float prevRateFrac;
 	float tQueueAvg;
+    float bytes;
+    float tLastAddBytes;
 };
 
 #endif

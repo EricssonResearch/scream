@@ -41,6 +41,8 @@ NetQueue::NetQueue(float delay_, float rate_, float jitter_, bool isL4s_) {
     pDrop = 0.0f;
     prevRateFrac = 0.0f;
 	tQueueAvg = 0.0;
+	bytes = 0.0;
+	tLastAddBytes = 0.0;
 
 }
 
@@ -71,6 +73,7 @@ void NetQueue::insert(float time,
 	sendTime = std::max(sendTime, time) + tmp;	
 	items[head]->tRelease = sendTime + delay + jitter * (rand() / float(RAND_MAX));;
 	items[head]->tQueue = time;
+	/*
 	if (rate > 0) {
 		float qDelay = items[tail]->tRelease - items[tail]->tQueue;
 		if (isL4s) {
@@ -89,9 +92,9 @@ void NetQueue::insert(float time,
 			}
 		}
 	}
+	*/
 
-
-	items[head]->isCe = isCe;
+	//items[head]->isCe = isCe;
 	items[head]->isMark = isMark;
 }
 
@@ -105,18 +108,39 @@ bool NetQueue::extract(float time,
 	unsigned int& timeStamp) {
 	if (items[tail]->used == false) {
 		lastQueueLow = time;
+		bytes = 0.0;
 		return false;
 	}
 	else {
-		if (time >= items[tail]->tRelease) {
+		if (time >= items[tail]->tRelease || rate > 0.0) {
 		//	items[tail]->tReleaseExt = time;
 			rtpPacket = items[tail]->packet;
 			seqNr = items[tail]->seqNr;
 			timeStamp = items[tail]->timeStamp;
 			ssrc = items[tail]->ssrc;
 			size = items[tail]->size;
-			isCe = items[tail]->isCe;
+			//isCe = items[tail]->isCe;
 			isMark = items[tail]->isMark;
+
+			if (rate > 0) {
+				float qDelay = items[tail]->tRelease - items[tail]->tQueue;
+				if (isL4s) {
+					int ix = int(time / 60.0f);
+					//float pMark = pMarkList[ix] / 100.0;
+					float pMark = std::max(0.0f, std::min(1.0f, (qDelay - l4sThLo) / (l4sThHi - l4sThLo)));
+					markCarry += pMark;
+					//if (markCarry >= 1.0f) {
+					if ((rand() % 1000) / 1000.0 < pMark) {
+						markCarry -= 1.0f;
+						isCe = true;
+					}
+				}
+				else {
+					if (qDelay > 0.03) {
+						isCe = true;
+					}
+				}
+			}
 
 			items[tail]->used = false;
 
@@ -130,8 +154,32 @@ bool NetQueue::extract(float time,
 	}
 }
 
+void NetQueue::addBytes(float time) {
+	if (sizeOfQueue() > 0) {
+		bytes += (time - tLastAddBytes) * rate / 8.0;
+	}
+	else {
+		//bytes = 0.0;
+	}
+	tLastAddBytes = time;
+	//cerr << time << " " << bytes << endl;
+}
 
-
+bool NetQueue::canExtract() {
+	if (sizeOfQueue() > 0) {
+		if (items[tail]->size <= bytes) {
+			bytes -= items[tail]->size;
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+	else {
+		bytes = 0.0;
+		return false;
+	}
+}
 
 int NetQueue::sizeOfQueue() {
 	int size = 0;

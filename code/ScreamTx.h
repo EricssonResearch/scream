@@ -806,6 +806,7 @@ extern "C" {
 		bool isEnableRelaxedPacing;
 
 		float sRtt;
+		float sRttSh;
 		uint32_t sRtt_ntp;
 		uint32_t sRttSh_ntp;
 		uint32_t sRttShPrev_ntp;
