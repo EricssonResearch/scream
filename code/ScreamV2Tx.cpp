@@ -40,7 +40,7 @@ static const uint32_t kBaseDelayResetInterval_ntp = 3932160; // 60s in NTP doain
 static const int kNumRateLimitRtts = 5;
 
 // L4S alpha gain factor, for scalable congestion control
-static const float kL4sG = 1.0f / 32 ;
+static const float kL4sG = 1.0f / 8 ;
 
 // L4S alpha max value, for scalable congestion control
 static const float kL4sAlphaMax = 1.0;
@@ -749,7 +749,16 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 					*   2) delay estimation algorithm also works in parallel
 					*   3) L4S marking algorithm can lag behind a little and potentially overmark
 					*/
-					l4sAlpha = std::min(kL4sAlphaMax, kL4sG * fractionMarked + (1.0f - kL4sG) * l4sAlpha);
+
+					if (fractionMarked >= l4sAlpha) {
+						l4sAlpha = std::min(kL4sAlphaMax, kL4sG * fractionMarked + (1.0f - kL4sG) * l4sAlpha);
+					} else {
+						/*
+						* Slow decay
+						*/
+						l4sAlpha *= (1.0 - kL4sG / 16.0f);
+					}
+					
 
 					bytesDeliveredThisRtt = 0;
 					bytesMarkedThisRtt = 0;

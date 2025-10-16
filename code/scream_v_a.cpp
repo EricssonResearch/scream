@@ -32,15 +32,15 @@ const bool enablePacing = true;
 
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
-#define TRACEFILE "../traces/trace_no_key.txt"
-//#define TRACEFILE "../traces/trace_flat.txt"
+//#define TRACEFILE "../traces/trace_no_key.txt"
+#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2
 */
 const int mode = 0x1;// 0x0F;
 
-const float RTT = 0.020f;
+const float RTT = 0.02f;
 
 //int mssList[5] = { 300, 500, 800, 1000, 1300 };
 //int nMssListItems = 5;
@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 1.0e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 10e6, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -294,10 +294,10 @@ int main(int argc, char* argv[])
 
 		if (isChRate) {
 			if ((time > 10.0 && time < 20) && isChRate) {
-				netQueueRate->rate = 5000e3;
+				netQueueRate->rate = 600e3;
 			}
 			else {
-				netQueueRate->rate = 10000e3;
+				netQueueRate->rate = 1000e3;
 			}
 		}
 
