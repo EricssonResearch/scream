@@ -212,7 +212,7 @@ extern "C" {
 		* multiplicativeIncreaseScaleFactor, indicates how fast CWND can increase when link capacity
 		*  increases. E.g 0.05 increases up tp 5% of the CWND per RTT.
 		* isL4s = true changes congestion window reaction to ECN marking to a scalable function, similar to DCTCP
-		* windowHeadroom, sets how much bytes in flight can exceed the congestion window
+		* maxWindowHeadroom, sets how much bytes in flight can exceed the congestion window
 		* enableSbd increases the delay target if competing buffer building flows are detected
 		* enableClockDriftCompensation = true compensates for the case where the endpoints clocks drift relative to one
 		*  another. Note though that clock drift is not always montonous IRL
@@ -227,7 +227,7 @@ extern "C" {
 			float bytesInFlightHeadRoom = kBytesInFlightHeadRoom,
 			float multiplicativeIncreaseScalefactor = kMultiplicativeIncreaseScalefactor,
 			bool isL4s = false,
-			float windowHeadroom = 5.0f,
+			float maxWindowHeadroom = 5.0f,
 			bool enableSbd = kEnableSbd,
 			bool enableClockDriftCompensation = false);
 
@@ -504,12 +504,12 @@ extern "C" {
 		/*
 		* Get SRtt
 		*/
-		int getSRtt() {
+		float getSRtt() {
 			return sRtt;
 		}
 
 		/*
-		* Enable or disable delay based congestion control. In certain scenarios where L4S (or ECN) is known to be 
+		* Enable/disable delay based congestion control. In certain scenarios where L4S (or ECN) is known to be 
 		* supported along the transport path it can be beneficial to disable the delay based congestion control because
 		* of the issues with clock drift and clock skipping that can harm performance if L4S is supported. 
 		*/
@@ -517,6 +517,14 @@ extern "C" {
 			isEnableDelayBasedCongestionControl = enable;
 		}
 
+		/*
+		* Enable/disable adaptive window headroom
+		* Recommended for cases where it is preferred to get a stable bitrate for instance 
+		* when the media encoder reacts slowly to rate changes. 
+		*/
+		void isEnableAdaptiveWindowHeadroom(bool val) {
+			enableAdaptiveWindowHeadroom = val;
+		}
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -795,7 +803,7 @@ extern "C" {
 		float bytesInFlightHeadRoom;
 		float multiplicativeIncreaseScalefactor;
 		bool isL4s;
-		float windowHeadroom;
+		float maxWindowHeadroom;
 		bool enableSbd;
 		bool enableClockDriftCompensation;
 
@@ -810,6 +818,7 @@ extern "C" {
 		uint32_t sRtt_ntp;
 		uint32_t sRttSh_ntp;
 		uint32_t sRttShPrev_ntp;
+		float rttDev;
 		float currRtt;
 		uint32_t ackedOwd;
 		uint32_t baseOwd;
@@ -857,6 +866,8 @@ extern "C" {
 		int maxBytesInFlight;
 		int maxBytesInFlightPrev;
 		float bytesInFlightRatio;
+		float windowHeadroom;
+		bool enableAdaptiveWindowHeadroom;
 
 		int bytesMarkedThisRtt;
 		int bytesDeliveredThisRtt;

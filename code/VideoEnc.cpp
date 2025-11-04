@@ -8,7 +8,7 @@
 
 using namespace std;
 
-static const int kRtpOverHead = 12;
+
 
 uint32_t SSRC = 1;
 VideoEnc::VideoEnc(RtpQueue* rtpQueue_, float frameRate_, char *fname, int ixOffset_, float sluggishness_) {

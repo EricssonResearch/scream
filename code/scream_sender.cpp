@@ -59,7 +59,7 @@ bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 bool pushTraffic = false;
-float windowHeadroom = 5.0f;
+float maxWindowHeadroom = 5.0f;
 bool relaxedPacing = false;
 float packetPacingHeadroom = 1.5f;
 float scaleFactor = 0.7f;
@@ -596,7 +596,7 @@ int setup() {
 			bytesInFlightHeadroom,
 			multiplicativeIncreaseFactor,
 			ect == 1,
-			windowHeadroom,
+			maxWindowHeadroom,
 			false,
 			enableClockDriftCompensation);
 	}
@@ -657,7 +657,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-10-16 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-11-04 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -684,7 +684,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -delaytarget val         Set a queue delay target (default = 0.06s) " << endl;
 		cerr << "     -nodelaycc               Disable delay based congestion control " << endl;
 		cerr << "     -paceheadroom val        Set a packet pacing headroom (default = 1.5) " << endl;
-		cerr << "     -windowheadroom val      How much bytes in flight can exceed cwnd  (default = 5.0) " << endl;
+		cerr << "     -maxwindowheadroom val   How much bytes in flight can exceed cwnd  (default = 5.0) " << endl;
 		cerr << "     -adaptivepaceheadroom val Set adaptive packet pacing headroom (default = 1.5) " << endl;
 		cerr << "     -relaxedpacing           Allow increased pacing rate when max rate reached (default = false) " << endl;
 		cerr << "     -inflightheadroom val    Set a bytes in flight headroom (default = 2.0) " << endl;
@@ -813,8 +813,8 @@ int main(int argc, char* argv[]) {
 			ix += 3;
 			continue;
 		}
-		if (strstr(argv[ix], "-windowheadroom")) {
-			windowHeadroom = atof(argv[ix + 1]);
+		if (strstr(argv[ix], "-maxwindowheadroom")) {
+			maxWindowHeadroom = atof(argv[ix + 1]);
 			ix += 2;
 			continue;
 		}

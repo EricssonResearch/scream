@@ -1,6 +1,6 @@
 #ifndef VIDEO_ENC
 #define VIDEO_ENC
-
+static const int kRtpOverHead = 12;
 class RtpQueue;
 #define MAX_FRAMES 10000
 class VideoEnc {
@@ -12,7 +12,7 @@ public:
     void setTargetBitrate(float targetBitrate);
 
     void setMss(int mss_) {
-        mss = mss_;
+        mss = mss_
     }
 
     RtpQueue* rtpQueue;
