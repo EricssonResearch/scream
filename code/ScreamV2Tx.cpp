@@ -69,7 +69,7 @@ static const float kCeDensityAlpha = 1.0f / 16;
 static const float kLowCwndScaleFactor = 1.0f;
 
 // Time constant for queue delay average
-static const float kQueueDelayAvgAlpha = 1.0f / 2;
+static const float kQueueDelayAvgAlpha = 1.0f / 4;
 
 // Packet overhead
 static const int kPacketOverhead = 12 + 8; // RTP + UDP
@@ -90,6 +90,8 @@ static const float kRelaxedPacingLimitHigh = 1.0f;
 static const float kMaxRelaxedPacingFactor = 5.0f;
 
 static const float kMinWindowHeadroom = 1.2f;
+
+static const float kQueueDelayDevNorm = 0.025f;
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -130,7 +132,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	sRtt_ntp(3277),
 	sRttSh_ntp(3277),
 	sRttShPrev_ntp(3277),
-	rttDev(0.0f),
 	currRtt(-1.0f),
 	ackedOwd(0),
 	baseOwd(UINT32_MAX),
@@ -139,6 +140,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	queueDelay(0.0),
 	queueDelayFractionAvg(0.0f),
 	queueDelayTarget(queueDelayTargetMin),
+	queueDelayDev(0.0f),
 	isEnableDelayBasedCongestionControl(true),
 
 	queueDelaySbdVar(0.0f),
@@ -177,6 +179,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	bytesInFlightRatio(0.0f),
 	windowHeadroom(maxWindowHeadroom),
 	enableAdaptiveWindowHeadroom(true),
+	cwndGrowthRestrictionWhenCongested(true),
 
 	bytesMarkedThisRtt(0),
 	bytesDeliveredThisRtt(0),
@@ -448,7 +451,7 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 	* Determine if window is large enough to transmit
 	* an RTP packet
 	*/
-	bool exit = (bytesInFlight + sizeOfNextRtp) > cwnd * windowHeadroom * relFrameSizeHigh + getMss();
+	bool exit = (bytesInFlight + sizeOfNextRtp) > cwnd * windowHeadroom /** relFrameSizeHigh*/ + getMss();
 
 	/*
 	* Enforce packet pacing
@@ -786,6 +789,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			else {
 				queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * queueDelay;
 			}
+			queueDelayDev = (63.0f * queueDelayDev + (queueDelay - queueDelayAvg) / kQueueDelayDevNorm) / 64.0f;
+			std::cerr << queueDelayDev << std::endl;
 			lastQueueDelayAvgUpdateT_ntp = time_ntp;
 		}
 
@@ -1016,12 +1021,8 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 				sRttSh = sRttSh_ntp * ntp2SecScaleFactor;
 				if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
 					/*
-					* Update sRtt and rttDev
-					* rttDev is standard deviation of RTT, normalized to kSrttVirtual
+					* Update sRtt
 					*/
-					float stdDev = std::fabs(sRttSh - sRtt)/kSrttVirtual;
-					rttDev = (63.0f * rttDev + stdDev) / 64.0f;
-
 					sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
 					sRtt = sRtt_ntp * ntp2SecScaleFactor;
 					lastSRttUpdateT_ntp = time_ntp;
@@ -1595,7 +1596,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		* Limited headroom can also be beneficial when link capacity varies.
 		*/
 		if (enableAdaptiveWindowHeadroom) {
-			windowHeadroom = kMinWindowHeadroom + (maxWindowHeadroom - kMinWindowHeadroom) * std::max(0.0f, (0.1f - rttDev) / 0.1f);
+			windowHeadroom = kMinWindowHeadroom + (maxWindowHeadroom - kMinWindowHeadroom) * std::max(0.0f, (0.1f - queueDelayDev) / 0.1f);
 		}
 
 		lastSlowUpdateT_ntp = time_ntp;
@@ -1678,13 +1679,22 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 				*/
 				backOff *= std::max(0.5f, 1.0f - cwndRatio);
 
-				/*
-				* Scale down backoff if close to the last known max
-				* This is complemented with a scale down of the CWND increase
-				* Don't scaledown back off if queueDelay is large
-				*/
 				if (queueDelay < queueDelayTarget * 0.25f) {
+					/*
+					* Scale down backoff if close to the last known max
+					* This is complemented with a scale down of the CWND increase
+					* Don't scaledown back off if queueDelay is large
+					*/
 					backOff *= std::max(0.25f, sclI);
+
+					/*
+					* Counteract the limitation in CWND increase when queue delay varies.
+					* This helps to avoid that SCReAM is starved by competing TCP Prague flows
+					* Don't scaledown back off if queueDelay is large
+					*/
+					if (cwndGrowthRestrictionWhenCongested) {
+						backOff *= std::min(1.0f, std::max(0.1f, (0.1f - queueDelayDev) / 0.1f));
+					}
 				}
 
 				if (time_ntp - lastCongestionDetectedT_ntp > 100*std::max(sRtt, kSrttVirtual)*65536) {
@@ -1797,6 +1807,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	}
 	
 	/*
+	* Limit increase if queue delay varies, this gives a more stable rate when congested.
+	*/
+	if (cwndGrowthRestrictionWhenCongested) {
+		increment *= std::min(1.0f, std::max(0.1f, (0.1f - queueDelayDev) / 0.1f));
+	}
+
+	/*
 	* Calculate relative growth of CWND
 	*/
 	float tmp2 = 1.0+ (multiplicativeIncreaseScalefactor * cwnd) / getMss();
@@ -1851,7 +1868,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Make the rate estimation more cautious when the window is almost full or overfilled
 	* This is only enabled when queue delay is high
 	*/
-	if (getQueueDelayFraction() > 0.25 && bytesInFlightRatio > kBytesInFlightLimit) {
+	if (false && getQueueDelayFraction() > 0.25 && bytesInFlightRatio > kBytesInFlightLimit) {
 		rateLeft /= std::min(kMaxBytesInFlightLimitCompensation, bytesInFlightRatio / kBytesInFlightLimit);
 	}
 
@@ -1865,7 +1882,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Scale down based on weigthed average high percentile of frame sizes
 	*/
-	rateLeft /= std::max(1.1f,relFrameSizeHigh);
+	rateLeft /= std::max(1.1f,0.0f*relFrameSizeHigh);
 
 	/*
 	* Compensation for packetization overhead, important when MSS is small

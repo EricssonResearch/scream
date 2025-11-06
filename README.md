@@ -3,9 +3,10 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
-- 2025-11-04 :
+- 2025-11-04 - 06 :
   - l4sAlpha calculation use fast attack slow decay filter
-  - Reference window headroom made adaptive
+  - Reference window headroom made adaptive based on queue delay variation
+  - CWND increase restriction based on queue delay variation 
   - Build date for BW test tool sender changed
 - 2025-10-16 :
   - Delay and L4S based CC further modified for increased stability  

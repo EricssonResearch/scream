@@ -51,7 +51,7 @@ float keyFrameInterval = 0.0;
 float keyFrameSize = 1.0;
 int initRate = 1000;
 int minRate = 1000;
-int maxRate = 200000;
+int maxRate = 500000;
 bool enableClockDriftCompensation = false;
 float burstTime = -1.0;
 float burstSleep = -1.0;
@@ -657,7 +657,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-11-04 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2025-11-06 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -676,7 +676,7 @@ int main(int argc, char* argv[]) {
 		cerr << "                               example -initrate 2000 " << endl;
 		cerr << "     -minrate  val            Set a min bitrate [kbps], default 1000kbps" << endl;
 		cerr << "                               example -minrate 1000 " << endl;
-		cerr << "     -maxrate val             Set a max bitrate [kbps], default 200000kbps" << endl;
+		cerr << "     -maxrate val             Set a max bitrate [kbps], default 500000kbps" << endl;
 		cerr << "                               example -maxrate 10000 " << endl;
 		cerr << "     -ect n                   ECN capable transport, n = 0 or 1 for ECT(0) or ECT(1)," << endl;
 		cerr << "                               -1 for not-ECT (default)" << endl;

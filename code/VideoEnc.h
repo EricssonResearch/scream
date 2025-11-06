@@ -12,7 +12,7 @@ public:
     void setTargetBitrate(float targetBitrate);
 
     void setMss(int mss_) {
-        mss = mss_
+        mss = mss_;
     }
 
     RtpQueue* rtpQueue;

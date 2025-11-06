@@ -525,6 +525,14 @@ extern "C" {
 		void isEnableAdaptiveWindowHeadroom(bool val) {
 			enableAdaptiveWindowHeadroom = val;
 		}
+		/*
+		* Enable/disable adaptive window headroom
+		* Recommended for cases where it is preferred to get a stable bitrate for instance
+		* when the media encoder reacts slowly to rate changes.
+		*/
+		void isCwndGrowthRestrictionWhenCongested(bool val) {
+			cwndGrowthRestrictionWhenCongested = val;
+		}
 	private:
 		/*
 		* Struct for list of RTP packets in flight
@@ -818,7 +826,6 @@ extern "C" {
 		uint32_t sRtt_ntp;
 		uint32_t sRttSh_ntp;
 		uint32_t sRttShPrev_ntp;
-		float rttDev;
 		float currRtt;
 		uint32_t ackedOwd;
 		uint32_t baseOwd;
@@ -827,6 +834,7 @@ extern "C" {
 		float queueDelay;
 		float queueDelayFractionAvg;
 		float queueDelayTarget;
+		float queueDelayDev;
 		bool isEnableDelayBasedCongestionControl;
 
 		float queueDelaySbdVar;
@@ -868,6 +876,7 @@ extern "C" {
 		float bytesInFlightRatio;
 		float windowHeadroom;
 		bool enableAdaptiveWindowHeadroom;
+		bool cwndGrowthRestrictionWhenCongested;
 
 		int bytesMarkedThisRtt;
 		int bytesDeliveredThisRtt;
