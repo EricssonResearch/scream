@@ -3,6 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2025-11-10 :
+  - virtual L4S backoff made faster
+  - Build date for BW test tool sender changed  
 - 2025-11-04 - 06 :
   - l4sAlpha calculation use fast attack slow decay filter
   - Reference window headroom made adaptive based on queue delay variation

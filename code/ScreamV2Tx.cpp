@@ -89,7 +89,7 @@ static const float kRelaxedPacingLimitLow = 0.8f;
 static const float kRelaxedPacingLimitHigh = 1.0f;
 static const float kMaxRelaxedPacingFactor = 5.0f;
 
-static const float kMinWindowHeadroom = 1.2f;
+static const float kMinWindowHeadroom = 1.5f;
 
 static const float kQueueDelayDevNorm = 0.025f;
 
@@ -790,7 +790,6 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * queueDelay;
 			}
 			queueDelayDev = (63.0f * queueDelayDev + (queueDelay - queueDelayAvg) / kQueueDelayDevNorm) / 64.0f;
-			std::cerr << queueDelayDev << std::endl;
 			lastQueueDelayAvgUpdateT_ntp = time_ntp;
 		}
 
@@ -820,8 +819,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 				 * against clock drift and clock skipping errors
 				 * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim 
 				 */
-				virtualL4sAlpha = std::min(1.0f, 2.0f * l4sAlphaLim *
-					std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
+				virtualL4sAlpha = std::min(1.0f, std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
 				/*
 				* Scale down backoff when sRtt is large as backoff happens every several times per RTT 
 				*/
