@@ -45,7 +45,7 @@ xlim(Tlim);
 ylim([0 110]);
 
 subplot(4,1,4);
-plot(T,a(ix,2),'.-',T,a(ix,3),'.-','linewidth',1);ylim([0 maxDelay]);
+plot(T,a(ix,2),'.-',T,a(ix,19),'.-','linewidth',1);ylim([0 maxDelay]);
 set(gca,'FontSize',12);grid on;
 title('Network queue(B) and RTT(R) [s]');
 xlim(Tlim);

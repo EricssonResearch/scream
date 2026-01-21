@@ -227,7 +227,7 @@ extern "C" {
 			float bytesInFlightHeadRoom = kBytesInFlightHeadRoom,
 			float multiplicativeIncreaseScalefactor = kMultiplicativeIncreaseScalefactor,
 			bool isL4s = false,
-			float maxWindowHeadroom = 5.0f,
+			float maxWindowHeadroom = 3.0f,
 			bool enableSbd = kEnableSbd,
 			bool enableClockDriftCompensation = false);
 
@@ -595,6 +595,10 @@ extern "C" {
 				hysteresis = aValue;
 			}
 
+			float getRateAdjustFactor() {
+				return rateAdjustFactor;
+			}
+
 			/*
 			* Set the timestamp clock rate for this stream, default 90000Hz
 			*/
@@ -677,6 +681,7 @@ extern "C" {
 			int frameSizePrev;
 			float frameSizeAvg;
 			float framePeriod;
+			float rateAdjustFactor;
 
 			float adaptivePacingRateScale;
 

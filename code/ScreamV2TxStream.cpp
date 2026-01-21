@@ -8,6 +8,8 @@ static const float kRelFrameSizeHistDecay = 1.0f / 1024;
 static const float kRelFrameSizeHighPercentile = 0.8f;
 static const int kRelFrameSizeHistPreamble = 50;
 static const float kRelFrameSizeHistRange = 3.0f;
+static const float kRateAdjustGain1 = 0.2f;
+static const float kRateAdjustGain2 = 1.0f/8;
 
 ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	RtpQueueIface* rtpQueue_,
@@ -87,6 +89,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	frameSizeAvg = 0.0f;
 	adaptivePacingRateScale = 1.0f;
 	framePeriod = 0.02f;
+	rateAdjustFactor = 0.0f;
 	relFrameSizeHist[0] = 1.0f;
 	for (int n = 1; n < kRelFrameSizeHistBins; n++) {
 		relFrameSizeHist[n] = 0.0f;
@@ -190,6 +193,14 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 		lastFrameT_ntp = time_ntp;
 
 		frameSizeAvg = targetBitrate * framePeriod / 8.0f;
+
+		/*
+		* Calculate rate compensation based on the tendency for the RTP queue delay to grow 
+		* larger than desired
+		*/
+		float error = kRateAdjustGain1*(rtpQueue->getDelay(time_ntp* ntp2SecScaleFactor) - framePeriod/2.0f) / framePeriod;
+		rateAdjustFactor += error * kRateAdjustGain2;
+		rateAdjustFactor = std::min(0.5f, std::max(0.0f, rateAdjustFactor));
 
 		frameSize = std::max(rtpQueue->bytesInQueue(), frameSizeAcc);
 
@@ -308,8 +319,9 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	* Target rate is computed based CWND and RTT, this is done in ScreamV2Tx::updateCwnd
 	* Here only functions are added to keep target bitrate within specified limits 
 	* for the stream and add the hysteresis
+	* Add rateAdjustFactor compensation to avoid RTP queue buildup
 	*/
-	targetBitrate = std::min(maxBitrate, std::max(minBitrate, rateShare));
+	targetBitrate = std::min(maxBitrate, std::max(minBitrate, rateShare / (1.0f+rateAdjustFactor)));
 
 	/*
 	* Update targetBitrateH

@@ -789,7 +789,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			else {
 				queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * queueDelay;
 			}
-			queueDelayDev = (63.0f * queueDelayDev + (queueDelay - queueDelayAvg) / kQueueDelayDevNorm) / 64.0f;
+			float diff = std::max(0.0f,(queueDelay - queueDelayMinAvg - kQueueDelayDevNorm / 4.0f) / kQueueDelayDevNorm);
+			queueDelayDev = std::min(0.2f, (63.0f* queueDelayDev + diff) / 64.0f);
 			lastQueueDelayAvgUpdateT_ntp = time_ntp;
 		}
 
@@ -870,7 +871,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 
 	if (isUseExtraDetailedLog || isLast || isMark) {
 		if (fp_log && completeLogItem) {			
-			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f %d",
+			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d",
 				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
 				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
 				isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI); //rtpQueue->getDelay(time));
@@ -1588,18 +1589,26 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		}
 		relFrameSizeHigh /= sumPrio;
 
-		/*
-		* Adaptive window headroom reduces the overshoot that can occur when media encoder react slowly to 
-		* rate changes. The function is to reduce the window headroom when RTT varies a lot.
-		* Limited headroom can also be beneficial when link capacity varies.
-		*/
-		if (enableAdaptiveWindowHeadroom) {
-			windowHeadroom = kMinWindowHeadroom + (maxWindowHeadroom - kMinWindowHeadroom) * std::max(0.0f, (0.1f - queueDelayDev) / 0.1f);
-		}
-
 		lastSlowUpdateT_ntp = time_ntp;
-	}
+	}	
+	/*
+	* Calculate adaptive tolerance to variations in queue delay. 
+	* More sensitive when CWND/MSS is low because the 1 MSS / RTT increase can give more rate 
+	* instability then
+	*/
+	cwndRatio = float(getMss()) / cwnd;
+	float queueDelayDevTh = std::max(0.05f, 0.1f * (1.0f - cwndRatio / 0.1f));
 
+	/*
+	* Adaptive window headroom reduces the overshoot that can occur when media encoder react slowly to
+	* rate changes. The function is to reduce the window headroom when RTT varies a lot and that suppresses
+	* extra variations in rate and delay
+	* Limited headroom can also be beneficial when link capacity varies.
+	*/
+	if (enableAdaptiveWindowHeadroom) {
+		windowHeadroom = kMinWindowHeadroom +
+			(maxWindowHeadroom - kMinWindowHeadroom) * std::max(0.0f, (queueDelayDevTh - queueDelayDev) / queueDelayDevTh);
+	}
 
 	/*
 	* Compute scale factor based on relation between CWND and last known 
@@ -1691,7 +1700,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 					* Don't scaledown back off if queueDelay is large
 					*/
 					if (cwndGrowthRestrictionWhenCongested) {
-						backOff *= std::min(1.0f, std::max(0.1f, (0.1f - queueDelayDev) / 0.1f));
+						backOff *= std::min(1.0f, std::max(0.1f, (queueDelayDevTh - queueDelayDev) / queueDelayDevTh));
 					}
 				}
 
@@ -1704,14 +1713,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 					* and thus the congestion episode is shortened
 					*/
 					cwnd = std::min(cwnd, maxBytesInFlightPrev);
-
-					/*
-					* In addition, bump up l4sAlpha to a more credible value
-					* This may over react but it is better than
-					* excessive queue delay
-					*/
-					l4sAlpha = 0.5f;
-					backOff = l4sAlpha / 2.0f;
 				}
 				/*
 				* Scale down CWND based on l4sAlpha
@@ -1753,7 +1754,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		wasLossEvent = true;
 		postCongestionScale = 0.0;
 	}
-	cwndRatio = float(getMss()) / cwnd;
 
 	if (time_ntp - lastRttT_ntp > sRtt_ntp) {
 		if (wasLossEvent)
@@ -1808,7 +1808,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Limit increase if queue delay varies, this gives a more stable rate when congested.
 	*/
 	if (cwndGrowthRestrictionWhenCongested) {
-		increment *= std::min(1.0f, std::max(0.1f, (0.1f - queueDelayDev) / 0.1f));
+		increment *= std::min(1.0f, std::max(0.1f, (queueDelayDevTh - queueDelayDev) / queueDelayDevTh));
 	}
 
 	/*
@@ -1850,25 +1850,8 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* accuracy that in turn can lead to a too high media bitrate. It is thus better to slightly over 
 	* estimate sRtt than under estimate it.
 	*/
-	float rtt = std::min(sRtt, sRttSh);
 
-	if (l4sAlpha < 0.0001f) {
-		/*
-		* Quite unlikely that packets are L4S marked, add a little extra RTT to make 
-		* delay based CC more stable
-		*/
-		//rtt += queueDelayTarget / 4.0f;
-	}
-
-	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, rtt + 0.001f));
-
-	/*
-	* Make the rate estimation more cautious when the window is almost full or overfilled
-	* This is only enabled when queue delay is high
-	*/
-	if (false && getQueueDelayFraction() > 0.25 && bytesInFlightRatio > kBytesInFlightLimit) {
-		rateLeft /= std::min(kMaxBytesInFlightLimitCompensation, bytesInFlightRatio / kBytesInFlightLimit);
-	}
+	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt + 0.001f));
 
 	/*
 	* Scale down rate slighty when the congestion window is very small compared to mss
@@ -1880,7 +1863,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	/*
 	* Scale down based on weigthed average high percentile of frame sizes
 	*/
-	rateLeft /= std::max(1.1f,0.0f*relFrameSizeHigh);
+	rateLeft /= 1.1f;
 
 	/*
 	* Compensation for packetization overhead, important when MSS is small

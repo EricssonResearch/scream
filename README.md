@@ -3,6 +3,11 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-01-21 :
+  - Calculation of queueDelayDev modified to be less sensitive to scheduling jitter
+   - Additional restrition of window headroom and rate increase applied when CWND/MSS is low
+  - RTCP adjusted for slightly less frequent feedback  
+  - Build date for BW test tool sender/receiver changed  
 - 2025-11-10 :
   - virtual L4S backoff made faster
   - Build date for BW test tool sender changed  

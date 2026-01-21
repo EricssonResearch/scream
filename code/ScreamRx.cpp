@@ -12,6 +12,7 @@
 using namespace std;
 
 static const int kMaxRtcpSize = 900;
+static const float kMaxRtcpInterval = 0.04f;
 
 #define OOO
 // Time stamp scale
@@ -418,16 +419,8 @@ void ScreamRx::receive(uint32_t time_ntp,
 		lastRateComputeT_ntp = time_ntp;
 		averageReceivedRate = std::max(0.95f * averageReceivedRate, bytesReceived * 8 / delta);
 		bytesReceived = 0;
-		/*
-		* The RTCP feedback rate depends on the received media date
-		* Target ~2% overhead but with feedback interval limited
-		*  to the range [2ms,100ms]
-		*/
-		float rate = 0.02f * averageReceivedRate / (100.0f * 8.0f); // RTCP overhead
-		rate = std::min(100.0f, std::max(10.0f, rate));
 
-		rtcpFbInterval_ntp = uint32_t(65536.0f / rate); // Convert to NTP domain (Q16)
-		rtcpFbInterval_ntp = std::min(uint32_t(0.010f * 65536.0f), rtcpFbInterval_ntp);
+		rtcpFbInterval_ntp = uint32_t(65536.0f*kMaxRtcpInterval); // Convert to NTP domain (Q16)
 	}
 
 	if (!streams.empty()) {
@@ -495,10 +488,14 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsign
 		for (auto it = streams.begin(); it != streams.end(); ++it) {
 			uint32_t diffT_ntp = time_ntp - (*it)->lastFeedbackT_ntp;
 			int nRtpSinceLastRtcp = (*it)->nRtpSinceLastRtcp;
-			if ((nRtpSinceLastRtcp >= std::min(8, ackDiff) || diffT_ntp > 655 || (isMark && nRtpSinceLastRtcp > 0)) &&
+			if ((nRtpSinceLastRtcp >= std::min(kReportedRtpPackets/2, ackDiff) || 
+				(*it)->doFlush || 
+				diffT_ntp > rtcpFbInterval_ntp || 
+				(isMark && nRtpSinceLastRtcp > 0)) &&
 				(*it)->lastFeedbackT_ntp < minT_ntp) {
 				stream = *it;
 				minT_ntp = (*it)->lastFeedbackT_ntp;
+				(*it)->doFlush = false;
 			}
 		}
 		if (stream == NULL)
