@@ -75,4 +75,7 @@ INCLUDE_DIRECTORIES(
 ${scream_SOURCE_DIR}/../include
 )
 
+ADD_SUBDIRECTORY(code/wrapper_lib)
+
+
 ADD_SUBDIRECTORY( code)
