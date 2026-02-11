@@ -83,7 +83,7 @@ pub fn stats(
             let stats_str = screamtx_e_clone.property::<String>("stats");
 
             let tm = pipeline_clock.time();
-            let ns = tm.unwrap().nseconds();
+            let ns = tm.nseconds();
             let out_p = outp_opt.as_ref().unwrap();
             let mut fd = out_p.lock().unwrap();
 

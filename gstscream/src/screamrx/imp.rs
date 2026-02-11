@@ -428,7 +428,7 @@ impl ElementImpl for Screamrx {
                 let element = self.obj();
                 gst::debug!(CAT, imp = self, "Waiting for 1s before retrying");
                 let clock = gst::SystemClock::obtain();
-                let wait_time = clock.time().unwrap() + gst::ClockTime::SECOND;
+                let wait_time = clock.time() + gst::ClockTime::SECOND;
                 let mut clock_wait = self.clock_wait.lock().unwrap();
                 let timeout = clock.new_periodic_id(wait_time, gst::ClockTime::from_useconds(500));
                 clock_wait.clock_id = Some(timeout.clone());

@@ -175,8 +175,26 @@ impl Screamtx {
             event.type_(),
             get_tags_from_event(&event),
         );
+        let is_eos = event.type_() == gst::EventType::Eos;
+        if is_eos {
+            unsafe {
+                ScreamSenderGlobalPluginEos();
+            }
+            gst::info!(CAT, obj = pad, "ScreamSenderGlobalPluginEos return");
+        }
         // println!("gstscream Handling sink event {:?}", event);
-        self.srcpad.push_event(event)
+        let result = self.srcpad.push_event(event);
+
+        if is_eos {
+            gst::info!(
+                CAT,
+                obj = pad,
+                "ScreamTx: EOS propagation result = {}",
+                result
+            );
+        }
+
+        result
     }
 
     // Called whenever a query is sent to the sink pad. It has to be answered if the element can
@@ -405,6 +423,7 @@ extern "C" {
         cb: extern "C" fn(stx: *const Screamtx, buf: gst::Buffer, is_push: u8),
     );
 
+    fn ScreamSenderGlobalPluginEos();
     fn ScreamSenderGetTargetRate(ssrc: u32, rate_p: *mut u32, force_idr_p: *mut u32);
 
 }

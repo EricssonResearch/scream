@@ -736,9 +736,16 @@ ScreamSenderPluginUpdate (uint32_t ssrc, const char *arg_string)
 }
 
 void
-ScreamSenderGlobalPluginInit (uint32_t ssrc, const char *arg_string, uint8_t *cb_data_arg,  ScreamSenderPushCallBack callback)
+ScreamSenderGlobalPluginEos ()
 {
     printf("%s %u \n", __FUNCTION__, __LINE__);
+    stopThread = true;
+}
+
+void
+ScreamSenderGlobalPluginInit (uint32_t ssrc, const char *arg_string, uint8_t *cb_data_arg,  ScreamSenderPushCallBack callback)
+{
+    printf("%s %u pid %u\n", __FUNCTION__, __LINE__, getpid());
     ScreamSenderPluginInit(ssrc, arg_string, cb_data_arg,  callback);
 }
 
