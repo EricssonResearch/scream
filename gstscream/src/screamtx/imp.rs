@@ -8,10 +8,11 @@ use gst::EventView;
 use core::result::Result;
 use std::convert::TryInto;
 use std::ffi::CString;
+use std::fmt::Write;
 use std::os::raw::c_char;
 use std::sync::Mutex;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::Once;
 
 static START: Once = Once::new();
@@ -51,7 +52,7 @@ pub struct Screamtx {
     settings: Mutex<Settings>,
 }
 
-static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
+static CAT: LazyLock<gst::DebugCategory> = LazyLock::new(|| {
     gst::DebugCategory::new(
         "screamtx",
         gst::DebugColorFlags::empty(),
@@ -65,7 +66,7 @@ fn get_tags_from_event(event: &gst::Event) -> String {
         let tags = tag_event.tag();
         output.push_str("Received tag event:\n");
         for (tag, value) in tags.iter_generic() {
-            output.push_str(&format!("  {}: {:?}\n", tag, value));
+            writeln!(output, "  {}: {:?}", tag, value).unwrap();
         }
     }
     output
@@ -131,7 +132,7 @@ impl Screamtx {
                 ssrc,
                 marker,
             );
-            ScreamSenderGetTargetRate(ssrc, &mut rate, &mut force_idr);
+            ScreamSenderGetTargetRate(ssrc, &raw mut rate, &raw mut force_idr);
             // println!("ScreamSenderGetTargetRate ssrc {}, rate {}, force_idr {} ", ssrc, rate, force_idr);
         }
 
@@ -569,7 +570,7 @@ impl ObjectImpl for Screamtx {
 
     // Metadata for the properties
     fn properties() -> &'static [glib::ParamSpec] {
-        static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
+        static PROPERTIES: LazyLock<Vec<glib::ParamSpec>> = LazyLock::new(|| {
             vec![
                 glib::ParamSpecString::builder("params")
                     .nick("Params")
@@ -662,7 +663,7 @@ impl ObjectImpl for Screamtx {
                     let mut dstlen: u32 = 0;
                     let pdst = dst.as_mut_ptr();
                     let settings = self.settings.lock().unwrap();
-                    ScreamSenderStats(pdst, &mut dstlen, settings.ssrc, 0);
+                    ScreamSenderStats(pdst, &raw mut dstlen, settings.ssrc, 0);
                     dst.set_len(dstlen.try_into().unwrap());
                     dst
                 };
@@ -675,7 +676,7 @@ impl ObjectImpl for Screamtx {
                     let mut dstlen: u32 = 0;
                     let pdst = dst.as_mut_ptr();
                     let settings = self.settings.lock().unwrap();
-                    ScreamSenderStats(pdst, &mut dstlen, settings.ssrc, 1);
+                    ScreamSenderStats(pdst, &raw mut dstlen, settings.ssrc, 1);
                     dst.set_len(dstlen.try_into().unwrap());
                     dst
                 };
@@ -688,7 +689,7 @@ impl ObjectImpl for Screamtx {
                     let mut dstlen: u32 = 0;
                     let pdst = dst.as_mut_ptr();
 
-                    ScreamSenderStatsHeader(pdst, &mut dstlen);
+                    ScreamSenderStatsHeader(pdst, &raw mut dstlen);
                     dst.set_len(dstlen.try_into().unwrap());
                     dst
                 };
@@ -712,7 +713,7 @@ impl ElementImpl for Screamtx {
     // retrieved from the gst::Registry after initial registration
     // without having to load the plugin in memory.
     fn metadata() -> Option<&'static gst::subclass::ElementMetadata> {
-        static ELEMENT_METADATA: Lazy<gst::subclass::ElementMetadata> = Lazy::new(|| {
+        static ELEMENT_METADATA: LazyLock<gst::subclass::ElementMetadata> = LazyLock::new(|| {
             gst::subclass::ElementMetadata::new(
                 "Screamtx",
                 "Generic",
@@ -730,7 +731,7 @@ impl ElementImpl for Screamtx {
     //
     // Actual instances can create pads based on those pad templates
     fn pad_templates() -> &'static [gst::PadTemplate] {
-        static PAD_TEMPLATES: Lazy<Vec<gst::PadTemplate>> = Lazy::new(|| {
+        static PAD_TEMPLATES: LazyLock<Vec<gst::PadTemplate>> = LazyLock::new(|| {
             // Our element can accept any possible caps on both pads
             let caps = gst::Caps::new_empty_simple("application/x-rtp");
             let src_pad_template = gst::PadTemplate::new(

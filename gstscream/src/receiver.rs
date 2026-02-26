@@ -89,7 +89,7 @@ fn start(main_loop: &glib::MainLoop, args: Arguments) -> Result<(), Error> {
                     main_loop.quit();
                 }
                 _ => (),
-            };
+            }
             glib::ControlFlow::Continue
         })
         .expect("failed to add bus watch");

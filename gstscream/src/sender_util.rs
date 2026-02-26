@@ -38,21 +38,16 @@ pub fn stats(
     let pipeline_clock = bin.pipeline_clock();
 
     let repl_string = "_".to_owned() + &n.to_string() + ".csv";
-    let file_name = match sender_stats_file_name.file_name() {
-        Some(file) => file,
-        None => {
-            println!("Invalid SENDER_STATS_FILE_NAME.");
-            return;
-        }
+
+    let Some(file_name) = sender_stats_file_name.file_name() else {
+        println!("Invalid SENDER_STATS_FILE_NAME.");
+        return;
     };
-    let file_name = match file_name.to_str() {
-        Some(file_name) => file_name,
-        None => {
-            println!("SENDER_STATS_FILE_NAME must be a utf8 encoded string");
-            return;
-        }
-    }
-    .to_string();
+
+    let Some(file_name) = file_name.to_str() else {
+        println!("SENDER_STATS_FILE_NAME must be a utf8 encoded string");
+        return;
+    };
 
     sender_stats_file_name.set_file_name(file_name.replace(".csv", &repl_string));
     println!(
@@ -62,14 +57,10 @@ pub fn stats(
     let mut out: File = File::create(&sender_stats_file_name).unwrap();
 
     let scream_name = screamtx_name_opt.as_ref().unwrap();
-    let screamtx_e = match bin.by_name(scream_name) {
-        Some(v) => v,
-        None => {
-            println!(" no {}", scream_name);
-            return;
-        }
+    let Some(screamtx_e) = bin.by_name(scream_name) else {
+        println!(" no {}", scream_name);
+        return;
     };
-
     let screamtx_e_clone = screamtx_e.clone();
     let stats_str_header = screamtx_e.property::<String>("stats-header");
 
@@ -78,7 +69,7 @@ pub fn stats(
     let outp_opt: Option<Arc<Mutex<File>>> = Some(Arc::new(Mutex::new(out)));
 
     timeout_add(
-        Duration::from_millis(sender_stats_timer as u64),
+        Duration::from_millis(u64::from(sender_stats_timer)),
         move || {
             let stats_str = screamtx_e_clone.property::<String>("stats");
 

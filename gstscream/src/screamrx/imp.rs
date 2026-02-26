@@ -5,9 +5,8 @@ use gst::subclass::prelude::*;
 
 use std::convert::TryInto;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::Mutex;
-
-use once_cell::sync::Lazy;
 
 use super::ScreamRx;
 
@@ -26,7 +25,7 @@ pub struct Screamrx {
     clock_wait: Mutex<ClockWait>,
 }
 
-pub static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
+pub static CAT: LazyLock<gst::DebugCategory> = LazyLock::new(|| {
     gst::DebugCategory::new(
         "screamrx",
         gst::DebugColorFlags::empty(),
@@ -352,7 +351,7 @@ impl ElementImpl for Screamrx {
         // is visible from gst-inspect-1.0 and can also be programatically
         // retrieved from the gst::Registry after initial registration
         // without having to load the plugin in memory.
-        static ELEMENT_METADATA: Lazy<gst::subclass::ElementMetadata> = Lazy::new(|| {
+        static ELEMENT_METADATA: LazyLock<gst::subclass::ElementMetadata> = LazyLock::new(|| {
             gst::subclass::ElementMetadata::new(
                 "Screamrx",
                 "Generc",
@@ -370,7 +369,7 @@ impl ElementImpl for Screamrx {
     //
     // Actual instances can create pads based on those pad templates
     fn pad_templates() -> &'static [gst::PadTemplate] {
-        static PAD_TEMPLATES: Lazy<Vec<gst::PadTemplate>> = Lazy::new(|| {
+        static PAD_TEMPLATES: LazyLock<Vec<gst::PadTemplate>> = LazyLock::new(|| {
             // Our element can accept any possible caps on both pads
 
             // Create and add pad templates for our sink and source pad. These
@@ -435,11 +434,9 @@ impl ElementImpl for Screamrx {
                 let element_weak = element.downgrade();
                 timeout
                     .wait_async(move |_clock, _time, _id| {
-                        let element = match element_weak.upgrade() {
-                            None => return,
-                            Some(element) => element,
+                        let Some(element) = element_weak.upgrade() else {
+                            return;
                         };
-
                         let lib_data = element.imp();
                         let mut screamrx = lib_data.lib_data.lock().unwrap();
                         screamrx.periodic_flush();

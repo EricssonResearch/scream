@@ -1,3 +1,5 @@
+// ScreamRx.rs
+
 #![allow(clippy::uninlined_format_args)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
@@ -6,11 +8,11 @@ use gst::prelude::*;
 use std::cmp;
 use std::convert::TryInto;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 
 extern crate array_init;
 use hashbrown::HashMap;
-use once_cell::sync::Lazy;
 
 use crate::screamrx::imp::CAT;
 
@@ -39,6 +41,120 @@ const kRxHistorySize: usize = 128;
 * All internal time is measured in NTP time, this is done to avoid wraparound issues
 * that can otherwise occur every 18 hour or so
 */
+
+// ---------------------------------------------------------------------------
+// Safe checked-cast helpers.  The `#[allow]` is confined here; call sites
+// stay clean.  On out-of-range values we log a gst::warning and clamp so
+// that processing can continue.
+// ---------------------------------------------------------------------------
+
+/// `f64` → `u32`, clamping on negative / overflow / NaN.
+fn f64_to_u32_checked(value: f64, context: &str) -> u32 {
+    if value.is_nan() {
+        gst::warning!(CAT, "f64_to_u32_checked: NaN in {context}, using 0");
+        return 0;
+    }
+    if value < 0.0 {
+        gst::warning!(
+            CAT,
+            "f64_to_u32_checked: negative value {value} in {context}, clamping to 0"
+        );
+        return 0;
+    }
+    if value > f64::from(u32::MAX) {
+        gst::warning!(
+            CAT,
+            "f64_to_u32_checked: value {value} exceeds u32::MAX in {context}, clamping"
+        );
+        return u32::MAX;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let result = value as u32;
+    result
+}
+
+/// `f64` → `u64`, clamping on negative / overflow / NaN.
+fn f64_to_u64_checked(value: f64, context: &str) -> u64 {
+    if value.is_nan() {
+        gst::warning!(CAT, "f64_to_u64_checked: NaN in {context}, using 0");
+        return 0;
+    }
+    if value < 0.0 {
+        gst::warning!(
+            CAT,
+            "f64_to_u64_checked: negative value {value} in {context}, clamping to 0"
+        );
+        return 0;
+    }
+    // 2^64 as f64 — anything at or above this overflows u64.
+    if value >= 18_446_744_073_709_551_616.0_f64 {
+        gst::warning!(
+            CAT,
+            "f64_to_u64_checked: value {value} exceeds u64::MAX in {context}, clamping"
+        );
+        return u64::MAX;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let result = value as u64;
+    result
+}
+
+/// `usize` → `i32`, clamping on overflow.
+fn usize_to_i32_checked(value: usize, context: &str) -> i32 {
+    if let Ok(v) = i32::try_from(value) {
+        v
+    } else {
+        gst::warning!(
+            CAT,
+            "usize_to_i32_checked: value {value} exceeds i32::MAX in {context}, clamping"
+        );
+        i32::MAX
+    }
+}
+
+/// `i32` → `u16`, clamping on negative or overflow.
+fn i32_to_u16_checked(value: i32, context: &str) -> u16 {
+    match u16::try_from(value) {
+        Ok(v) => v,
+        Err(_) => {
+            if value < 0 {
+                gst::warning!(
+                    CAT,
+                    "i32_to_u16_checked: negative value {value} in context{context}, clamping to 0"
+                );
+                0
+            } else {
+                gst::warning!(
+                    CAT,
+                    "i32_to_u16_checked: value {value} exceeds u16::MAX in {context}, clamping"
+                );
+                u16::MAX
+            }
+        }
+    }
+}
+
+/// `u32` → `u16`, clamping on overflow.
+fn u32_to_u16_checked(value: u32, context: &str) -> u16 {
+    if let Ok(v) = u16::try_from(value) {
+        v
+    } else {
+        gst::warning!(
+            CAT,
+            "u32_to_u16_checked: value {value} exceeds u16::MAX in {context}, clamping"
+        );
+        u16::MAX
+    }
+}
+
+/// `u64` → `u32`, masking to low 32 bits (intentional NTP wrap).
+fn u64_to_u32_ntp(value: u64) -> u32 {
+    #[allow(clippy::cast_possible_truncation)]
+    let result = (value & 0xFFFF_FFFF) as u32;
+    result
+}
+
+// ---------------------------------------------------------------------------
 
 const kMaxRtcpSize: usize = 900;
 const ntp2SecScaleFactor: f64 = 1.0 / 65536.0;
@@ -180,7 +296,7 @@ impl ScreamRx {
             //rate *= streams.size();
             // rate *= 4.0;
             let ftmp: f64 = 65536.0 / rate;
-            self.rtcpFbInterval_ntp = ftmp as u32;
+            self.rtcpFbInterval_ntp = f64_to_u32_checked(ftmp, "rtcpFbInterval_ntp");
             // Convert to NTP domain (Q16)
             gst::trace!(CAT, "time_ntp - lastRateComputeT_ntp {} , delta {}, averageReceivedRate {}, rate {},size {},  bytesReceived {}",
                        time_ntp - self.lastRateComputeT_ntp, delta, self.averageReceivedRate, rate, size, self.bytesReceived);
@@ -201,7 +317,8 @@ impl ScreamRx {
          */
         let mut stream = Stream::new(ssrc);
         println!("ScreamRx.rs: new ssrc {}", ssrc);
-        stream.nReportedRtpPackets = self.nReportedRtpPackets as i32;
+        stream.nReportedRtpPackets =
+            usize_to_i32_checked(self.nReportedRtpPackets, "stream.nReportedRtpPackets");
         stream.ix = self.ix + 1;
         stream.ssrc = ssrc;
         stream.receive(time_ntp, seqNr, ceBits);
@@ -416,10 +533,14 @@ impl Stream {
             self.highestSeqNr,
             self.nReportedRtpPackets - 1
         );
-        let tmp_s: u16 = if self.highestSeqNr < ((self.nReportedRtpPackets - 1) as u16) {
-            (u16::MAX - ((self.nReportedRtpPackets - 1) as u16)) + 1 + self.highestSeqNr
+
+        let n_reported_minus1 =
+            i32_to_u16_checked(self.nReportedRtpPackets - 1, "nReportedRtpPackets-1");
+
+        let tmp_s: u16 = if self.highestSeqNr < n_reported_minus1 {
+            (u16::MAX - n_reported_minus1) + 1 + self.highestSeqNr
         } else {
-            self.highestSeqNr - ((self.nReportedRtpPackets - 1) as u16)
+            self.highestSeqNr - n_reported_minus1
         };
         bytes.extend_from_slice(&tmp_s.to_be_bytes());
         /*
@@ -431,15 +552,16 @@ impl Stream {
         /*
          * Write 16bits report element for received RTP packets
          */
-        let sn_lo: u16 = self
-            .highestSeqNr
-            .overflowing_sub((self.nReportedRtpPackets - 1) as u16)
-            .0;
+        let sn_lo: u16 = self.highestSeqNr.overflowing_sub(n_reported_minus1).0;
 
         gst::log!(CAT, "getStandardizedFeedback time_diff  {} begin_seq {}, num_reports {} , end_seq {} nRecvRtpPackets {} ",
                    time_ntp - self.lastFeedbackT_ntp, sn_lo,  self.nReportedRtpPackets,  self.highestSeqNr, self.nRecvRtpPackets);
         for k in 0..self.nReportedRtpPackets {
-            let sn: u16 = ((u32::from(sn_lo) + k as u32) & u32::from(u16::MAX)) as u16;
+            let k_u32 = u32::from(i32_to_u16_checked(k, "loop index k"));
+            let sn = u32_to_u16_checked(
+                (u32::from(sn_lo) + k_u32) & u32::from(u16::MAX),
+                "sn computation",
+            );
 
             let ix = (sn as usize) % kRxHistorySize;
             let mut ato: u32 = time_ntp - self.rxTimeHist[ix];
@@ -450,9 +572,12 @@ impl Stream {
 
             let mut tmp_s: u16 = 0x0000;
             if self.seqNrHist[ix] == sn && self.rxTimeHist[ix] != 0 {
-                tmp_s = (0x8000_u32
-                    | (u32::from(self.ceBitsHist[ix] & 0x03) << 13)
-                    | (ato & (0x01FFF_u32))) as u16;
+                tmp_s = u32_to_u16_checked(
+                    0x8000_u32
+                        | (u32::from(self.ceBitsHist[ix] & 0x03) << 13)
+                        | (ato & 0x01FFF_u32),
+                    "RTCP feedback element",
+                );
             }
 
             bytes.extend_from_slice(&tmp_s.to_be_bytes());
@@ -496,7 +621,7 @@ impl ScreamRx {
              * stream in the first iteration, a bit unnecessary.
              */
             let mut stream_opt: Option<&mut Stream> = None;
-            let mut minT_ntp: u32 = u32::MAX;
+            let mut minT_ntp = u32::MAX;
             let mut diffT_ntp: u32;
             let mut nRtpSinceLastRtcp: i32;
             for (_, it) in &mut self.streams {
@@ -557,10 +682,10 @@ impl ScreamRx {
     }
 }
 
-static t0: Lazy<std::time::Instant> = Lazy::new(std::time::Instant::now);
+static t0: LazyLock<std::time::Instant> = LazyLock::new(std::time::Instant::now);
 
 pub fn getTimeInNtp() -> u32 {
     let time = t0.elapsed().as_secs_f64();
-    let ntp64: u64 = (time * 65536.0) as u64;
-    (0xFFFF_FFFF & ntp64) as u32 // NTP in Q16
+    let ntp64 = f64_to_u64_checked(time * 65536.0, "getTimeInNtp");
+    u64_to_u32_ntp(ntp64) // NTP in Q16
 }

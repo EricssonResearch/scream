@@ -8,8 +8,6 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::Mutex;
 
-use once_cell::sync::Lazy;
-
 const DEFAULT_BITRATE: u32 = 1000;
 
 // Property value storage
@@ -38,7 +36,7 @@ pub struct Screamtxbw {
     settings: Mutex<Settings>,
 }
 
-static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
+static CAT: std::sync::LazyLock<gst::DebugCategory> = std::sync::LazyLock::new(|| {
     gst::DebugCategory::new(
         "screamtxbw",
         gst::DebugColorFlags::empty(),
@@ -274,7 +272,7 @@ impl ObjectSubclass for Screamtxbw {
             })
             .build();
 
-        let settings = Mutex::new(Default::default());
+        let settings = Mutex::new(Settings::default());
 
         // Return an instance of our struct and also include our debug category here.
         // The debug category will be used later whenever we need to put something
@@ -304,21 +302,22 @@ impl ObjectImpl for Screamtxbw {
 
     // Metadata for the properties
     fn properties() -> &'static [glib::ParamSpec] {
-        static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-            vec![
-                glib::ParamSpecString::builder("params")
-                    .nick("Params")
-                    .blurb("scream lib command line args")
-                    .build(),
-                glib::ParamSpecUInt::builder("bitrate")
-                    .nick("bitrate")
-                    .blurb("Bitrate in kbit/sec (0 = from NVENC preset)")
-                    .minimum(0)
-                    .maximum(u32::MAX)
-                    .default_value(DEFAULT_BITRATE)
-                    .build(),
-            ]
-        });
+        static PROPERTIES: std::sync::LazyLock<Vec<glib::ParamSpec>> =
+            std::sync::LazyLock::new(|| {
+                vec![
+                    glib::ParamSpecString::builder("params")
+                        .nick("Params")
+                        .blurb("scream lib command line args")
+                        .build(),
+                    glib::ParamSpecUInt::builder("bitrate")
+                        .nick("bitrate")
+                        .blurb("Bitrate in kbit/sec (0 = from NVENC preset)")
+                        .minimum(0)
+                        .maximum(u32::MAX)
+                        .default_value(DEFAULT_BITRATE)
+                        .build(),
+                ]
+            });
         PROPERTIES.as_ref()
     }
     fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
@@ -393,14 +392,15 @@ impl ElementImpl for Screamtxbw {
     // retrieved from the gst::Registry after initial registration
     // without having to load the plugin in memory.
     fn metadata() -> Option<&'static gst::subclass::ElementMetadata> {
-        static ELEMENT_METADATA: Lazy<gst::subclass::ElementMetadata> = Lazy::new(|| {
-            gst::subclass::ElementMetadata::new(
-                "Screamtxbw",
-                "Generic",
-                "generate RTP packets",
-                "Jacob Teplitsky <jacob.teplitsky@ericsson.com>",
-            )
-        });
+        static ELEMENT_METADATA: std::sync::LazyLock<gst::subclass::ElementMetadata> =
+            std::sync::LazyLock::new(|| {
+                gst::subclass::ElementMetadata::new(
+                    "Screamtxbw",
+                    "Generic",
+                    "generate RTP packets",
+                    "Jacob Teplitsky <jacob.teplitsky@ericsson.com>",
+                )
+            });
         Some(&*ELEMENT_METADATA)
     }
 
@@ -411,28 +411,29 @@ impl ElementImpl for Screamtxbw {
     //
     // Actual instances can create pads based on those pad templates
     fn pad_templates() -> &'static [gst::PadTemplate] {
-        static PAD_TEMPLATES: Lazy<Vec<gst::PadTemplate>> = Lazy::new(|| {
-            // Our element can accept any possible caps on both pads
-            let caps = gst::Caps::new_empty_simple("application/x-rtp");
-            let src_pad_template = gst::PadTemplate::new(
-                "src",
-                gst::PadDirection::Src,
-                gst::PadPresence::Always,
-                &caps,
-            )
-            .unwrap();
+        static PAD_TEMPLATES: std::sync::LazyLock<Vec<gst::PadTemplate>> =
+            std::sync::LazyLock::new(|| {
+                // Our element can accept any possible caps on both pads
+                let caps = gst::Caps::new_empty_simple("application/x-rtp");
+                let src_pad_template = gst::PadTemplate::new(
+                    "src",
+                    gst::PadDirection::Src,
+                    gst::PadPresence::Always,
+                    &caps,
+                )
+                .unwrap();
 
-            let caps = gst::Caps::new_empty_simple("application/x-rtp");
-            let sink_pad_template = gst::PadTemplate::new(
-                "sink",
-                gst::PadDirection::Sink,
-                gst::PadPresence::Always,
-                &caps,
-            )
-            .unwrap();
+                let caps = gst::Caps::new_empty_simple("application/x-rtp");
+                let sink_pad_template = gst::PadTemplate::new(
+                    "sink",
+                    gst::PadDirection::Sink,
+                    gst::PadPresence::Always,
+                    &caps,
+                )
+                .unwrap();
 
-            vec![src_pad_template, sink_pad_template]
-        });
+                vec![src_pad_template, sink_pad_template]
+            });
 
         PAD_TEMPLATES.as_ref()
     }
