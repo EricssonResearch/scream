@@ -177,9 +177,9 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
 	size += 2;
 
 	/*
-	* Write number of reports- 1
+	* Write number of reports
 	*/
-	tmp_s = nReportedRtpPackets - 1;
+	tmp_s = nReportedRtpPackets;
 	tmp_s = htons(tmp_s);
 	memcpy(buf + 6, &tmp_s, 2);
 	size += 2;
