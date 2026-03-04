@@ -509,15 +509,6 @@ extern "C" {
 		}
 
 		/*
-		* Enable/disable delay based congestion control. In certain scenarios where L4S (or ECN) is known to be 
-		* supported along the transport path it can be beneficial to disable the delay based congestion control because
-		* of the issues with clock drift and clock skipping that can harm performance if L4S is supported. 
-		*/
-		void enableDelayBasedCongestionControl(bool enable) {
-			isEnableDelayBasedCongestionControl = enable;
-		}
-
-		/*
 		* Enable/disable adaptive window headroom
 		* Recommended for cases where it is preferred to get a stable bitrate for instance 
 		* when the media encoder reacts slowly to rate changes. 
@@ -525,13 +516,14 @@ extern "C" {
 		void isEnableAdaptiveWindowHeadroom(bool val) {
 			enableAdaptiveWindowHeadroom = val;
 		}
+
 		/*
-		* Enable/disable adaptive window headroom
-		* Recommended for cases where it is preferred to get a stable bitrate for instance
-		* when the media encoder reacts slowly to rate changes.
+		* Set the estimated non-congestion related delay jitter in the network path.
+		* In a perfect world it should be possible to estimate this realiably but pending
+		* an algorithm that does this reliably, the value is set manually.  
 		*/
-		void isCwndGrowthRestrictionWhenCongested(bool val) {
-			cwndGrowthRestrictionWhenCongested = val;
+		void setEstimatedJitter(float estimatedJitter_) {
+			estimatedJitter = estimatedJitter_;
 		}
 	private:
 		/*
@@ -840,7 +832,8 @@ extern "C" {
 		float queueDelayFractionAvg;
 		float queueDelayTarget;
 		float queueDelayDev;
-		bool isEnableDelayBasedCongestionControl;
+		float queueDelayDevTh;
+		float estimatedJitter;
 
 		float queueDelaySbdVar;
 		float queueDelaySbdMean;
@@ -881,7 +874,6 @@ extern "C" {
 		float bytesInFlightRatio;
 		float windowHeadroom;
 		bool enableAdaptiveWindowHeadroom;
-		bool cwndGrowthRestrictionWhenCongested;
 
 		int bytesMarkedThisRtt;
 		int bytesDeliveredThisRtt;
@@ -956,6 +948,7 @@ extern "C" {
 		uint32_t lastCwndUpdateT_ntp;
 
 		uint32_t lastQueueDelayAvgUpdateT_ntp;
+		uint32_t lastQueueDelayMinAvgUpdateT_ntp;
 		uint32_t lastL4sAlphaUpdateT_ntp;
 		uint32_t lastBaseDelayRefreshT_ntp;
 		uint32_t lastRateLimitT_ntp;
