@@ -871,6 +871,7 @@ extern "C" {
 		int prevBytesInFlight;
 		int maxBytesInFlight;
 		int maxBytesInFlightPrev;
+		bool isApplicationLimited;
 		float bytesInFlightRatio;
 		float windowHeadroom;
 		bool enableAdaptiveWindowHeadroom;

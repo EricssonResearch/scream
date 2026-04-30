@@ -179,6 +179,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	prevBytesInFlight(0),
 	maxBytesInFlight(0),
 	maxBytesInFlightPrev(0),
+	isApplicationLimited(false),
 	bytesInFlightRatio(0.0f),
 	windowHeadroom(maxWindowHeadroom),
 	enableAdaptiveWindowHeadroom(true),
@@ -1040,7 +1041,16 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 					/*
 					* Update sRtt
 					*/
-					sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
+					if (isApplicationLimited && sRtt_ntp > sRttSh_ntp) {
+						/*
+						* Slow decay of sRtt if application limited and rtt is reduced.
+						* This avoids that the target bitrate is increased because of lower RTT when 
+						* a media encoder produces output media at a lower bitrate than the target.
+						*/
+						sRtt_ntp = (1023 * sRtt_ntp + sRttSh_ntp) / 1024;
+					} else {
+						sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
+					}
 					sRtt = sRtt_ntp * ntp2SecScaleFactor;
 					lastSRttUpdateT_ntp = time_ntp;
 				}
@@ -1804,6 +1814,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Limit increase if max bitrate reached, as there is no point increasing it
 	*/
 	double maxAllowed = getMss() + std::max(maxBytesInFlight, maxBytesInFlightPrev) * bytesInFlightHeadRoom;
+	isApplicationLimited = maxAllowed < cwnd;
 	int cwndTmp = cwnd + (int)(increment + 0.5f);
 	if (cwndTmp <= maxAllowed && getTotalTargetBitrate() < getTotalMaxBitrate())
 		cwnd = cwndTmp;
