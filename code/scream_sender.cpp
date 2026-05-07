@@ -365,7 +365,7 @@ void* createRtpThread(void* arg) {
 			lastKeyFrameT_ntp = time_ntp;
 		}
 
-		if (!pushTraffic && burstTime < 0) {
+		if (burstTime > 0) {
 			float time_s = time_ntp / 65536.0f;
 			if (burstStartTime < 0) {
 				burstStartTime = time_s;
@@ -655,7 +655,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-03-04 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-05-07 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;

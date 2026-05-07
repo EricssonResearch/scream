@@ -3,6 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-05-07 :
+  - -burst option did not work correctly 
+  - Build date for BW test tool sender changed
 - 2026-04-30 :
   - sRtt calculation slowed down when bytes in flight is considerably lower than cwnd (application limited).  
 - 2026-03-04 :
@@ -32,26 +35,6 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
 - 2025-10-14 :
   - Bug in congestion avoidance logic fixed
   - Delay based and L4S CC stablity improved for large RTTs
-- 2025-09-27 - 28 :
-  - Delay based congestion control (default enabled) can be selectable with function enableDelayBasedCongestionControl. With this change, delay based congestion congtrol (if enabled) runs fully in parallel with L4S. 
-  - Option -nodelaycc added BW test tool to disable delay based congestion control.  
-	- Build date for BW test tool changed
-- 2025-08-08 :
-  - Reordering time (packet reodering margin) is made configurable 
-- 2025-05-09 : 
-  - Added new user guide for the SCReAM BW test tool with examples
-  - SCReAM BW test, added end of session summary 
-- 2025-04-17 :
-  - Added option -txrxlog that logs time, sequence_number, tx_time, rx_time, rx_time-tx_time for each RTP packet.   
-- 2025-01-29 :
-  - -relaxedpacing option added. Enables increased pacing rate when max rate reached
-  - -postcongestiondelay option removed, replaced with a constant
-  - -openwindow option replaced with windowheadroom option
-  - More conservative CWND increase when max rate reached
-  - Bytes inflight restriction to target rate enabled only when queue detected
-  - Max feedback interval set to 10ms (was 5ms) 
-  - Release dates for SCReAM BW test changed 
-
   
 Older version history is found here https://github.com/EricssonResearch/scream/blob/master/version-history.md 
 ## What is SCReAM
