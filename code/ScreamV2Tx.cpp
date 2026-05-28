@@ -401,7 +401,7 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
 			if (n == 0)
 				statistics->add(time_ntp, streams[0]->rateTransmitted, streams[0]->rateLost, streams[0]->rateCe, sRtt, queueDelay);
 		}
-		rateTransmittedAvg = 0.8f * rateTransmittedAvg + 0.2f * rateTransmitted;
+		rateTransmittedAvg = 0.5f * rateTransmittedAvg + 0.5f * rateTransmitted;
 		lastRateUpdateT_ntp = time_ntp;
 
 		/*
@@ -894,7 +894,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		if (fp_log && completeLogItem) {			
 			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d",
 				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
-				stream->rateRtpAvg, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe,
+				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
 				isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI); //rtpQueue->getDelay(time));
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
