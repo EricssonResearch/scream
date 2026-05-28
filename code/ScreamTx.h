@@ -717,6 +717,17 @@ extern "C" {
 		float getTotalMaxBitrate();
 
 		/*
+		* Get total acked bitrate for all streams
+		*/
+		float getTotalAckedBitrate();
+
+		/*
+		* Get total transmitted bitrate for all streams
+		*/
+		float getTotalTransmittedBitrate();
+
+
+		/*
 		* Update CWND
 		*/
 		void updateCwnd(uint32_t time_ntp);

@@ -1,4 +1,4 @@
-function plot_thp_delay(a,id,Tlim,maxThp,maxDelay)
+function plot_thp_delay(a,id,Tlim,maxThp,maxDelay,maxC)
 % This function plots the thorughput
 % RTT and estimated queue delay
 % Parameters:
@@ -33,6 +33,7 @@ set(gca,'FontSize',12);grid on;
 set(gca,'XTickLabel',[]);grid on;
 title('CWND(B) and bytes in flight(R) [kByte]');
 xlim(Tlim);
+ylim([0 maxC]);
 
 subplot(4,1,3);
 x = a(ix,11)./a(ix,10)*100;

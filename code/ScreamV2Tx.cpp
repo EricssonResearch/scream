@@ -28,7 +28,7 @@ static const float kQueueDelayTargetMax = 0.3f; //s
 // Queue delay trend and shared bottleneck detection
 static const uint32_t kSlowUpdateInterval_ntp = 3277; // 50ms in NTP domain
 // video rate estimation update period
-static const uint32_t kRateUpdateInterval_ntp = 3277; // 50ms in NTP domain
+static const uint32_t kRateUpdateInterval_ntp = 6553; // 100ms in NTP domain //3277; // 50ms in NTP domain
 // Update period for MSS estimation
 static const int kMssUpdateInterval_ntp = 65536;      // 1s in NTP
 
@@ -94,6 +94,8 @@ static const float kMinWindowHeadroom = 1.5f;
 
 static const int kQueueDelayMinAvgUpdateRtts = 100;
 static const float kDefaultEstimatedJitter = 0.01f;
+
+static const float kTotalAckedBitrateFraction = 0.0f;// Should be 0.8 when verified to be safe
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -892,7 +894,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		if (fp_log && completeLogItem) {			
 			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d",
 				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
-				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
+				stream->rateRtpAvg, stream->rateTransmitted, stream->rateAcked, stream->rateLost, stream->rateCe,
 				isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI); //rtpQueue->getDelay(time));
 			if (strlen(detailedLogExtraData) > 0) {
 				fprintf(fp_log, ",%s", detailedLogExtraData);
@@ -1372,6 +1374,27 @@ float ScreamV2Tx::getTotalMaxBitrate() {
 	return totalMaxBitrate;
 }
 
+/*
+* Get total acked bitrate for all streams
+*/
+float ScreamV2Tx::getTotalAckedBitrate() {
+	float totalAckedBitrate = 0.0f;
+	for (int n = 0; n < nStreams; n++) {
+		totalAckedBitrate += streams[n]->rateAcked;
+	}
+	return totalAckedBitrate;
+}
+
+/*
+* Get total transmitted bitrate for all streams
+*/
+float ScreamV2Tx::getTotalTransmittedBitrate() {
+	float totalTransmittedBitrate = 0.0f;
+	for (int n = 0; n < nStreams; n++) {
+		totalTransmittedBitrate += streams[n]->rateTransmitted;
+	}
+	return totalTransmittedBitrate;
+}
 
 /*
 * Determine CWND inflexion point based on median filtering
@@ -1695,6 +1718,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 				float backOff = l4sAlpha / 2.0f;
 
 				/*
+				* Reduce backoff if target bitrate is less than RX rate
+				*/
+				if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
+					backOff *= 0.25f;
+				}
+
+				/*
 				* Scale down backoff when RTT is high as several backoff events occur per RTT
 				*/
 				backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
@@ -1743,6 +1773,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 			* Scale down CWND based on virtualL4sAlpha
 			*/
 			float backOff = virtualL4sAlpha / 2.0f;
+
+			/*
+			* Reduce backoff if target bitrate rate is less than RX rate
+			*/
+			if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
+				backOff *= 0.25f;
+			}
 
 			/*
 			* Scale down backoff when RTT is high as several backoff events occur per RTT
