@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <atomic>
 using namespace std;
 
 #define BUFSIZE 2048
@@ -48,6 +49,11 @@ struct sockaddr_in local_rtp_addr;
 
 struct sockaddr_in6 incoming_rtp_addr6, outgoing_rtcp_addr6, sender_rtcp_addr6;
 struct sockaddr_in6 local_rtp_addr6;
+
+// Flag to track if we know the peer address (seeded or learned).
+// std::atomic gives a release store / acquire load so that the write of
+// outgoing_rtcp_addr in learn-from-source mode is visible before the flag is set.
+std::atomic<bool> peer_known{ false };
 const char* LOCAL_IP = "127.0.0.1";
 const char* LOCAL_IPV6 = "::1";
 int LOCAL_PORT = 30124;
@@ -111,7 +117,8 @@ void* rtcpPeriodicThread(void* arg) {
 	int rtcpSize;
 	uint32_t rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
 	for (;;) {
-		if (getTimeInNtp() - lastPunchNatT_ntp > 32768) { // 500ms in Q16
+		// Only send if we know the peer address (either seeded or learned from first RTP)
+		if (peer_known && getTimeInNtp() - lastPunchNatT_ntp > 32768) { // 500ms in Q16
 			/*
 			* Send a small packet just to punch open a hole in the NAT,
 			*  just one single byte will do.
@@ -128,7 +135,7 @@ void* rtcpPeriodicThread(void* arg) {
 		}
 		uint32_t time_ntp = getTimeInNtp();
 		rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
-		if (screamRx->isFeedback(time_ntp) &&
+		if (peer_known && screamRx->isFeedback(time_ntp) &&
 			(screamRx->checkIfFlushAck() ||
 				(time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp))) {
 			pthread_mutex_lock(&lock_scream);
@@ -154,11 +161,14 @@ int main(int argc, char* argv[])
 	unsigned char buf_rtcp[BUFSIZE];
 	if (argc <= 1) {
 		cerr << "SCReAM BW test tool, receiver. Ericsson AB. Version 2026-01-21 " << endl;
-		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> sender_ip sender_port" << endl;
+		cerr << "Usage :" << endl << " > scream_bw_test_rx <options> [sender_ip] sender_port" << endl;
 		cerr << "     -ipv6               IPv6" << endl;
 		cerr << "     -ackdiff            set the max distance in received RTPs to send an ACK " << endl;
 		cerr << "     -nreported          set the number of reported RTP packets per ACK " << endl;
 		cerr << "     -if name            bind to specific interface" << endl;
+		cerr << endl;
+		cerr << "  If sender_ip is omitted, the receiver will learn the sender address" << endl;
+		cerr << "  from the first incoming RTP packet (reply-to-source mode)." << endl;
 		exit(-1);
 	}
 
@@ -187,9 +197,18 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	// Two modes: seeded (sender_ip + port) or learn-from-source (just port)
 	if (argc > (ix + 1)) {
+		// Seeded mode: sender_ip and port provided
 		SENDER_IP = argv[ix];
 		INCOMING_RTP_PORT = atoi(argv[ix + 1]);
+		peer_known = true; // Peer address is known upfront
+	}
+	else if (argc == (ix + 1)) {
+		// Learn-from-source mode: only port provided
+		INCOMING_RTP_PORT = atoi(argv[ix]);
+		peer_known = false; // Will learn peer from first RTP packet
+		cerr << "Running in learn-from-source mode (sender_ip will be learned from first RTP)" << endl;
 	}
 	else {
 		cerr << "Insufficient parameters." << endl;
@@ -208,10 +227,12 @@ int main(int argc, char* argv[])
 		incoming_rtp_addr6.sin6_addr = in6addr_any;
 		incoming_rtp_addr6.sin6_port = htons(INCOMING_RTP_PORT);
 
-		outgoing_rtcp_addr6.sin6_family = AF_INET6;
-		inet_pton(AF_INET6, SENDER_IP, &outgoing_rtcp_addr6.sin6_addr);
-		//inet_aton(SENDER_IP.c_str(), (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
-		outgoing_rtcp_addr6.sin6_port = htons(INCOMING_RTP_PORT);
+		// Only seed outgoing address if peer is known upfront (seeded mode)
+		if (peer_known) {
+			outgoing_rtcp_addr6.sin6_family = AF_INET6;
+			inet_pton(AF_INET6, SENDER_IP, &outgoing_rtcp_addr6.sin6_addr);
+			outgoing_rtcp_addr6.sin6_port = htons(INCOMING_RTP_PORT);
+		}
 
 
 		local_rtp_addr6.sin6_family = AF_INET6;
@@ -229,9 +250,12 @@ int main(int argc, char* argv[])
 		incoming_rtp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 		incoming_rtp_addr.sin_port = htons(INCOMING_RTP_PORT);
 
-		outgoing_rtcp_addr.sin_family = AF_INET;
-		inet_aton(SENDER_IP, (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
-		outgoing_rtcp_addr.sin_port = htons(INCOMING_RTP_PORT);
+		// Only seed outgoing address if peer is known upfront (seeded mode)
+		if (peer_known) {
+			outgoing_rtcp_addr.sin_family = AF_INET;
+			inet_aton(SENDER_IP, (in_addr*)&outgoing_rtcp_addr.sin_addr.s_addr);
+			outgoing_rtcp_addr.sin_port = htons(INCOMING_RTP_PORT);
+		}
 
 
 		local_rtp_addr.sin_family = AF_INET;
@@ -319,17 +343,18 @@ int main(int argc, char* argv[])
 	uint32_t receivedRtp = 0;
 
 	/*
-	* Send a small packet just to punmax distance in received RTPs to send an ACKch open a hole in the NAT,
-	*  just one single byte will do.
-	* This makes in possible to receive packets on the same port
+	* Send a small packet just to punch open a hole in the NAT (only in seeded mode).
+	* In learn-from-source mode, the sender punches the hole outbound, so skip this.
 	*/
-	if (ipv6) {
-		sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&outgoing_rtcp_addr6, sizeof(outgoing_rtcp_addr6));
+	if (peer_known) {
+		if (ipv6) {
+			sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&outgoing_rtcp_addr6, sizeof(outgoing_rtcp_addr6));
+		}
+		else {
+			sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
+		}
+		lastPunchNatT_ntp = getTimeInNtp();
 	}
-	else {
-		sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-	}
-	lastPunchNatT_ntp = getTimeInNtp();
 
 	pthread_t rtcp_thread;
 	pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...");
@@ -353,8 +378,10 @@ int main(int argc, char* argv[])
 	rcv_iov[0].iov_base = rcv_buf;
 	rcv_iov[0].iov_len = MAX_BUF_SIZE;
 
-	rcv_msg.msg_name = NULL;	// Socket is connected
-	rcv_msg.msg_namelen = 0;
+	// Prepare to capture source address (needed for learn-from-source mode)
+	struct sockaddr_storage peer_addr;
+	rcv_msg.msg_name = &peer_addr;
+	rcv_msg.msg_namelen = sizeof(peer_addr);
 	rcv_msg.msg_iov = rcv_iov;
 	rcv_msg.msg_iovlen = 1;
 	rcv_msg.msg_control = rcv_ctrl_data;
@@ -371,6 +398,8 @@ int main(int argc, char* argv[])
 		*/
 		unsigned char received_ecn;
 #ifdef ECN_CAPABLE
+		// Reset msg_namelen before each recvmsg (kernel updates it)
+		rcv_msg.msg_namelen = sizeof(peer_addr);
 		int recvlen = recvmsg(fd_incoming_rtp, &rcv_msg, 0);
 		if (recvlen == -1) {
 			perror("recvmsg()");
@@ -417,6 +446,29 @@ int main(int argc, char* argv[])
 				cout << s << endl;
 			}
 			else {
+				// Learn peer address from first RTP packet (if not already known)
+				if (!peer_known) {
+#ifdef ECN_CAPABLE
+					// ECN path: source is in rcv_msg.msg_name (filled by recvmsg)
+					if (ipv6) {
+						memcpy(&outgoing_rtcp_addr6, &peer_addr, sizeof(outgoing_rtcp_addr6));
+					}
+					else {
+						memcpy(&outgoing_rtcp_addr, &peer_addr, sizeof(outgoing_rtcp_addr));
+					}
+#else
+					// Non-ECN path: source is in sender_rtp_addr (filled by recvfrom)
+					if (ipv6) {
+						memcpy(&outgoing_rtcp_addr6, &sender_rtp_addr6, sizeof(outgoing_rtcp_addr6));
+					}
+					else {
+						memcpy(&outgoing_rtcp_addr, &sender_rtp_addr, sizeof(outgoing_rtcp_addr));
+					}
+#endif
+					peer_known = true; // Mark peer as known (enables periodic thread + feedback)
+					cerr << "Learned sender address from first RTP packet" << endl;
+				}
+
 				if (time_ntp - last_received_time_ntp > 2 * 65536) { // 2 sec in Q16
 					/*
 					* It's been more than 2 seconds since we last received an RTP packet
