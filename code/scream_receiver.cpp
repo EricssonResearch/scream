@@ -134,22 +134,32 @@ void* rtcpPeriodicThread(void* arg) {
 			cerr << "." << endl;
 		}
 		uint32_t time_ntp = getTimeInNtp();
-		rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
-		if (peer_known && screamRx->isFeedback(time_ntp) &&
-			(screamRx->checkIfFlushAck() ||
-				(time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp))) {
+		// Evaluate the feedback decision and build the feedback packet while
+		// holding lock_scream: getRtcpFbInterval/isFeedback/checkIfFlushAck/
+		// getLastFeedbackT and createStandardizedFeedback all dereference
+		// screamRx, which the main thread may delete and recreate in its
+		// idle-reset path. The original code read screamRx in the condition
+		// before taking the lock, racing that reset. Network I/O stays outside
+		// the critical section.
+		bool isFeedback = false;
+		if (peer_known) {
 			pthread_mutex_lock(&lock_scream);
-			bool isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), true, buf, rtcpSize);
-			pthread_mutex_unlock(&lock_scream);
-			if (isFeedback) {
-				if (ipv6) {
-					sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr6, sizeof(outgoing_rtcp_addr6));
-				}
-				else {
-					sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-				}
-				lastPunchNatT_ntp = getTimeInNtp();
+			rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
+			if (screamRx->isFeedback(time_ntp) &&
+				(screamRx->checkIfFlushAck() ||
+					(time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp))) {
+				isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), true, buf, rtcpSize);
 			}
+			pthread_mutex_unlock(&lock_scream);
+		}
+		if (isFeedback) {
+			if (ipv6) {
+				sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr6, sizeof(outgoing_rtcp_addr6));
+			}
+			else {
+				sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
+			}
+			lastPunchNatT_ntp = getTimeInNtp();
 		}
 		usleep(500);
 	}
@@ -356,11 +366,14 @@ int main(int argc, char* argv[])
 		lastPunchNatT_ntp = getTimeInNtp();
 	}
 
+	uint16_t lastSn = 0;
+	// Initialize the mutex before starting the periodic thread: that thread
+	// now locks lock_scream on every iteration (see rtcpPeriodicThread), so
+	// it must be valid before the thread can run.
+	pthread_mutex_init(&lock_scream, NULL);
+
 	pthread_t rtcp_thread;
 	pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...");
-
-	uint16_t lastSn = 0;
-	pthread_mutex_init(&lock_scream, NULL);
 
 
 #define MAX_CTRL_SIZE 8192
@@ -472,11 +485,17 @@ int main(int argc, char* argv[])
 				if (time_ntp - last_received_time_ntp > 2 * 65536) { // 2 sec in Q16
 					/*
 					* It's been more than 2 seconds since we last received an RTP packet
-					*  let's reset everything to be on the safe side
+					*  let's reset everything to be on the safe side.
+					* Hold lock_scream across the delete/new: rtcpPeriodicThread
+					* dereferences screamRx concurrently, so swapping the pointer
+					* unlocked is a use-after-free. This fires when the RTP source
+					* stalls then resumes (e.g. a flapping cellular/NAT link).
 					*/
 					receivedRtp = 0;
+					pthread_mutex_lock(&lock_scream);
 					delete screamRx;
 					screamRx = new ScreamRx(10, ackDiff, nReportedRtpPackets);
+					pthread_mutex_unlock(&lock_scream);
 					cerr << "Receiver state reset due to idle input" << endl;
 				}
 				last_received_time_ntp = time_ntp;
