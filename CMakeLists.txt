@@ -9,6 +9,7 @@ SET(LIBRARY_OUTPUT_PATH ${scream_SOURCE_DIR}/lib)
 SET(RUNTIME_OUTPUT_DIRECTORY ${scream_SOURCE_DIR}/bin)
 
 SET(scream_BIN ${scream_SOURCE_DIR}/bin)
+SET(CMAKE_BUILD_TYPE Release)
 
 message("scream_SOURCE_DIR directories:" ${scream_SOURCE_DIR})
 

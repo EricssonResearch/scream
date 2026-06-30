@@ -69,8 +69,8 @@ static const float kCeDensityAlpha = 1.0f / 16;
 static const float kLowCwndScaleFactor = 1.0f;
 
 // Time constant for queue delay average
-static const float kQueueDelayAvgAlpha = 1.0f / 4;
-static const float kQueueDelayMinAvgAlpha = 1.0f/8;
+static const float kQueueDelayAvgAlpha = 1.0f/4;
+static const float kQueueDelayMinSlowAvgAlpha = 1.0f/8;
 
 // Packet overhead
 static const int kPacketOverhead = 12 + 8; // RTP + UDP
@@ -92,10 +92,17 @@ static const float kMaxRelaxedPacingFactor = 5.0f;
 
 static const float kMinWindowHeadroom = 1.5f;
 
-static const int kQueueDelayMinAvgUpdateRtts = 100;
-static const float kDefaultEstimatedJitter = 0.01f;
+static const int kQueueDelayMinSlowAvgUpdateRtts = 100;
 
-static const float kTotalAckedBitrateFraction = 0.0f;// Should be 0.8 when verified to be safe
+static const float kLatencyDiffAlpha = 1.0f/32;
+static const float kQueueDelayMinMaxAlpha = 1.0f/16;
+static const float kLatencyDiffThreshold = 0.01f;
+static const float kLossRateThreshold = 0.01f;
+static const float kPolicerLossRateThreshold = 0.1f;
+static const float kBetaLossPolicer = 0.8f;
+static const float kLossBetaSlow = 0.95f;
+
+static const float kTotalAckedBitrateFraction = 0.8f;// Should be 0.8 when verified to be safe
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -110,26 +117,27 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	float maxWindowHeadroom_,
 	bool enableSbd_,
 	bool enableClockDriftCompensation_
-) :
-	ScreamTx(),
-	lossBeta(lossBeta_),
-	ecnCeBeta(ecnCeBeta_),
-	queueDelayTargetMin(queueDelayTargetMin_),
+  ) :
+  ScreamTx(),
+  lossBeta(lossBeta_),
+  ecnCeBeta(ecnCeBeta_),
+  queueDelayTargetMin(queueDelayTargetMin_),
 
-	packetPacingHeadroom(packetPacingHeadroom_),
-	maxAdaptivePacingRateScale(maxAdaptivePacingRateScale_),
-	bytesInFlightHeadRoom(bytesInFlightHeadRoom_),
-	multiplicativeIncreaseScalefactor(multiplicativeIncreaseScalefactor_),
-	isL4s(isL4s_),
-	maxWindowHeadroom(maxWindowHeadroom_),
-	enableSbd(enableSbd_),
-	enableClockDriftCompensation(enableClockDriftCompensation_),
+  packetPacingHeadroom(packetPacingHeadroom_),
+  maxAdaptivePacingRateScale(maxAdaptivePacingRateScale_),
+  bytesInFlightHeadRoom(bytesInFlightHeadRoom_),
+  multiplicativeIncreaseScalefactor(multiplicativeIncreaseScalefactor_),
+  isL4s(isL4s_),
+  maxWindowHeadroom(maxWindowHeadroom_),
+  enableSbd(enableSbd_),
+  enableClockDriftCompensation(enableClockDriftCompensation_),
+  enableRatePolicerProtection(false),
 
-	isEnablePacketPacing(true),
-	isAutoTuneMinCwnd(false),
-	enableRateUpdate(true),
-	isUseExtraDetailedLog(false),
-	isEnableRelaxedPacing(false),
+  isEnablePacketPacing(true),
+  isAutoTuneMinCwnd(false),
+  enableRateUpdate(true),
+  isUseExtraDetailedLog(false),
+  isEnableRelaxedPacing(false),
 
 	sRtt(0.05f), // Init SRTT to 50ms
 	sRttSh(0.05f),
@@ -144,9 +152,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	queueDelay(0.0),
 	queueDelayFractionAvg(0.0f),
 	queueDelayTarget(queueDelayTargetMin),
-	queueDelayDev(0.05f), // Initialize to a non-zero value to avoid overshoot if link throughput
-	queueDelayDevTh(0.1f),
-	estimatedJitter(kDefaultEstimatedJitter),
 
 	queueDelaySbdVar(0.0f),
 	queueDelaySbdMean(0.0f),
@@ -156,7 +161,11 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	queueDelayAvg(0.0f),
 	queueDelayMax(0.0f),
 	queueDelayMin(1000.0),
-	queueDelayMinAvg(0.0f),
+	queueDelayMaxAvg(0.0f),
+	queueDelayMinAvg(1000.0),
+	queueDelayMinSlowAvg(0.0f),
+	latencyDiffAvg(0.0f),
+	latencyDiffCwndScale(1.0f),
 
 	bytesNewlyAcked(0),
 	bytesNewlyAckedCe(0),
@@ -175,6 +184,8 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	cwndI(1),
 	cwndRatio(0.001f),
 	cwndIHistIx(0),
+	maxPolicedCwnd(1.0e8f), // Really high value
+	isMaxPolicedCwndUpdateBlocked(false),
 
 	bytesInFlight(0),
 	bytesInFlightLog(0),
@@ -206,6 +217,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	postCongestionScale(1.0f),
 	reorderTime(kReorderTime),
 	reorderTime_ntp(uint32_t(kReorderTime * sec2NtpScaleFactor + 0.5f)),
+	lossRate(0.0f),
 
 	rateTransmitted(0.0f),
 	rateRtpAvg(0.0f),
@@ -251,34 +263,34 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	lastCwndIUpdateT_ntp(0),
 	lastCwndUpdateT_ntp(0),
 	lastQueueDelayAvgUpdateT_ntp(0),
-	lastQueueDelayMinAvgUpdateT_ntp(0),
+	lastQueueDelayMinSlowAvgUpdateT_ntp(0),
 	lastL4sAlphaUpdateT_ntp(0),
 	lastBaseDelayRefreshT_ntp(0),
 	lastRateLimitT_ntp(0),
 	lastMssChange_ntp(0)
-{
-	strcpy(detailedLogExtraData, "");
-	strcpy(timeString, "");
+  {
+    strcpy(detailedLogExtraData, "");
+    strcpy(timeString, "");
 
-	if (cwnd_ == 0) {
-		cwnd = kInitMss * 2;
-	}
-	else {
-		cwnd = cwnd_;
-	}
+    if (cwnd_ == 0) {
+      cwnd = kInitMss * 2;
+    }
+    else {
+      cwnd = cwnd_;
+    }
 
-	for (int n = 0; n < kBaseOwdHistSize; n++)
-		baseOwdHist[n] = UINT32_MAX;
-	for (int n = 0; n < kQueueDelayNormHistSize; n++)
-		queueDelayNormHist[n] = 0.0f;
-	for (int n = 0; n < kMaxStreams; n++)
-		streams[n] = NULL;
-	for (int n = 0; n < kMaxBytesInFlightHistSize; n++)
-		maxBytesInFlightHist[n] = 0;
-	for (int n = 0; n < kCwndIHistSize; n++) 
-		cwndIHist[n] = 0;
+    for (int n = 0; n < kBaseOwdHistSize; n++)
+      baseOwdHist[n] = UINT32_MAX;
+    for (int n = 0; n < kQueueDelayNormHistSize; n++)
+      queueDelayNormHist[n] = 0.0f;
+    for (int n = 0; n < kMaxStreams; n++)
+      streams[n] = NULL;
+    for (int n = 0; n < kMaxBytesInFlightHistSize; n++)
+      maxBytesInFlightHist[n] = 0;
+    for (int n = 0; n < kCwndIHistSize; n++) 
+      cwndIHist[n] = 0;
 
-	mssList[0] = kRecommendedMss;
+    mssList[0] = kRecommendedMss;
 }
 
 ScreamV2Tx::~ScreamV2Tx() {
@@ -331,7 +343,6 @@ RtpQueueIface* ScreamV2Tx::getStreamQueue(uint32_t ssrc) {
 	else
 		return stream->rtpQueue;
 }
-
 
 /*
 * New media frame
@@ -553,7 +564,6 @@ float ScreamV2Tx::addTransmitted(uint32_t time_ntp,
 	return paceInterval;
 }
 
-//extern uint32_t getTimeInNtp();
 static uint32_t    unused;
 static uint32_t time_ntp_prev = 0;
 void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
@@ -710,6 +720,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		detectLoss(time_ntp, txPackets, seqNr, stream);
 	}
 
+	queueDelayMinAvg = std::min(queueDelayMinAvg, queueDelay);
+	queueDelayMaxAvg = std::min(queueDelayTarget, std::max(queueDelayMaxAvg, queueDelay));
 	if (isLast) {
 		if (time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) { // CE event at least every 30ms
 			if (isCeThisFeedback) {
@@ -788,40 +800,62 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		}
 
 		if (time_ntp - lastQueueDelayAvgUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
-            /*
-            * Update a long term average of the min queue delay. This is used to take clock drift into account
-            * and also to be able to reset the queue delay history if clock drift becomes too large
-            */
-            if (time_ntp - lastQueueDelayMinAvgUpdateT_ntp > sRtt_ntp*kQueueDelayMinAvgUpdateRtts) {
-                if (queueDelayMin < queueDelayMinAvg) {
-                    queueDelayMinAvg = queueDelayMin;
-                } else {
-                    queueDelayMinAvg = kQueueDelayMinAvgAlpha * queueDelayMin + (1.0f-kQueueDelayMinAvgAlpha) * queueDelayMinAvg;
-                }
-                queueDelayMin = 1000.0;
-                lastQueueDelayMinAvgUpdateT_ntp = time_ntp;
-            }
+
+
+      /*
+      * Update a long term average of the min queue delay. This is used to take clock drift into account
+      * and also to be able to reset the queue delay history if clock drift becomes too large
+      */
+      if (time_ntp - lastQueueDelayMinSlowAvgUpdateT_ntp > sRtt_ntp*kQueueDelayMinSlowAvgUpdateRtts) {
+        if (queueDelayMin < queueDelayMinSlowAvg) {
+          queueDelayMinSlowAvg = queueDelayMin;
+        } else {
+          queueDelayMinSlowAvg = kQueueDelayMinSlowAvgAlpha * queueDelayMin + (1.0f-kQueueDelayMinSlowAvgAlpha) * queueDelayMinSlowAvg;
+        }
+        queueDelayMin = 1000.0;
+        lastQueueDelayMinSlowAvgUpdateT_ntp = time_ntp;
+      }
 
 			/*
-            * Compute a more slowly varying queue delay estimate
-            */
-			float tmp = queueDelay-queueDelayMinAvg;
-			if (tmp < queueDelayAvg) {
-				queueDelayAvg = tmp;
-			}
-			else {
-				queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * tmp;
-			}
+      * Compute a more slowly varying queue delay estimate
+      */
+      float tmp = queueDelay-queueDelayMinSlowAvg;
+      if (tmp < queueDelayAvg) {
+        queueDelayAvg = tmp;
+      }
+      else {
+        queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * tmp;
+      }
 
 			/*
-			* Calculate a standard deviation if the queue delay jitter. The metric is zero if the jitter is lower than the 
-			* estimated jitter. The estimatedJitter is a fixed value (default 10ms) but may become a run-time estimated 
-			* value in a future version.
+			* Calculate the restriction on bytes in flight and the increase of the cwnd based on
+			* the difference between max and min queue delay.
 			*/
-			float diff = std::max(0.0f,(queueDelay - queueDelayMinAvg) / estimatedJitter - 1.0f);
-			queueDelayDev = std::min(0.2f, (63.0f* queueDelayDev + diff) / 64.0f);
-			lastQueueDelayAvgUpdateT_ntp = time_ntp;
-		}
+      float packetLatencyDiff = std::max(0.0f, 
+      	std::min(2.0f * kLatencyDiffThreshold, queueDelayMaxAvg-queueDelayMinAvg));
+
+      latencyDiffAvg = (1.0f-kLatencyDiffAlpha)*latencyDiffAvg + 
+  			kLatencyDiffAlpha*packetLatencyDiff;
+				
+      latencyDiffCwndScale = std::min(1.0f, std::max(0.0f, 1.0f - latencyDiffAvg/kLatencyDiffThreshold));
+
+      /*
+      * Max average queue delay targets zero while min average queue delay 
+      * targets the max average queue delay. This makes the difference robust against 
+      * clock drift and increases the robustness against scheduling delay jitter somewhat
+      */
+      queueDelayMaxAvg *= (1.0f-kQueueDelayMinMaxAlpha);
+      queueDelayMinAvg = (1.0f-kQueueDelayMinMaxAlpha) * queueDelayMinAvg +
+      kQueueDelayMinMaxAlpha * queueDelayMaxAvg;
+
+
+      /*
+      * Increase maxPolicedCwnd with a time constant of 1000RTTs
+      */
+      maxPolicedCwnd *= 1.001;
+
+      lastQueueDelayAvgUpdateT_ntp = time_ntp;
+    }
 
 		/*
 		* This code fakes ECN-CE events when either ECN or L4S is not enabled or in case packets are not
@@ -832,9 +866,9 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 		* Use the average queue delay to avoid over reaction to lower later retransmissions
 		*/
 
-		if (queueDelayAvg > queueDelayTarget / 2.0f &&
-			time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
-			virtualCeEvent = true;
+    if (queueDelayAvg > queueDelayTarget / 2.0f &&
+      time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
+      virtualCeEvent = true;
 			/*
 			 * A virtual L4S alpha is calculated based on the estimated queue delay
 			 * Virtual L4S marking sets in with increased back-off as soon as the queue delay
@@ -842,71 +876,70 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 			 * against clock drift and clock skipping errors
 			 * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim 
 			 */
-			virtualL4sAlpha = std::min(1.0f, std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
+      virtualL4sAlpha = std::min(1.0f, std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
 			/*
 			* Scale down backoff when sRtt is large as backoff happens every several times per RTT 
 			*/
-			virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
-		}
+      virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
+    }
 
-		if (sRttShPrev_ntp > sRttSh_ntp && fractionMarked == 1.0f) {
+    if (sRttShPrev_ntp > sRttSh_ntp && fractionMarked == 1.0f) {
 			/*
 			* L4S marking may have too high marking thresholds, the result is that queues
 			* can become large that CE marking stays too long. This inhibits CE marking if the RTT reduces, which 
 			* is a reasonably safe sign that queues begin to deplete
 			*/
-			ecnCeEvent = false;
-		}
+      ecnCeEvent = false;
+    }
 
-		if (lossEvent || ecnCeEvent || virtualCeEvent) {
-			lastLossEventT_ntp = time_ntp;
-		}
+    if (lossEvent || ecnCeEvent || virtualCeEvent) {
+      lastLossEventT_ntp = time_ntp;
+    }
 
-		if (lastCwndUpdateT_ntp == 0)
-			lastCwndUpdateT_ntp = time_ntp;
+    if (lastCwndUpdateT_ntp == 0)
+      lastCwndUpdateT_ntp = time_ntp;
 
-		if (time_ntp - lastCwndUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp) ||
-			lossEvent || ecnCeEvent || virtualCeEvent || isNewFrame) {
+    if (time_ntp - lastCwndUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp) ||
+        lossEvent || ecnCeEvent || virtualCeEvent || isNewFrame) {
 			/*
 			* There is no gain with a too frequent CWND update
 			* An update every 10ms is fast enough even at very high high bitrates
 			* Expections are loss or CE events
 			* or when a new frame arrives, in which case the packet pacing rate needs an update
 			*/
-			bytesInFlightRatio = std::min(1.0f, float(prevBytesInFlight) / cwnd);
+      bytesInFlightRatio = std::min(1.0f, float(prevBytesInFlight) / cwnd);
 
-			updateCwnd(time_ntp);
-			for (int n = 0; n < nStreams; n++) {
-				Stream* tmp = streams[n];
-				tmp->updateTargetBitrate(time_ntp);
-			}
-			ecnCeEvent = false;
-			virtualCeEvent = false;
-			lastCwndUpdateT_ntp = time_ntp;
-			isNewFrame = false;
-		}
+      updateCwnd(time_ntp);
+      for (int n = 0; n < nStreams; n++) {
+        Stream* tmp = streams[n];
+        tmp->updateTargetBitrate(time_ntp);
+      }
+      ecnCeEvent = false;
+      virtualCeEvent = false;
+      lastCwndUpdateT_ntp = time_ntp;
+      isNewFrame = false;
+    }
 
-	}
+  }
 
-	float time = time_ntp * ntp2SecScaleFactor;
+  float time = time_ntp * ntp2SecScaleFactor;
 
-	if (isUseExtraDetailedLog || isLast || isMark) {
-		if (fp_log && completeLogItem) {			
-			fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d",
-				cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
-				stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
+  if (isUseExtraDetailedLog || isLast || isMark) {
+    if (fp_log && completeLogItem) {			
+      fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d",
+        cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
+        stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
 				isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI); //rtpQueue->getDelay(time));
-			if (strlen(detailedLogExtraData) > 0) {
-				fprintf(fp_log, ",%s", detailedLogExtraData);
-			}
-			bytesNewlyAckedLog = 0;
-			ecnCeMarkedBytesLog = 0;
-		}
-		if (fp_log && completeLogItem) {
-			fprintf(fp_log, "\n");
-		}
-	}
-
+      if (strlen(detailedLogExtraData) > 0) {
+        fprintf(fp_log, ",%s", detailedLogExtraData);
+      }
+      bytesNewlyAckedLog = 0;
+      ecnCeMarkedBytesLog = 0;
+    }
+    if (fp_log && completeLogItem) {
+      fprintf(fp_log, "\n");
+    }
+  }
 }
 
 /*
@@ -968,102 +1001,102 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 				* single precision (float) issues
 				*/ 
 				fprintf(fp_txrxlog, "%s, %d, %d.%04d, %d.%04d, %d.%04d\n", timeString, seqNr,
-					    tmp->timeTx_ntp >> 16,
-					    uint32_t((tmp->timeTx_ntp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5),
-					    timestamp >> 16, 
-					    uint32_t((timestamp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5),
-					    ackedOwd >> 16,
-					    uint32_t((ackedOwd & 0xFFFF)*ntp2SecScaleFactor*10000+0.5));
-            }
+         tmp->timeTx_ntp >> 16,
+         uint32_t((tmp->timeTx_ntp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5),
+         timestamp >> 16, 
+         uint32_t((timestamp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5),
+         ackedOwd >> 16,
+         uint32_t((ackedOwd & 0xFFFF)*ntp2SecScaleFactor*10000+0.5));
+      }
 
 			/*
 			* Compute the queue delay i NTP domain (Q16)
 			*/
-			estimateOwd(time_ntp);
+      estimateOwd(time_ntp);
 			/*
 			* Small compensation for positive clock drift
 			*/
-			ackedOwd -= clockDriftCompensation;
+      ackedOwd -= clockDriftCompensation;
 
-			uint32_t qDel = ackedOwd - getBaseOwd();
+      uint32_t qDel = ackedOwd - getBaseOwd();
 
-			if (qDel > 0xFFFF0000 && clockDriftCompensation != 0) {
+      if (qDel > 0xFFFF0000 && clockDriftCompensation != 0) {
 				/*
 				* We have the case that the clock drift compensation is too large as it gives negative queue delays
 				* reduce the clock drift compensation and restore qDel to 0
 				*/
-				uint32_t diff = 0 - qDel;
-				clockDriftCompensation -= diff;
-				qDel = 0;
-			}
+        uint32_t diff = 0 - qDel;
+        clockDriftCompensation -= diff;
+        qDel = 0;
+      }
 
-			if (qDel > 0xFFFF0000 || clockDriftCompensation > 0xFFFF0000) {
+      if (qDel > 0xFFFF0000 || clockDriftCompensation > 0xFFFF0000) {
 				/*
 				* TX and RX clock diff made qDel wrap around
 				*  reset history
 				*/
-				clockDriftCompensation = 0;
-				clockDriftCompensationInc = 0;
-				queueDelayMinAvg = 0.0f;
-				queueDelay = 0.0f;
-				for (int n = 0; n < kBaseOwdHistSize; n++)
-					baseOwdHist[n] = UINT32_MAX;
-				baseOwd = UINT32_MAX;
-				baseOwdHistMin = UINT32_MAX;
-				baseOwdResetT_ntp = time_ntp;
-				qDel = 0;
-			}
+        clockDriftCompensation = 0;
+        clockDriftCompensationInc = 0;
+        queueDelayMinSlowAvg = 0.0f;
+        queueDelay = 0.0f;
+        for (int n = 0; n < kBaseOwdHistSize; n++)
+          baseOwdHist[n] = UINT32_MAX;
+        baseOwd = UINT32_MAX;
+        baseOwdHistMin = UINT32_MAX;
+        baseOwdResetT_ntp = time_ntp;
+        qDel = 0;
+      }
 
 			/*
 			* Convert from NTP domain OWD to an OWD in [s]
 			*/
-			queueDelay = qDel * ntp2SecScaleFactor;
-			if (queueDelay < 0.001f) {
+      queueDelay = qDel * ntp2SecScaleFactor;
+      if (queueDelay < 0.001f) {
 				/*
 				* A long standing queue is avoided
 				* no need to refresh the base delay for a foreseeable future
 				*/
-				lastBaseDelayRefreshT_ntp = time_ntp - 3 * sRtt_ntp;
-			}
+        lastBaseDelayRefreshT_ntp = time_ntp - 3 * sRtt_ntp;
+      }
 
 
-			uint32_t rtt = time_ntp - tmp->timeTx_ntp;
-			currRtt = rtt*ntp2SecScaleFactor;
+      uint32_t rtt = time_ntp - tmp->timeTx_ntp;
+      currRtt = rtt*ntp2SecScaleFactor;
 
-			if (fp_log && (isUseExtraDetailedLog || isLast || isMark)) {
-				fprintf(fp_log, "%s,%1.4f,%1.4f,", timeString, queueDelay, rtt * ntp2SecScaleFactor);
-				completeLogItem = true;
-			}
-			
-			if (rtt < 1000000 && isLast) {
-				sRttShPrev_ntp = sRttSh_ntp;
-				sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
-				sRttSh = sRttSh_ntp * ntp2SecScaleFactor;
-				if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
+      if (fp_log && (isUseExtraDetailedLog || isLast || isMark)) {
+        fprintf(fp_log, "%s,%1.4f,%1.4f,", timeString, queueDelay, rtt * ntp2SecScaleFactor);
+        completeLogItem = true;
+      }
+
+      if (rtt < 1000000 && isLast) {
+        sRttShPrev_ntp = sRttSh_ntp;
+        sRttSh_ntp = (7 * sRttSh_ntp + rtt) / 8;
+        sRttSh = sRttSh_ntp * ntp2SecScaleFactor;
+        if (time_ntp - lastSRttUpdateT_ntp > sRttSh_ntp) {
 					/*
 					* Update sRtt
 					*/
-					if (isApplicationLimited && sRtt_ntp > sRttSh_ntp) {
+          if (isApplicationLimited && sRtt_ntp > sRttSh_ntp) {
 						/*
 						* Slow decay of sRtt if application limited and rtt is reduced.
 						* This avoids that the target bitrate is increased because of lower RTT when 
 						* a media encoder produces output media at a lower bitrate than the target.
 						*/
-						sRtt_ntp = (1023 * sRtt_ntp + sRttSh_ntp) / 1024;
-					} else {
-						sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
-					}
-					sRtt = sRtt_ntp * ntp2SecScaleFactor;
-					lastSRttUpdateT_ntp = time_ntp;
-				}
-			}
-			stream->timeTxAck_ntp = tmp->timeTx_ntp;
-		}
-	}
-	else {
-		unused++;
-	}
-	return isCe;
+            sRtt_ntp = (1023 * sRtt_ntp + sRttSh_ntp) / 1024;
+          } else {
+            sRtt_ntp = (7 * sRtt_ntp + sRttSh_ntp) / 8;
+          }
+          sRtt = sRtt_ntp * ntp2SecScaleFactor;
+          lastSRttUpdateT_ntp = time_ntp;
+        }
+      }
+      stream->timeTxAck_ntp = tmp->timeTx_ntp;
+    }
+  }
+  else {
+    unused++;
+  }
+  return isCe;
 }
 
 
@@ -1102,45 +1135,46 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 			Transmitted* tmp = &txPackets[n];
 			if (!tmp->isAcked) {
 				if (time_ntp - lastLossEventT_ntp > sRtt_ntp && lossBeta < 1.0f) {
-					lossEvent = true;
+					setLossEvent();
 				}
 				if (fp_txrxlog) {
-				   fprintf(fp_txrxlog, "%s, %d, %d.%04d, -1.0, -1.0\n", timeString, tmp->seqNr,
-					    tmp->timeTx_ntp >> 16,
-					    uint32_t((tmp->timeTx_ntp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5));
-            	}
+         fprintf(fp_txrxlog, "%s, %d, %d.%04d, -1.0, -1.0\n", timeString, tmp->seqNr,
+           tmp->timeTx_ntp >> 16,
+           uint32_t((tmp->timeTx_ntp & 0xFFFF)*ntp2SecScaleFactor*10000+0.5));
+        }
 
-				stream->bytesLost += tmp->size;
-				stream->packetLost++;
-				tmp->isUsed = false;
-				stream->repairLoss = true;
-			}
-			tmp->isUsed = false;
-		}
-	}
+        stream->bytesLost += tmp->size;
+        stream->packetLost++;
+        tmp->isUsed = false;
+        stream->repairLoss = true;
+        calculateLossRate(true);
+      }
+      tmp->isUsed = false;
+    }
+  }
 
 	/*
 	* Mark late packets as lost
 	*/
-	for (int m = ix0; m <= ix1; m++) {
-		int n = m % kMaxTxPackets;
+  for (int m = ix0; m <= ix1; m++) {
+    int n = m % kMaxTxPackets;
 		/*
 		* Loop through TX packets
 		*/
-		if (txPackets[n].isUsed) {
-			Transmitted* tmp = &txPackets[n];
+    if (txPackets[n].isUsed) {
+      Transmitted* tmp = &txPackets[n];
 			/*
 			* RTP packet is in flight
 			*/
 			/*
 			* Wrap-around safety net
 			*/
-			uint32_t seqNrExt = tmp->seqNr;
-			uint32_t highestSeqNrExt = highestSeqNr;
-			if (seqNrExt < highestSeqNrExt && highestSeqNrExt - seqNrExt > 20000)
-				seqNrExt += 65536;
-			else if (seqNrExt > highestSeqNrExt && seqNrExt - highestSeqNrExt > 20000)
-				highestSeqNrExt += 65536;
+      uint32_t seqNrExt = tmp->seqNr;
+      uint32_t highestSeqNrExt = highestSeqNr;
+      if (seqNrExt < highestSeqNrExt && highestSeqNrExt - seqNrExt > 20000)
+        seqNrExt += 65536;
+      else if (seqNrExt > highestSeqNrExt && seqNrExt - highestSeqNrExt > 20000)
+        highestSeqNrExt += 65536;
 
 			/*
 			* RTP packets with a sequence number lower
@@ -1149,15 +1183,15 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 			* This advances the send window, similar to what
 			* SACK does in TCP
 			*/
-			if (seqNrExt <= highestSeqNrExt && tmp->isAfterReceivedEdge == false) {
-				bytesNewlyAcked += tmp->size;
-				bytesNewlyAckedLog += tmp->size;
-				bytesInFlight -= tmp->size;
-				if (bytesInFlight < 0)
-					bytesInFlight = 0;
-				stream->bytesAcked += tmp->size;
-				tmp->isAfterReceivedEdge = true;
-			}
+      if (seqNrExt <= highestSeqNrExt && tmp->isAfterReceivedEdge == false) {
+        bytesNewlyAcked += tmp->size;
+        bytesNewlyAckedLog += tmp->size;
+        bytesInFlight -= tmp->size;
+        if (bytesInFlight < 0)
+          bytesInFlight = 0;
+        stream->bytesAcked += tmp->size;
+        tmp->isAfterReceivedEdge = true;
+      }
 
 			/*
 			* Determine if RTP packet is ACKed beyond the allowed reording delay, or just lost
@@ -1165,26 +1199,28 @@ void ScreamV2Tx::detectLoss(uint32_t time_ntp, struct Transmitted* txPackets, ui
 			* the tsDiffCorrection makes a reference to transmission of earlier frames with same timestamp
 			* to determine if a packet is lost.
 			*/
-			uint32_t tsDiffCorrection = (uint32_t)(65536.0f * (stream->timeStampAckHigh - tmp->timeStamp) / stream->timeStampClockRate);
-			if (tmp->timeTx_ntp + reorderTime_ntp + tsDiffCorrection < stream->timeTxAck_ntp && !tmp->isAcked) {
+      uint32_t tsDiffCorrection = (uint32_t)(65536.0f * (stream->timeStampAckHigh - tmp->timeStamp) / stream->timeStampClockRate);
+      if (tmp->timeTx_ntp + reorderTime_ntp + tsDiffCorrection < stream->timeTxAck_ntp && !tmp->isAcked) {
 				/*
 				* Packet ACK is delayed more than reorderTime_ntp after an ACK of a higher SN packet, 
 				* compensated for timestamp jumps for new frames.
 				* Raise a loss event and remove from TX list
 				*/
-				if (time_ntp - lastLossEventT_ntp > sRtt_ntp && lossBeta < 1.0f) {
-					lossEvent = true;
-				}
-				stream->bytesLost += tmp->size;
-				stream->packetLost++;
-				tmp->isUsed = false;
-				stream->repairLoss = true;
-			}
-			else if (tmp->isAcked) {
-				tmp->isUsed = false;
-			}
-		}
-	}
+        if (time_ntp - lastLossEventT_ntp > sRtt_ntp && lossBeta < 1.0f) {
+          setLossEvent();
+        }
+        stream->bytesLost += tmp->size;
+        stream->packetLost++;
+        tmp->isUsed = false;
+        stream->repairLoss = true;
+        calculateLossRate(true);
+      }
+      else if (tmp->isAcked) {
+        tmp->isUsed = false;
+        calculateLossRate(false);
+      }
+    }
+  }
 }
 
 float ScreamV2Tx::getTargetBitrate(uint32_t time_ntp, uint32_t ssrc) {
@@ -1194,7 +1230,7 @@ float ScreamV2Tx::getTargetBitrate(uint32_t time_ntp, uint32_t ssrc) {
 	* Check if queue delay is constantly high either because of clock drift
 	* or a standing queue. If that is the case, base delay history is reset.
 	*/
-	if (queueDelayMinAvg > queueDelayTarget / 8) {
+	if (queueDelayMinSlowAvg > queueDelayTarget / 8) {
 		/*
 		* The base delay may slowly creep up when SCReAM operates only on 
 		* detection of estimated one way delay. The reason can be clock drift 
@@ -1210,25 +1246,24 @@ float ScreamV2Tx::getTargetBitrate(uint32_t time_ntp, uint32_t ssrc) {
 			rate *= 0.5f;
 			canResetBaseDelayHistory = true;
 		} else {
-			if (canResetBaseDelayHistory) {;
+			if (canResetBaseDelayHistory) {
 				/*
 				* Reset base delay history
 				*/
-				clockDriftCompensation = 0;
-				clockDriftCompensationInc = 0;
-				queueDelayMinAvg = 0.0f;
-				queueDelay = 0.0f;
-				for (int n = 0; n < kBaseOwdHistSize; n++)
-					baseOwdHist[n] = UINT32_MAX;
-				baseOwd = UINT32_MAX;
-				baseOwdHistMin = UINT32_MAX;
-				baseOwdResetT_ntp = time_ntp;
-				canResetBaseDelayHistory = false;
-			}	
-		}
-	}
-
-	return  rate;
+        clockDriftCompensation = 0;
+        clockDriftCompensationInc = 0;
+        queueDelayMinSlowAvg = 0.0f;
+        queueDelay = 0.0f;
+        for (int n = 0; n < kBaseOwdHistSize; n++)
+          baseOwdHist[n] = UINT32_MAX;
+        baseOwd = UINT32_MAX;
+        baseOwdHistMin = UINT32_MAX;
+        baseOwdResetT_ntp = time_ntp;
+        canResetBaseDelayHistory = false;
+      }	
+    }
+  }
+  return  rate;
 }
 
 void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
@@ -1240,14 +1275,14 @@ void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
 
 void ScreamV2Tx::getLogHeader(char* s) {
 	sprintf(s,
-		"LogName,queueDelay,queueDelayMax,queueDelayMinAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,curMss,rtpQueueDelay,rtpQueueBytes,rtpQueueSize,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
+		"LogName,queueDelay,queueDelayMax,queueDelayMinSlowAvg,sRtt,cwnd,bytesInFlightLog,rateTransmitted,isInFastStart,curMss,rtpQueueDelay,rtpQueueBytes,rtpQueueSize,targetBitrate,rateRtp,packetsRtp,rateTransmittedStream,rateAcked,rateLost,rateCe,packetsCe,hiSeqTx,hiSeqAck,SeqDiff,packetetsRtpCleared,packetsLost");
 }
 
 void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 	int inFlightMax = bytesInFlight;
 	sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, %d,",
-		logTag, queueDelay, queueDelayMax, queueDelayMinAvg, sRtt,
-        cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f, 0, mssList[mssIndex]);
+		logTag, queueDelay, queueDelayMax, queueDelayMinSlowAvg, sRtt,
+    cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f, 0, mssList[mssIndex]);
 	bytesInFlightLog = bytesInFlight;
 	queueDelayMax = 0.0;
 	for (int n = 0; n < nStreams; n++) {
@@ -1278,7 +1313,6 @@ void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
 			tmp->packetLost = 0;
 		}
 	}
-
 }
 
 void ScreamV2Tx::getShortLog(float time, char* s) {
@@ -1353,7 +1387,7 @@ void ScreamV2Tx::initialize(uint32_t time_ntp) {
 	initTime_ntp = time_ntp;
 	lastCongestionDetectedT_ntp = 0;
 	lastQueueDelayAvgUpdateT_ntp = time_ntp;
-	lastQueueDelayMinAvgUpdateT_ntp = time_ntp;
+	lastQueueDelayMinSlowAvgUpdateT_ntp = time_ntp;
 	lastRateLimitT_ntp = time_ntp;
 	lastMssChange_ntp = time_ntp;
 }
@@ -1427,38 +1461,38 @@ void ScreamV2Tx::updateCwndI(int cwndI_) {
 /*
 * Update the  congestion window
 */
-
 void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	if (lastCwndUpdateT_ntp == 0)
 		lastCwndUpdateT_ntp = time_ntp;
 
 	float lossDistanceScale = std::max(0.0f,std::min(1.0f,
-                             ((time_ntp - lastLossEventT_ntp)/65536.0f/sRtt-4.0f)/4.0f));
+   ((time_ntp - lastLossEventT_ntp)/65536.0f/sRtt-4.0f)/4.0f));
 	postCongestionScale = 
-		std::max(0.0f, 
-	             std::min(1.0f, 
-                          float(time_ntp - lastCongestionDetectedT_ntp)/
-		    		      (kPostCongestionDelayRtts*sRtt_ntp)));
+  std::max(0.0f, 
+    std::min(1.0f, 
+      float(time_ntp - lastCongestionDetectedT_ntp)/
+      (kPostCongestionDelayRtts*sRtt_ntp)));
 
-	queueDelayMin = std::min(queueDelayMin, queueDelay);
+  queueDelayMin = std::min(queueDelayMin, queueDelay);
+  queueDelayMax = std::max(queueDelayMax, queueDelay);
 
-	queueDelayMax = std::max(queueDelayMax, queueDelay);
 
-	float time = time_ntp * ntp2SecScaleFactor;
+
+  float time = time_ntp * ntp2SecScaleFactor;
 
 	/*
 	* An averaged version of the queue delay fraction
 	* neceassary in order to make video rate control robust
 	* against jitter
 	*/
-	queueDelayFractionAvg = 0.9f * queueDelayFractionAvg + 0.1f * getQueueDelayFraction();
+  queueDelayFractionAvg = 0.9f * queueDelayFractionAvg + 0.1f * getQueueDelayFraction();
 
 	/*
 	* Compute paceInterval
 	*/
-	paceInterval = kMinPaceInterval;
-	adaptivePacingRateScale = 1.0;
-	if (isEnablePacketPacing) {
+  paceInterval = kMinPaceInterval;
+  adaptivePacingRateScale = 1.0;
+  if (isEnablePacketPacing) {
 		/*
 		* Compute adaptivePacingRateScale across all streams, the goal is to compute
 		* a best guess of the appropriate adaptivePacingRateScale given the individual streams
@@ -1466,44 +1500,44 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		* The scaling with the individual rates for the streams is based on the rationale that
 		* a low bitrate stream does not contribute much to the total packet pacing rate.
 		*/
-		float tmp1 = 0.0f;
-		float tmp2 = 0.0f;
-		for (int n = 0; n < nStreams; n++) {
-			if (streams[n]->adaptivePacingRateScale > 1.0) {
-				tmp1 += streams[n]->adaptivePacingRateScale * streams[n]->targetBitrate;
-				tmp2 += streams[n]->targetBitrate;
-			}
-		}
-		if (tmp2 > 0) {
+    float tmp1 = 0.0f;
+    float tmp2 = 0.0f;
+    for (int n = 0; n < nStreams; n++) {
+      if (streams[n]->adaptivePacingRateScale > 1.0) {
+        tmp1 += streams[n]->adaptivePacingRateScale * streams[n]->targetBitrate;
+        tmp2 += streams[n]->targetBitrate;
+      }
+    }
+    if (tmp2 > 0) {
 			/*
 			* Scale up the packet pacing headroom
 			*/
-			adaptivePacingRateScale = tmp1 / tmp2;
-		}
+      adaptivePacingRateScale = tmp1 / tmp2;
+    }
 
-		float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtpAvg);
-	
-		pacingBitrate = std::max(50e3f, packetPacingHeadroom * adaptivePacingRateScale * pacingBitrate);
-		if (maxTotalBitrate > 0) {
-			pacingBitrate = std::min(pacingBitrate, maxTotalBitrate * packetPacingHeadroom);
-		}
+    float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtpAvg);
 
-		if (isEnableRelaxedPacing && getTotalTargetBitrate() > kRelaxedPacingLimitLow * getTotalMaxBitrate()) {
+    pacingBitrate = std::max(50e3f, packetPacingHeadroom * adaptivePacingRateScale * pacingBitrate);
+    if (maxTotalBitrate > 0) {
+      pacingBitrate = std::min(pacingBitrate, maxTotalBitrate * packetPacingHeadroom);
+    }
+
+    if (isEnableRelaxedPacing && getTotalTargetBitrate() > kRelaxedPacingLimitLow * getTotalMaxBitrate()) {
 			/*
 			 * Relax packet pacing when close to rate limited. The pacing rate can be increased
 			 * by up to a factor MAX_RELAXED_PACING_FACTOR when target bitrate > RELAXED_PACING_LIMIT_LOW * max bitrate
 			 */
-			float nominalRate = getTotalTargetBitrate() / getTotalMaxBitrate();
-			float relaxedPacingScale = std::min(1.0f,
-				(nominalRate - kRelaxedPacingLimitLow) / (kRelaxedPacingLimitHigh - kRelaxedPacingLimitLow));
-			double tmp = std::min(1.0f, std::max(1.0f / kMaxRelaxedPacingFactor, 1.0f - relaxedPacingScale));
-			pacingBitrate /= tmp;
-		}
+      float nominalRate = getTotalTargetBitrate() / getTotalMaxBitrate();
+      float relaxedPacingScale = std::min(1.0f,
+        (nominalRate - kRelaxedPacingLimitLow) / (kRelaxedPacingLimitHigh - kRelaxedPacingLimitLow));
+      double tmp = std::min(1.0f, std::max(1.0f / kMaxRelaxedPacingFactor, 1.0f - relaxedPacingScale));
+      pacingBitrate /= tmp;
+    }
 
 
-		float tp = (getMss() * 8.0f) / pacingBitrate;
-		paceInterval = std::max(kMinPaceInterval, tp);
-	}
+    float tp = (getMss() * 8.0f) / pacingBitrate;
+    paceInterval = std::max(kMinPaceInterval, tp);
+  }
 	paceInterval_ntp = (uint32_t)(paceInterval * 65536); // paceinterval converted to NTP domain (Q16)
 
 
@@ -1517,129 +1551,107 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		kSlowUpdateInterval_ntp) {
 
 		determineActiveStreams(time_ntp);
-#ifdef ENABLE_BASE_OWD_RESET_2		
-		if ((queueDelayMinAvg > 0.5f * queueDelayTarget || queueDelayMinAvg > 0.9f * sRtt) && time_ntp - baseOwdResetT_ntp > 655360) {
-			/*
-			* The base OWD is likely wrong, for instance due to
-			* a channel change or clock drift, reset base OWD history
-			*/
-			clockDriftCompensation = 0;
-			clockDriftCompensationInc = 0;
-			queueDelayMinAvg = 0.0f;
-			queueDelay = 0.0f;
-			for (int n = 0; n < kBaseOwdHistSize; n++)
-				baseOwdHist[n] = UINT32_MAX;
-			baseOwd = UINT32_MAX;
-			baseOwdHistMin = UINT32_MAX;
-			baseOwdResetT_ntp = time_ntp;
-		}
-#endif
-		float queueDelayNorm = queueDelay / queueDelayTargetMin;
+    float queueDelayNorm = queueDelay / queueDelayTargetMin;
 
-		if (enableSbd) {
+    if (enableSbd) {
 			/*
 			* Shared bottleneck detection,
 			*/
-			queueDelayNormHist[queueDelayNormHistPtr] = queueDelayNorm;
-			queueDelayNormHistPtr = (queueDelayNormHistPtr + 1) % kQueueDelayNormHistSize;
+      queueDelayNormHist[queueDelayNormHistPtr] = queueDelayNorm;
+      queueDelayNormHistPtr = (queueDelayNormHistPtr + 1) % kQueueDelayNormHistSize;
 
 			/*
 			* Compute shared bottleneck detection and update queue delay target
 			* if queue delta variance is sufficienctly low
 			*/
-			computeSbd();
+      computeSbd();
 
 			/*
 			* This function avoids the adjustment of queueDelayTarget when
 			* congestion occurs (indicated by high queueDelaydSbdVar and queueDelaySbdSkew)
 			*/
-			float oh = queueDelayTargetMin * (queueDelaySbdMeanSh + sqrt(queueDelaySbdVar));
-			if (lossEventRate > 0.002 && queueDelaySbdMeanSh > 0.5 && queueDelaySbdVar < 0.2) {
-				queueDelayTarget = std::min(kQueueDelayTargetMax, oh * 1.5f);
-			}
-			else {
-				if (queueDelaySbdVar < 0.2 && queueDelaySbdSkew < 0.05) {
-					queueDelayTarget = std::max(queueDelayTargetMin, std::min(kQueueDelayTargetMax, oh));
-				}
-				else {
-					if (oh < queueDelayTarget)
-						queueDelayTarget = std::max(queueDelayTargetMin, std::max(queueDelayTarget * 0.99f, oh));
-					else
-						queueDelayTarget = std::max(queueDelayTargetMin, queueDelayTarget * 0.999f);
-				}
-			}
-		}
+      float oh = queueDelayTargetMin * (queueDelaySbdMeanSh + sqrt(queueDelaySbdVar));
+      if (lossEventRate > 0.002 && queueDelaySbdMeanSh > 0.5 && queueDelaySbdVar < 0.2) {
+        queueDelayTarget = std::min(kQueueDelayTargetMax, oh * 1.5f);
+      } else {
+        if (queueDelaySbdVar < 0.2 && queueDelaySbdSkew < 0.05) {
+          queueDelayTarget = std::max(queueDelayTargetMin, std::min(kQueueDelayTargetMax, oh));
+        }
+      }  
+      if (oh < queueDelayTarget) {
+        queueDelayTarget = std::max(queueDelayTargetMin, std::max(queueDelayTarget * 0.99f, oh));
+      }
+      else {
+        queueDelayTarget = std::max(queueDelayTargetMin, queueDelayTarget * 0.999f);
+      }
+    }
 
-		maxBytesInFlightHist[maxBytesInFlightHistIx] = maxBytesInFlight;
-		maxBytesInFlightHistIx++;
-		if (maxBytesInFlightHistIx == kMaxBytesInFlightHistSize)
-			maxBytesInFlightHistIx = 0;
 
-		if (getTotalTargetBitrate() > getTotalMaxBitrate() * 0.95f) {
+    maxBytesInFlightHist[maxBytesInFlightHistIx] = maxBytesInFlight;
+    maxBytesInFlightHistIx++;
+    if (maxBytesInFlightHistIx == kMaxBytesInFlightHistSize) {
+      maxBytesInFlightHistIx = 0;
+    }
+
+    if (getTotalTargetBitrate() > getTotalMaxBitrate() * 0.95f) {
 			/*
 			* CWND is allowed to grow considerably larger than bytes in flight
 			*  at ramp-up, this to avoid that the ramp-up locks to low rates
 			* However, when bitrate is almost max, it is better to constrain CWND
 			*  to avoid large queue build up when congestion occurs
 			*/
-			int tmp = maxBytesInFlight;
-			for (int n = 0; n < kMaxBytesInFlightHistSize; n++) {
-				tmp = std::max(tmp, maxBytesInFlightHist[n]);
-			}
+      int tmp = maxBytesInFlight;
+      for (int n = 0; n < kMaxBytesInFlightHistSize; n++) {
+          tmp = std::max(tmp, maxBytesInFlightHist[n]);
+      }
 
 			/*
 			* Additionally compute updated CWND from totalMaxBitrate and rtt
 			* with extra headroom, to avoid that the target bitrates
 			* varies unnecessarily near the max rate
 			*/
-			tmp = std::max(tmp, (int)(packetPacingHeadroom * relFrameSizeHigh * getTotalMaxBitrate() / 8 *
-				(sRtt + 0.001f)));
+      tmp = std::max(tmp, (int)(packetPacingHeadroom * relFrameSizeHigh * getTotalMaxBitrate() / 8 *
+        (sRtt + 0.001f)));
 
 			/*
 			* Limit CWND
 			*/
-			cwnd = std::min(cwnd, tmp);
-		}
+      cwnd = std::min(cwnd, tmp);
+    }  
 
-		if (time_ntp - initTime_ntp > 2 * 65536) {
+    if (time_ntp - initTime_ntp > 2 * 65536) {
 			/*
 			* Update cwndMinLow if isAutoTuneMinCwnd == true
 			*/
-			if (isAutoTuneMinCwnd) {
-				float minBitrateSum = 0.0f;
-				for (int n = 0; n < nStreams; n++) {
-					minBitrateSum += streams[n]->minBitrate;
-				}
-				cwndMinLow = (int)(minBitrateSum / 8.0f * sRtt);
-			}
+      if (isAutoTuneMinCwnd) {
+        float minBitrateSum = 0.0f;
+        for (int n = 0; n < nStreams; n++) {
+          minBitrateSum += streams[n]->minBitrate;
+        }
+        cwndMinLow = (int)(minBitrateSum / 8.0f * sRtt);
+      }
 
 			/*
 			* Update max bytes in flight
 			*/
-			maxBytesInFlightPrev = maxBytesInFlight;
-			maxBytesInFlight = 0;
-		}
+      maxBytesInFlightPrev = maxBytesInFlight;
+      maxBytesInFlight = 0;
+    }
 
 		/*
 		* Updated relFrameSizeHigh based on individual streams' histogram
 		*/
-		relFrameSizeHigh = 0.0f;
-		float sumPrio = 0.0f;
-		for (int n = 0; n < nStreams; n++) {
-			relFrameSizeHigh += streams[n]->getRelFrameSizeHigh() * streams[n]->targetPriority;
-			sumPrio += streams[n]->targetPriority;
-		}
-		relFrameSizeHigh /= sumPrio;
+    relFrameSizeHigh = 0.0f;
+    float sumPrio = 0.0f;
+    for (int n = 0; n < nStreams; n++) {
+      relFrameSizeHigh += streams[n]->getRelFrameSizeHigh() * streams[n]->targetPriority;
+      sumPrio += streams[n]->targetPriority;
+    }
+    relFrameSizeHigh /= sumPrio;
 
-		lastSlowUpdateT_ntp = time_ntp;
-	}	
-	/*
-	* Calculate adaptive tolerance to variations in queue delay. 
-	* More sensitive when CWND/MSS is low because the 1 MSS / RTT increase can give more rate 
-	* instability then
-	*/
-	cwndRatio = float(getMss()) / cwnd;
-	queueDelayDevTh = std::max(0.05f, 0.1f * (1.0f - cwndRatio / 0.1f));
+    lastSlowUpdateT_ntp = time_ntp;
+  }	
+  cwndRatio = float(getMss()) / cwnd;
 
 	/*
 	* Adaptive window headroom reduces the overshoot that can occur when media encoder react slowly to
@@ -1647,20 +1659,20 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* extra variations in rate and delay
 	* Limited headroom can also be beneficial when link capacity varies.
 	*/
-	if (enableAdaptiveWindowHeadroom) {
-		windowHeadroom = kMinWindowHeadroom +
-			(maxWindowHeadroom - kMinWindowHeadroom) * std::max(0.0f, (queueDelayDevTh - queueDelayDev) / queueDelayDevTh);
-	}
+  if (enableAdaptiveWindowHeadroom) {
+    windowHeadroom = kMinWindowHeadroom + 
+    (maxWindowHeadroom - kMinWindowHeadroom) * latencyDiffCwndScale;
+  }
 
 	/*
 	* Compute scale factor based on relation between CWND and last known 
 	* max CWND
 	*/
-	float sclI = 1.0;
-	float tmp = (cwnd - cwndI) / float(cwndI);
-	tmp *= 8;
-	tmp = tmp * tmp;
-	sclI = std::max(0.1f, std::min(1.0f, tmp));
+  float sclI = 1.0;
+  float tmp = (cwnd - cwndI) / float(cwndI);
+  tmp *= 8;
+  tmp = tmp * tmp;
+  sclI = std::max(0.1f, std::min(1.0f, tmp));
 
 	/*
 	* At very low congestion windows (just a few MSS) the up and down scaling
@@ -1670,82 +1682,86 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* Reducing the MSS when bitrate is low is the best option if fast reaction to congestion
 	* is desired
 	*/
-	if (lossEvent) {
+  if (lossEvent) {
 		/*
 		* Update inflexion point
 		*/
-		if (time_ntp - lastCwndIUpdateT_ntp > 32768) {
-			lastCwndIUpdateT_ntp = time_ntp;
-			updateCwndI(cwnd);
-		}
+    if (time_ntp - lastCwndIUpdateT_ntp > 32768) {
+      lastCwndIUpdateT_ntp = time_ntp;
+      updateCwndI(cwnd);
+    }
 		/*
 		* loss event detected, decrease congestion window
 		*/
-		cwnd = std::max(cwndMin, (int)(lossBeta * cwnd));
-		lossEvent = false;
-		lastCongestionDetectedT_ntp = time_ntp;
+		if (isMaxPolicedCwndUpdateBlocked) {
+    	cwnd = std::max(cwndMin, (int)(kLossBetaSlow * cwnd));
+		} else {	
+    	cwnd = std::max(cwndMin, (int)(lossBeta * cwnd));
+  	}
+    lossEvent = false;
+    lastCongestionDetectedT_ntp = time_ntp;
 
-		wasLossEvent = true;
-		postCongestionScale = 0.0f;
-	}
-	else if (ecnCeEvent || virtualCeEvent) {
+    wasLossEvent = true;
+    postCongestionScale = 0.0f;
+  }
+  else if (ecnCeEvent || virtualCeEvent) {
 		/*
 		* Update inflexion point
 		*/
-		if (time_ntp - lastCwndIUpdateT_ntp > sRtt_ntp) {
-			lastCwndIUpdateT_ntp = time_ntp;
-			updateCwndI(cwnd);
+    if (time_ntp - lastCwndIUpdateT_ntp > sRtt_ntp) {
+      lastCwndIUpdateT_ntp = time_ntp;
+      updateCwndI(cwnd);
 
-			if (time_ntp - lastCongestionDetectedT_ntp > 5 * sRtt_ntp) {
+      if (time_ntp - lastCongestionDetectedT_ntp > 5 * sRtt_ntp) {
 				/*
 				 * A long while since last congested, update entire cwndInflectionPointHist
 				 * to current value
 				 */
-				for (int n = 0; n < kCwndIHistSize; n++) {
-					cwndIHist[n] = cwnd;
-				}
-			}
+        for (int n = 0; n < kCwndIHistSize; n++) {
+          cwndIHist[n] = cwnd;
+        }
+      }
 
-		}
+    }
 		/*
 		* CE event detected, decrease congestion window
 		*/
-		if (ecnCeEvent) {
-			if (isL4s) {
+    if (ecnCeEvent) {
+      if (isL4s) {
 				/*
 				* L4S backoff
 				*/
-				float backOff = l4sAlpha / 2.0f;
+        float backOff = l4sAlpha / 2.0f;
 
 				/*
 				* Reduce backoff if target bitrate is less than RX rate
 				*/
-				if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
-					backOff *= 0.25f;
-				}
+        if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
+          backOff *= 0.25f;
+        }
 
 				/*
 				* Scale down backoff when RTT is high as several backoff events occur per RTT
 				*/
-				backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
+        backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 
-				if (queueDelay < queueDelayTarget * 0.25f) {
+        if (queueDelay < queueDelayTarget * 0.25f) {
 					/*
 					* Scale down backoff if close to the last known max
 					* This is complemented with a scale down of the CWND increase
 					* Don't scaledown back off if queueDelay is large
 					*/
-					backOff *= std::max(0.25f, sclI);
+          backOff *= std::max(0.25f, sclI);
 
 					/*
 					* Counteract the limitation in CWND increase when queue delay varies.
 					* This helps to avoid that SCReAM is starved by competing TCP Prague flows
 					* Don't scaledown back off if queueDelay is large
 					*/
-   					backOff *= std::min(1.0f, std::max(0.25f, (queueDelayDevTh - queueDelayDev) / queueDelayDevTh));
-				}
+          backOff *= std::min(1.0f, std::max(0.25f, latencyDiffCwndScale));
+        }
 
-				if (time_ntp - lastCongestionDetectedT_ntp > 100*std::max(sRtt, kSrttVirtual)*65536) {
+        if (time_ntp - lastCongestionDetectedT_ntp > 100*std::max(sRtt, kSrttVirtual)*65536) {
 					/*
 					* A long time since last congested because link throughput
 					* exceeds max video bitrate.
@@ -1753,65 +1769,65 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 					* bytes in flight, so we reduce it here to get it better on track
 					* and thus the congestion episode is shortened
 					*/
-					cwnd = std::min(cwnd, maxBytesInFlightPrev);
-				}
+          cwnd = std::min(cwnd, maxBytesInFlightPrev);
+        }
 				/*
 				* Scale down CWND based on l4sAlpha
 				*/
-				cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
-			} 
-			else {
+        cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
+      } 
+      else {
 				/* Classic ECN
 				* Scale down CWND based on fixed Beta
 				*/
-				cwnd = std::max(cwndMin, (int)(ecnCeBeta * cwnd));
-			}
-			virtualCeEvent = false;
-		}
-		if (virtualCeEvent) {
+        cwnd = std::max(cwndMin, (int)(ecnCeBeta * cwnd));
+      }
+      virtualCeEvent = false;
+    }
+    if (virtualCeEvent) {
 			/*
 			* Scale down CWND based on virtualL4sAlpha
 			*/
-			float backOff = virtualL4sAlpha / 2.0f;
+      float backOff = virtualL4sAlpha / 2.0f;
 
 			/*
 			* Reduce backoff if target bitrate rate is less than RX rate
 			*/
-			if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
-				backOff *= 0.25f;
-			}
+      if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
+      	backOff *= 0.25f;
+      }
 
 			/*
 			* Scale down backoff when RTT is high as several backoff events occur per RTT
 			*/
-			backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
+      backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 
-			cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
-		}
-		
-		ecnCeEvent = false;
-		virtualCeEvent = false;
-		lastCongestionDetectedT_ntp = time_ntp;
+      cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
+    }
 
-		wasLossEvent = true;
-		postCongestionScale = 0.0;
-	}
+    ecnCeEvent = false;
+    virtualCeEvent = false;
+    lastCongestionDetectedT_ntp = time_ntp;
 
-	if (time_ntp - lastRttT_ntp > sRtt_ntp) {
-		if (wasLossEvent)
-			lossEventRate = 0.98f * lossEventRate + 0.02f;
-		else
-			lossEventRate *= 0.98f;
-		wasLossEvent = false;
-		lastRttT_ntp = time_ntp;
-	}
+    wasLossEvent = true;
+    postCongestionScale = 0.0;
+  }
+
+  if (time_ntp - lastRttT_ntp > sRtt_ntp) {
+    if (wasLossEvent)
+      lossEventRate = 0.98f * lossEventRate + 0.02f;
+    else
+      lossEventRate *= 0.98f;
+    wasLossEvent = false;
+    lastRttT_ntp = time_ntp;
+  }
 
 	/*
 	* Compute max increment based on bytes acked
 	*  but subtract number of CE marked bytes
 	*/
-	int bytesAckedMinusCe = bytesNewlyAcked - bytesNewlyAckedCe;
-	float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio;
+  int bytesAckedMinusCe = bytesNewlyAcked - bytesNewlyAckedCe;
+  float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio;
 
 	/*
 	 * Scale the increment more cautious when close the last
@@ -1820,50 +1836,56 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* This downscaling is complemented with a similar downscaling of
 	* the CWND back off.
 	*/
-	increment *= std::max(0.25f, sclI);
+  increment *= std::max(0.25f, sclI);
 
 	/*
 	* Reduce increment for very small RTTs
 	*/
-	tmp = std::min(1.0f, sRtt / kSrttVirtual);
-	increment *= tmp;
+  tmp = std::min(1.0f, sRtt / kSrttVirtual);
+  increment *= tmp;
 
 	/*
 	* Limit increase if queue delay varies, this gives a more stable rate when congested.
 	*/
-	increment *= std::min(1.0f, std::max(0.1f, (queueDelayDevTh - queueDelayDev) / queueDelayDevTh));
+  increment *= std::min(1.0f, std::max(0.1f, latencyDiffCwndScale));
 
 	/*
 	* Calculate relative growth of CWND
 	*/
-	float tmp2 = 1.0+ (multiplicativeIncreaseScalefactor * cwnd) / getMss();
+  float tmp2 = 1.0+ (multiplicativeIncreaseScalefactor * cwnd) / getMss();
 
 	/*
 	* Limit multiplicative increase when congestion occured
 	* recently
 	*/
-	tmp2 = 1.0 + ((tmp2 - 1.0) * postCongestionScale) * sclI;
-	increment *= tmp2;
+  tmp2 = 1.0 + ((tmp2 - 1.0) * postCongestionScale) * sclI;
+  increment *= tmp2;
 
 	/*
     * Allow the CWND to increase beyond the bytes in flight
 	* limited by MAX_BYTES_IN_FLIGHT_HEADROOM
 	* Limit increase if max bitrate reached, as there is no point increasing it
 	*/
-	double maxAllowed = getMss() + std::max(maxBytesInFlight, maxBytesInFlightPrev) * bytesInFlightHeadRoom;
-	isApplicationLimited = maxAllowed < cwnd;
-	int cwndTmp = cwnd + (int)(increment + 0.5f);
-	if (cwndTmp <= maxAllowed && getTotalTargetBitrate() < getTotalMaxBitrate())
-		cwnd = cwndTmp;
+  double maxAllowed = getMss() + std::max(maxBytesInFlight, maxBytesInFlightPrev) * bytesInFlightHeadRoom;
+  isApplicationLimited = maxAllowed < cwnd;
+  int cwndTmp = cwnd + (int)(increment + 0.5f);
+  if (cwndTmp <= maxAllowed && getTotalTargetBitrate() < getTotalMaxBitrate()) {
+    cwnd = cwndTmp;
+  }
 
-	cwnd = std::max(cwndMin, cwnd);
+  /*
+  * Limit to max policed CWND, if applicable
+  */ 
+  cwnd = std::min((int) maxPolicedCwnd, cwnd);
 
-	if (maxTotalBitrate > 0) {
-		cwnd = std::min(cwnd, int(maxTotalBitrate * sRtt / 8));
-	}
+  cwnd = std::max(cwndMin, cwnd);
 
-	bytesNewlyAcked = 0;
-	bytesNewlyAckedCe = 0;
+  if (maxTotalBitrate > 0) {
+    cwnd = std::min(cwnd, int(maxTotalBitrate * sRtt / 8));
+  }
+
+  bytesNewlyAcked = 0;
+  bytesNewlyAckedCe = 0;
 
 	/*
 	* Compute rate share among streams, take into account that some streams reach the
@@ -1874,71 +1896,70 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 	* estimate sRtt than under estimate it.
 	*/
 
-	float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt + 0.001f));
+  float rateLeft = 8 * cwnd / std::max(0.001f, std::min(0.2f, sRtt + 0.001f));
 
 	/*
 	* Scale down rate slighty when the congestion window is very small compared to mss
 	* This helps to avoid unnecessary RTP queue build up
 	* Note that at very low bitrates it is necessary to reduce the MTU also
 	*/
-	rateLeft *= 1.0f - std::min(0.2f, std::max(0.0f, cwndRatio - 0.1f));
+  rateLeft *= 1.0f - std::min(0.2f, std::max(0.0f, cwndRatio - 0.1f));
 
 	/*
 	* Scale down based on weigthed average high percentile of frame sizes
 	*/
-	rateLeft /= 1.1f;
+  rateLeft /= 1.1f;
 
 	/*
 	* Compensation for packetization overhead, important when MSS is small
 	* This should actually be done per stream but is done here for simplicity
 	*/
-	double overheadScale = getMss() / float(getMss() + kPacketOverhead);
-	rateLeft *= overheadScale;
+  double overheadScale = getMss() / float(getMss() + kPacketOverhead);
+  rateLeft *= overheadScale;
 
-	float prioritySum = 0.0f;
+  float prioritySum = 0.0f;
 	/*
 	* Calculate sum of priorities
 	*/
-	for (int n = 0; n < nStreams; n++) {
-		Stream* stream = streams[n];
-		stream->isMaxrate = false;
-		stream->rateShare = 0.0f;
-		if (stream->isActive)
-			prioritySum += stream->targetPriority;
-	}
+  for (int n = 0; n < nStreams; n++) {
+    Stream* stream = streams[n];
+    stream->isMaxrate = false;
+    stream->rateShare = 0.0f;
+    if (stream->isActive)
+      prioritySum += stream->targetPriority;
+  }
 
 	/*
 	* Walk through and allocate rates according to priority 
 	* until nothing left
 	*/
-	while (rateLeft > 1.0f && prioritySum > 0.01f) {
+  while (rateLeft > 1.0f && prioritySum > 0.01f) {
 		/*
 		* Allocate rates
 		*/
-		for (int n = 0; n < nStreams; n++) {
-			Stream* stream = streams[n];
-			if (stream->isActive && !stream->isMaxrate) {
-				float tmp = rateLeft * stream->targetPriority / prioritySum;
-				stream->rateShare += tmp;
-			}
-		}
+    for (int n = 0; n < nStreams; n++) {
+      Stream* stream = streams[n];
+      if (stream->isActive && !stream->isMaxrate) {
+        float tmp = rateLeft * stream->targetPriority / prioritySum;
+        stream->rateShare += tmp;
+      }
+    }
 		/*
 		* Walk through again to see if some rate shares are higher than max bitrate
 		* and allocate surplus for next iteration
 		*/
-		rateLeft = 0.0f;
-		for (int n = 0; n < nStreams; n++) {
-			Stream* stream = streams[n];
-			if (stream->rateShare > stream->maxBitrate && !stream->isMaxrate) {
-				float tmp = stream->rateShare - stream->maxBitrate;
-				rateLeft += tmp;
-				stream->rateShare = stream->maxBitrate;
-				prioritySum -= stream->targetPriority;
-				stream->isMaxrate = true;
-			}
-		}
-	}
-
+    rateLeft = 0.0f;
+    for (int n = 0; n < nStreams; n++) {
+      Stream* stream = streams[n];
+      if (stream->rateShare > stream->maxBitrate && !stream->isMaxrate) {
+        float tmp = stream->rateShare - stream->maxBitrate;
+        rateLeft += tmp;
+        stream->rateShare = stream->maxBitrate;
+        prioritySum -= stream->targetPriority;
+        stream->isMaxrate = true;
+      }
+    }
+  }
 }
 
 /*
@@ -2231,20 +2252,54 @@ int ScreamV2Tx::getRecommendedMss(uint32_t time_ntp) {
 				mssIndex < nMssListItems - 1 && 
 				maxMss > mssList[mssIndex + 1]) {
 				mssIndex++;
-				lastMssChange_ntp = time_ntp;
-			}
-		} else if (maxMss < mssList[mssIndex]) {
+        lastMssChange_ntp = time_ntp;
+      }
+    } else if (maxMss < mssList[mssIndex]) {
 			/*
 			* Step down only if the preferred mss is higher than the next lower value
 			*/
-			if (mssIndex > 0 && maxMss < mssList[mssIndex - 1]) {
-				mssIndex--;
-				lastMssChange_ntp = time_ntp;
-			}
-		}
-	}
-
-	return mssList[mssIndex];
+      if (mssIndex > 0 && maxMss < mssList[mssIndex - 1]) {
+        mssIndex--;
+        lastMssChange_ntp = time_ntp;
+      }
+    }
+  }
+  return mssList[mssIndex];
 }
 
+void ScreamV2Tx::calculateLossRate(bool isLoss) {
+	/*
+	* lossRate averaging time is set to min(2*RTT, lossRateThreshold/4)
+	*/ 
+	float alpha = std::min( kLossRateThreshold / 4.0f, mss/float(cwnd) /2);
+
+	float tmp = 0.0f;
+	if (isLoss) {
+		tmp = 1.0f;
+	}
+	lossRate = (1.0f - alpha) * lossRate + alpha * tmp;
+} 
+
+void ScreamV2Tx::setLossEvent(){
+	if (lossRate > kLossRateThreshold || queueDelayAvg > queueDelayTarget / 4.0f) {
+		lossEvent = true;
+    /*
+    * Rate policers are characterized by that they cause large amounts of lost 
+    * packets when the policing rate is exceeded. In additon, little congestion 
+    * signals in terms of increased delay is seen. This function sets a limit 
+    * to the congestion window when policer drops are detected.
+    * The function is experimental, use at your own risk. 
+    */ 
+		if (enableRatePolicerProtection && 
+			lossRate > kPolicerLossRateThreshold && 
+			queueDelayAvg < queueDelayTarget / 4.0f) {
+      if (!isMaxPolicedCwndUpdateBlocked) {
+      	maxPolicedCwnd = (cwnd+cwndI) * kBetaLossPolicer / 2;
+      	isMaxPolicedCwndUpdateBlocked = true;
+      } 
+    } else {
+      isMaxPolicedCwndUpdateBlocked = false;
+    }
+  } 
+}
 

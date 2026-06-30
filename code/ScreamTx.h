@@ -31,9 +31,9 @@ extern "C" {
 	// ==== Default parameters (if tuning necessary) ====
 	// Connection related default parameters
 	// CWND scale factor upon loss event
-	static const float kLossBeta = 0.7f;
+  static const float kLossBeta = 0.7f;
 	// CWND scale factor upon ECN-CE event
-	static const float kEcnCeBeta = 0.9f;
+  static const float kEcnCeBeta = 0.9f;
 	// Min and max queue delay target
 	static const float kQueueDelayTargetMin = 0.1f; //ms
 	// Enable shared botleneck detection and queue delay target adjustement
@@ -136,32 +136,32 @@ extern "C" {
 			void add(uint32_t time_ntp, float rateTx, float rateLost, float rateCe, float rtt, float queueDelay);
 			void addEcn(uint8_t ecn);
 			float getStatisticsItem(StatisticsItem item);
-    		void printFinalSummary();
-		private:
-			float lossRateHist[kLossRateHistSize];
-			float ceRateHist[kLossRateHistSize];
-			float rateLostAcc;
-			float rateCeAcc;
-			int rateLostN;
-			int lossRateHistPtr;
-			float avgRateTx;
-			float minRate;
-			float maxRate;
-			float avgRtt;
-			float sumRtt;
-			float minRtt;
-			float maxRtt;
-			float avgQueueDelay;
-			float maxQueueDelay;
-			float sumQueueDelay;
-			float sumRateTx;
-			float sumRateLost;
-			float sumRateCe;
-			float lossRate;
-			float ceRate;
-			float lossRateLong;
-			float ceRateLong;
-			int nStatisticsItems;
+      void printFinalSummary();
+    private:
+     float lossRateHist[kLossRateHistSize];
+     float ceRateHist[kLossRateHistSize];
+     float rateLostAcc;
+     float rateCeAcc;
+     int rateLostN;
+     int lossRateHistPtr;
+     float avgRateTx;
+     float minRate;
+     float maxRate;
+     float avgRtt;
+     float sumRtt;
+     float minRtt;
+     float maxRtt;
+     float avgQueueDelay;
+     float maxQueueDelay;
+     float sumQueueDelay;
+     float sumRateTx;
+     float sumRateLost;
+     float sumRateCe;
+     float lossRate;
+     float ceRate;
+     float lossRateLong;
+     float ceRateLong;
+     int nStatisticsItems;
 			int n00; // Number of not-ECT packets
 			int n10; // Number of ECT(0) packets
 			int n01; // Number of ECT(1) packets
@@ -301,7 +301,7 @@ extern "C" {
 			bool isMark,
 			float rtpQueueDelay = 0.0f,
 			uint32_t timeStamp = 0
-		);
+      );
 
 		/* New incoming feedback, this function
 		* triggers a CWND update
@@ -517,29 +517,28 @@ extern "C" {
 			enableAdaptiveWindowHeadroom = val;
 		}
 
-		/*
-		* Set the estimated non-congestion related delay jitter in the network path.
-		* In a perfect world it should be possible to estimate this realiably but pending
-		* an algorithm that does this reliably, the value is set manually.  
-		*/
-		void setEstimatedJitter(float estimatedJitter_) {
-			estimatedJitter = estimatedJitter_;
-		}
-	private:
+        /*
+        * Enable/disable rate policer protection
+        */
+		void isEnableRatePolicerProtection(bool val) {
+      enableRatePolicerProtection = val;
+    } 
+
+  private:
 		/*
 		* Struct for list of RTP packets in flight
 		*/
-		struct Transmitted {
-			uint32_t timeTx_ntp;
-			int size;
-			uint16_t seqNr;
-			uint32_t timeStamp;
-			float rtpQueueDelay;
-			bool isMark;
-			bool isUsed;
-			bool isAcked;
-			bool isAfterReceivedEdge;
-		};
+    struct Transmitted {
+     uint32_t timeTx_ntp;
+     int size;
+     uint16_t seqNr;
+     uint32_t timeStamp;
+     float rtpQueueDelay;
+     bool isMark;
+     bool isUsed;
+     bool isAcked;
+     bool isAfterReceivedEdge;
+   };
 
 		/*
 		* One instance is created for each {SSRC,PT} tuple
@@ -553,59 +552,59 @@ extern "C" {
 		* enableFrameSizeOverhead (default true) adds additional safety margin 
 		*  when frame sizes vary a lot.
 		*/
-		class Stream {
-		public:
-			Stream(ScreamV2Tx* parent,
-				RtpQueueIface* rtpQueue,
-				uint32_t ssrc,
-				float priority,
-				float minBitrate,
-				float startBitrate,
-				float maxBitrate,
-				float maxRtpQueueDelay,
-				bool isAdaptiveTargetRateScale,
-				float hysteresis,
-				bool enableFrameSizeOverhead);
+   class Stream {
+   public:
+     Stream(ScreamV2Tx* parent,
+      RtpQueueIface* rtpQueue,
+      uint32_t ssrc,
+      float priority,
+      float minBitrate,
+      float startBitrate,
+      float maxBitrate,
+      float maxRtpQueueDelay,
+      bool isAdaptiveTargetRateScale,
+      float hysteresis,
+      bool enableFrameSizeOverhead);
 
-			float getMaxRate();
+     float getMaxRate();
 
-			float getTargetBitrate();
+     float getTargetBitrate();
 
-			void newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMarker);
+     void newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMarker);
 
-			void updateRate(uint32_t time_ntp);
+     void updateRate(uint32_t time_ntp);
 
-			void updateTargetBitrate(uint32_t time_ntp);
+     void updateTargetBitrate(uint32_t time_ntp);
 
-			bool isRtpQueueDiscard();
+     bool isRtpQueueDiscard();
 
-			bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
+     bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 
-			bool isLossEpoch();
+     bool isLossEpoch();
 
-			void setRateHysteresis(float aValue) {
-				hysteresis = aValue;
-			}
+     void setRateHysteresis(float aValue) {
+      hysteresis = aValue;
+    }
 
-			float getRateAdjustFactor() {
-				return rateAdjustFactor;
-			}
+    float getRateAdjustFactor() {
+      return rateAdjustFactor;
+    }
 
 			/*
 			* Set the timestamp clock rate for this stream, default 90000Hz
 			*/
-			void setTimeStampClockRate(float aValue) {
-				timeStampClockRate = aValue;
-			}
+    void setTimeStampClockRate(float aValue) {
+      timeStampClockRate = aValue;
+    }
 
 			/*
 			* Get the high percentile relative frame size
 			*/
-			float getRelFrameSizeHigh() {
-				return relFrameSizeHigh;
-			}
+    float getRelFrameSizeHigh() {
+      return relFrameSizeHigh;
+    }
 
-			ScreamV2Tx* parent;
+    ScreamV2Tx* parent;
 			RtpQueueIface* rtpQueue;      // RTP Packet queue
 			uint32_t ssrc;            // SSRC of stream
 			bool isAdaptiveTargetRateScale;
@@ -804,6 +803,17 @@ extern "C" {
 		*/
 		int getMss();
 
+        /*
+        * calculate the packet loss rate
+        */
+		void calculateLossRate(bool isLoss);
+
+		/*
+		* Conditionally set loss event
+		*/ 
+		void setLossEvent();
+
+
 		/*
 		* Variables for network congestion control
 		*/
@@ -822,6 +832,7 @@ extern "C" {
 		float maxWindowHeadroom;
 		bool enableSbd;
 		bool enableClockDriftCompensation;
+		bool enableRatePolicerProtection;
 
 		bool isEnablePacketPacing;
 		bool isAutoTuneMinCwnd;
@@ -842,9 +853,6 @@ extern "C" {
 		float queueDelay;
 		float queueDelayFractionAvg;
 		float queueDelayTarget;
-		float queueDelayDev;
-		float queueDelayDevTh;
-		float estimatedJitter;
 
 		float queueDelaySbdVar;
 		float queueDelaySbdMean;
@@ -854,12 +862,16 @@ extern "C" {
 		float queueDelayAvg;
 		float queueDelayMax;
 		float queueDelayMin;
+		float queueDelayMaxAvg;
 		float queueDelayMinAvg;
+		float queueDelayMinSlowAvg;
+		float latencyDiffAvg;
+    float latencyDiffCwndScale;
 
-		int bytesNewlyAcked;
-		int bytesNewlyAckedCe;
-		int bytesNewlyAckedLog;
-		int ecnCeMarkedBytesLog;
+    int bytesNewlyAcked;
+    int bytesNewlyAckedCe;
+    int bytesNewlyAckedLog;
+    int ecnCeMarkedBytesLog;
 
 		int mss; // Maximum Segment Size
 		int prevMss;
@@ -876,6 +888,8 @@ extern "C" {
 		float cwndRatio;
 		int cwndIHist[kCwndIHistSize];
 		int cwndIHistIx;
+		float maxPolicedCwnd;
+		bool isMaxPolicedCwndUpdateBlocked;
 
 		int bytesInFlight;
 		int bytesInFlightLog;
@@ -907,6 +921,7 @@ extern "C" {
 		float postCongestionScale;
 		uint32_t reorderTime_ntp;
 		float reorderTime;
+		float lossRate;
 		
 		float rateTransmitted;
 		float rateRtpAvg;
@@ -960,7 +975,7 @@ extern "C" {
 		uint32_t lastCwndUpdateT_ntp;
 
 		uint32_t lastQueueDelayAvgUpdateT_ntp;
-		uint32_t lastQueueDelayMinAvgUpdateT_ntp;
+		uint32_t lastQueueDelayMinSlowAvgUpdateT_ntp;
 		uint32_t lastL4sAlphaUpdateT_ntp;
 		uint32_t lastBaseDelayRefreshT_ntp;
 		uint32_t lastRateLimitT_ntp;

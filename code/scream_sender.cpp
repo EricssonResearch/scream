@@ -655,7 +655,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-05-07 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-06-30 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
