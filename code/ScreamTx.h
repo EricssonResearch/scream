@@ -102,12 +102,9 @@ extern "C" {
 	static const int kQueueDelayFractionHistSize = 20;
 	static const int kBytesInFlightHistSizeMax = 60;
 	static const int kRateUpDateSize = 4;
-	static const int kTargetBitrateHistSize = 3;
 	static const int kLossRateHistSize = 10;
-	static const int kSrttHistBins = 200;
 	static const int kRelFrameSizeHistBins = 50;
 	static const int kMaxBytesInFlightHistSize = 20;
-	static const int kCwndIHistSize = 3;
 	static const int kMssListSize = 10;
 
 	enum StatisticsItem {
@@ -138,30 +135,30 @@ extern "C" {
 			float getStatisticsItem(StatisticsItem item);
       void printFinalSummary();
     private:
-     float lossRateHist[kLossRateHistSize];
-     float ceRateHist[kLossRateHistSize];
-     float rateLostAcc;
-     float rateCeAcc;
-     int rateLostN;
-     int lossRateHistPtr;
-     float avgRateTx;
-     float minRate;
-     float maxRate;
-     float avgRtt;
-     float sumRtt;
-     float minRtt;
-     float maxRtt;
-     float avgQueueDelay;
-     float maxQueueDelay;
-     float sumQueueDelay;
-     float sumRateTx;
-     float sumRateLost;
-     float sumRateCe;
-     float lossRate;
-     float ceRate;
-     float lossRateLong;
-     float ceRateLong;
-     int nStatisticsItems;
+     	float lossRateHist[kLossRateHistSize];
+     	float ceRateHist[kLossRateHistSize];
+     	float rateLostAcc;
+     	float rateCeAcc;
+     	int rateLostN;
+     	int lossRateHistPtr;
+     	float avgRateTx;
+     	float minRate;
+     	float maxRate;
+     	float avgRtt;
+     	float sumRtt;
+     	float minRtt;
+     	float maxRtt;
+     	float avgQueueDelay;
+     	float maxQueueDelay;
+     	float sumQueueDelay;
+     	float sumRateTx;
+     	float sumRateLost;
+     	float sumRateCe;
+     	float lossRate;
+     	float ceRate;
+     	float lossRateLong;
+     	float ceRateLong;
+     	int nStatisticsItems;
 			int n00; // Number of not-ECT packets
 			int n10; // Number of ECT(0) packets
 			int n01; // Number of ECT(1) packets
@@ -529,15 +526,15 @@ extern "C" {
 		* Struct for list of RTP packets in flight
 		*/
     struct Transmitted {
-     uint32_t timeTx_ntp;
-     int size;
-     uint16_t seqNr;
-     uint32_t timeStamp;
-     float rtpQueueDelay;
-     bool isMark;
-     bool isUsed;
-     bool isAcked;
-     bool isAfterReceivedEdge;
+     	uint32_t timeTx_ntp;
+     	int size;
+     	uint16_t seqNr;
+     	uint32_t timeStamp;
+     	float rtpQueueDelay;
+     	bool isMark;
+     	bool isUsed;
+     	bool isAcked;
+     	bool isAfterReceivedEdge;
    };
 
 		/*
@@ -566,23 +563,23 @@ extern "C" {
       float hysteresis,
       bool enableFrameSizeOverhead);
 
-     float getMaxRate();
+     	float getMaxRate();
 
-     float getTargetBitrate();
+     	float getTargetBitrate();
 
-     void newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMarker);
+     	void newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isMarker);
 
-     void updateRate(uint32_t time_ntp);
+     	void updateRate(uint32_t time_ntp);
 
-     void updateTargetBitrate(uint32_t time_ntp);
+     	void updateTargetBitrate(uint32_t time_ntp);
 
-     bool isRtpQueueDiscard();
+     	bool isRtpQueueDiscard();
 
-     bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
+     	bool isMatch(uint32_t ssrc_) { return ssrc == ssrc_; };
 
-     bool isLossEpoch();
+     	bool isLossEpoch();
 
-     void setRateHysteresis(float aValue) {
+     	void setRateHysteresis(float aValue) {
       hysteresis = aValue;
     }
 
@@ -794,11 +791,6 @@ extern "C" {
 		float getQueueDelayFraction();
 
 		/*
-		* Update cwndI
-		*/
-		void updateCwndI(int cwndI);
-
-		/*
 		* Get the mss
 		*/
 		int getMss();
@@ -886,8 +878,7 @@ extern "C" {
 		int cwndMinLow;
 		int cwndI; // congestion window inflexion point
 		float cwndRatio;
-		int cwndIHist[kCwndIHistSize];
-		int cwndIHistIx;
+		bool cwndIUpdateBlocked;
 		float maxPolicedCwnd;
 		bool isMaxPolicedCwndUpdateBlocked;
 
@@ -971,7 +962,6 @@ extern "C" {
 		uint32_t nextTransmitT_ntp;
 
 		uint32_t lastRateUpdateT_ntp;
-		uint32_t lastCwndIUpdateT_ntp;
 		uint32_t lastCwndUpdateT_ntp;
 
 		uint32_t lastQueueDelayAvgUpdateT_ntp;
@@ -980,8 +970,6 @@ extern "C" {
 		uint32_t lastBaseDelayRefreshT_ntp;
 		uint32_t lastRateLimitT_ntp;
 		uint32_t lastMssChange_ntp;
-
-
 	};
 }
 #endif

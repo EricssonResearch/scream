@@ -19,10 +19,10 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 10;
-const bool isChRate = false;
+const float Tmax = 20;
+const bool isChRate = true;
 const bool printLog = false;
-const bool ecnCapable = false;
+const bool ecnCapable = true;
 const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
@@ -306,11 +306,11 @@ int main(int argc, char* argv[])
 
 
 		if (isChRate) {
-			if ((time > 5.0 && time < 10) && isChRate) {
-				netQueueRate->rate = 1000e3;
+			if ((time > 3.0 && time < 6) && isChRate) {
+				netQueueRate->rate = 5000e3;
 			}
 			else {
-				netQueueRate->rate = 50000e3;
+				netQueueRate->rate = 10000e3;
 			}
 		}
 

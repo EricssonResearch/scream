@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-07-02 :
+  - cwndI update simplified
 - 2026-06-30 :
   - Reduction of queue delay variations modified
   - CWND reduction is restricted when target rate is below the ACKed bitrate

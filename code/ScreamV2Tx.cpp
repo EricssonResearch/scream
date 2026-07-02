@@ -183,7 +183,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	cwndMinLow(0),
 	cwndI(1),
 	cwndRatio(0.001f),
-	cwndIHistIx(0),
+	cwndIUpdateBlocked(false),
 	maxPolicedCwnd(1.0e8f), // Really high value
 	isMaxPolicedCwndUpdateBlocked(false),
 
@@ -260,7 +260,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
 	lastTransmitT_ntp(0),
 	nextTransmitT_ntp(0),
 	lastRateUpdateT_ntp(0),
-	lastCwndIUpdateT_ntp(0),
 	lastCwndUpdateT_ntp(0),
 	lastQueueDelayAvgUpdateT_ntp(0),
 	lastQueueDelayMinSlowAvgUpdateT_ntp(0),
@@ -287,8 +286,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
       streams[n] = NULL;
     for (int n = 0; n < kMaxBytesInFlightHistSize; n++)
       maxBytesInFlightHist[n] = 0;
-    for (int n = 0; n < kCwndIHistSize; n++) 
-      cwndIHist[n] = 0;
 
     mssList[0] = kRecommendedMss;
 }
@@ -1431,34 +1428,6 @@ float ScreamV2Tx::getTotalTransmittedBitrate() {
 }
 
 /*
-* Determine CWND inflexion point based on median filtering
-*/
-void ScreamV2Tx::updateCwndI(int cwndI_) {
-
-	if (cwndIHist[0] == 0) {
-		for (int n = 0; n < kCwndIHistSize; n++)
-			cwndIHist[n] = cwndI_;
-	}
-	cwndIHist[cwndIHistIx] = cwndI_;
-	cwndIHistIx = (cwndIHistIx + 1) % kCwndIHistSize;
-
-	int tmp[kCwndIHistSize];
-	for (int n = 0; n < kCwndIHistSize; n++)
-		tmp[n] = cwndIHist[n];
-
-	for (int n = 0; n < kCwndIHistSize - 1; n++) {
-		for (int m = n + 1; m < kCwndIHistSize; m++) {
-			if (tmp[n] > tmp[m]) {
-				int tmp2 = tmp[n];
-				tmp[n] = tmp[m];
-				tmp[m] = tmp2;
-			}
-		}
-	}
-
-	cwndI = tmp[kCwndIHistSize / 2];
-}
-/*
 * Update the  congestion window
 */
 void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
@@ -1686,9 +1655,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* Update inflexion point
 		*/
-    if (time_ntp - lastCwndIUpdateT_ntp > 32768) {
-      lastCwndIUpdateT_ntp = time_ntp;
-      updateCwndI(cwnd);
+    if (!cwndIUpdateBlocked) { 
+      cwndI = cwnd;
+      cwndIUpdateBlocked = true;
     }
 		/*
 		* loss event detected, decrease congestion window
@@ -1708,20 +1677,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 		/*
 		* Update inflexion point
 		*/
-    if (time_ntp - lastCwndIUpdateT_ntp > sRtt_ntp) {
-      lastCwndIUpdateT_ntp = time_ntp;
-      updateCwndI(cwnd);
-
-      if (time_ntp - lastCongestionDetectedT_ntp > 5 * sRtt_ntp) {
-				/*
-				 * A long while since last congested, update entire cwndInflectionPointHist
-				 * to current value
-				 */
-        for (int n = 0; n < kCwndIHistSize; n++) {
-          cwndIHist[n] = cwnd;
-        }
-      }
-
+    if (!cwndIUpdateBlocked) {
+      cwndI = cwnd;
+      cwndIUpdateBlocked = true;
     }
 		/*
 		* CE event detected, decrease congestion window
@@ -1861,6 +1819,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
   tmp2 = 1.0 + ((tmp2 - 1.0) * postCongestionScale) * sclI;
   increment *= tmp2;
 
+  int cwndPrev = cwnd;
 	/*
     * Allow the CWND to increase beyond the bytes in flight
 	* limited by MAX_BYTES_IN_FLIGHT_HEADROOM
@@ -1871,6 +1830,10 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
   int cwndTmp = cwnd + (int)(increment + 0.5f);
   if (cwndTmp <= maxAllowed && getTotalTargetBitrate() < getTotalMaxBitrate()) {
     cwnd = cwndTmp;
+  }
+
+  if (cwnd > cwndPrev) {
+    cwndIUpdateBlocked = false;	
   }
 
   /*
