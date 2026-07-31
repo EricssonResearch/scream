@@ -54,6 +54,11 @@ struct sockaddr_in6 local_rtp_addr6;
 // std::atomic gives a release store / acquire load so that the write of
 // outgoing_rtcp_addr in learn-from-source mode is visible before the flag is set.
 std::atomic<bool> peer_known{ false };
+// True only when the receiver was started without an explicit sender_ip, i.e.
+// learn-from-source mode. Set once during argument parsing (before any thread
+// starts) and read-only thereafter. Gates the mid-session re-latch below so
+// that seeded mode (explicit sender_ip) NEVER changes its feedback target.
+bool learn_from_source = false;
 const char* LOCAL_IP = "127.0.0.1";
 const char* LOCAL_IPV6 = "::1";
 int LOCAL_PORT = 30124;
@@ -112,11 +117,46 @@ uint64_t lastPunchNatT_ntp = 0;
 uint32_t SSRC = 100; // We don't bother with SSRC yet, this is for experiments only so far.
 #define KEEP_ALIVE_PKT_SIZE 1
 
+/*
+* Compare the ip:port of two socket addresses. Returns true when they are the
+* same family and identical address+port. Used in learn-from-source mode to
+* detect that the sender's observed source (its public NAT mapping) has moved
+* mid-session, so the feedback target can be re-latched to the new address.
+*/
+static bool same_peer(const struct sockaddr_storage* a, const struct sockaddr* b) {
+	if (a->ss_family != b->sa_family)
+		return false;
+	if (b->sa_family == AF_INET6) {
+		const struct sockaddr_in6* aa = (const struct sockaddr_in6*)a;
+		const struct sockaddr_in6* bb = (const struct sockaddr_in6*)b;
+		return aa->sin6_port == bb->sin6_port &&
+			memcmp(&aa->sin6_addr, &bb->sin6_addr, sizeof(aa->sin6_addr)) == 0;
+	}
+	const struct sockaddr_in* aa = (const struct sockaddr_in*)a;
+	const struct sockaddr_in* bb = (const struct sockaddr_in*)b;
+	return aa->sin_port == bb->sin_port &&
+		aa->sin_addr.s_addr == bb->sin_addr.s_addr;
+}
+
 void* rtcpPeriodicThread(void* arg) {
 	unsigned char buf[BUFSIZE];
 	int rtcpSize;
 	uint32_t rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
 	for (;;) {
+		// Snapshot the feedback target under lock_scream. In learn-from-source
+		// mode the main thread may re-latch outgoing_rtcp_addr(6) mid-session
+		// when the sender's NAT mapping moves; taking a local copy under the
+		// lock keeps every sendto() below race-free while leaving the network
+		// I/O itself outside the critical section. Seeded mode never re-latches,
+		// so the snapshot simply mirrors the address set at startup.
+		struct sockaddr_in fb_addr;
+		struct sockaddr_in6 fb_addr6;
+		if (peer_known) {
+			pthread_mutex_lock(&lock_scream);
+			fb_addr = outgoing_rtcp_addr;
+			fb_addr6 = outgoing_rtcp_addr6;
+			pthread_mutex_unlock(&lock_scream);
+		}
 		// Only send if we know the peer address (either seeded or learned from first RTP)
 		if (peer_known && getTimeInNtp() - lastPunchNatT_ntp > 32768) { // 500ms in Q16
 			/*
@@ -125,31 +165,41 @@ void* rtcpPeriodicThread(void* arg) {
 			* This makes in possible to receive packets on the same port
 			*/
 			if (ipv6) {
-				int ret = sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&outgoing_rtcp_addr6, sizeof(outgoing_rtcp_addr6));
+				int ret = sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&fb_addr6, sizeof(fb_addr6));
 			}
 			else {
-				int ret = sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
+				int ret = sendto(fd_incoming_rtp, buf, KEEP_ALIVE_PKT_SIZE, 0, (struct sockaddr*)&fb_addr, sizeof(fb_addr));
 			}
 			lastPunchNatT_ntp = getTimeInNtp();
 			cerr << "." << endl;
 		}
 		uint32_t time_ntp = getTimeInNtp();
-		rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
-		if (peer_known && screamRx->isFeedback(time_ntp) &&
-			(screamRx->checkIfFlushAck() ||
-				(time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp))) {
+		// Evaluate the feedback decision and build the feedback packet while
+		// holding lock_scream: getRtcpFbInterval/isFeedback/checkIfFlushAck/
+		// getLastFeedbackT and createStandardizedFeedback all dereference
+		// screamRx, which the main thread may delete and recreate in its
+		// idle-reset path. The original code read screamRx in the condition
+		// before taking the lock, racing that reset. Network I/O stays outside
+		// the critical section.
+		bool isFeedback = false;
+		if (peer_known) {
 			pthread_mutex_lock(&lock_scream);
-			bool isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), true, buf, rtcpSize);
-			pthread_mutex_unlock(&lock_scream);
-			if (isFeedback) {
-				if (ipv6) {
-					sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr6, sizeof(outgoing_rtcp_addr6));
-				}
-				else {
-					sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&outgoing_rtcp_addr, sizeof(outgoing_rtcp_addr));
-				}
-				lastPunchNatT_ntp = getTimeInNtp();
+			rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
+			if (screamRx->isFeedback(time_ntp) &&
+				(screamRx->checkIfFlushAck() ||
+					(time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp))) {
+				isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), true, buf, rtcpSize);
 			}
+			pthread_mutex_unlock(&lock_scream);
+		}
+		if (isFeedback) {
+			if (ipv6) {
+				sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&fb_addr6, sizeof(fb_addr6));
+			}
+			else {
+				sendto(fd_incoming_rtp, buf, rtcpSize, 0, (struct sockaddr*)&fb_addr, sizeof(fb_addr));
+			}
+			lastPunchNatT_ntp = getTimeInNtp();
 		}
 		usleep(500);
 	}
@@ -208,6 +258,7 @@ int main(int argc, char* argv[])
 		// Learn-from-source mode: only port provided
 		INCOMING_RTP_PORT = atoi(argv[ix]);
 		peer_known = false; // Will learn peer from first RTP packet
+		learn_from_source = true; // Allow mid-session re-latch when the NAT mapping moves
 		cerr << "Running in learn-from-source mode (sender_ip will be learned from first RTP)" << endl;
 	}
 	else {
@@ -356,11 +407,14 @@ int main(int argc, char* argv[])
 		lastPunchNatT_ntp = getTimeInNtp();
 	}
 
+	uint16_t lastSn = 0;
+	// Initialize the mutex before starting the periodic thread: that thread
+	// now locks lock_scream on every iteration (see rtcpPeriodicThread), so
+	// it must be valid before the thread can run.
+	pthread_mutex_init(&lock_scream, NULL);
+
 	pthread_t rtcp_thread;
 	pthread_create(&rtcp_thread, NULL, rtcpPeriodicThread, (void*)"Periodic RTCP thread...");
-
-	uint16_t lastSn = 0;
-	pthread_mutex_init(&lock_scream, NULL);
 
 
 #define MAX_CTRL_SIZE 8192
@@ -446,37 +500,68 @@ int main(int argc, char* argv[])
 				cout << s << endl;
 			}
 			else {
-				// Learn peer address from first RTP packet (if not already known)
-				if (!peer_known) {
+				// Determine the source address of this RTP packet. On the ECN
+				// path recvmsg fills rcv_msg.msg_name (peer_addr); otherwise
+				// recvfrom fills sender_rtp_addr(6). Normalise both into a
+				// sockaddr_storage so learn and re-latch share one code path.
+				struct sockaddr_storage src_addr;
 #ifdef ECN_CAPABLE
-					// ECN path: source is in rcv_msg.msg_name (filled by recvmsg)
-					if (ipv6) {
-						memcpy(&outgoing_rtcp_addr6, &peer_addr, sizeof(outgoing_rtcp_addr6));
-					}
-					else {
-						memcpy(&outgoing_rtcp_addr, &peer_addr, sizeof(outgoing_rtcp_addr));
-					}
+				memcpy(&src_addr, &peer_addr, sizeof(src_addr));
 #else
-					// Non-ECN path: source is in sender_rtp_addr (filled by recvfrom)
+				if (ipv6) {
+					memcpy(&src_addr, &sender_rtp_addr6, sizeof(sender_rtp_addr6));
+				}
+				else {
+					memcpy(&src_addr, &sender_rtp_addr, sizeof(sender_rtp_addr));
+				}
+#endif
+				// Learn peer address from first RTP packet (if not already
+				// known), and in learn-from-source mode also re-latch it when
+				// the sender's observed source moves mid-session (a CGNAT/NAT
+				// rebind, common on cellular links after tens of minutes). A
+				// stale target would otherwise strand SCReAM feedback at an
+				// address that no longer routes to the sender, blinding its
+				// rate controller. Seeded mode (learn_from_source == false)
+				// keeps its startup target unconditionally.
+				// The current feedback target is only read here (this recv
+				// thread is its sole writer), so comparing it lock-free is safe.
+				struct sockaddr* cur_target = ipv6
+					? (struct sockaddr*)&outgoing_rtcp_addr6
+					: (struct sockaddr*)&outgoing_rtcp_addr;
+				bool relatch = peer_known && learn_from_source &&
+					!same_peer(&src_addr, cur_target);
+				if (!peer_known || relatch) {
+					pthread_mutex_lock(&lock_scream);
 					if (ipv6) {
-						memcpy(&outgoing_rtcp_addr6, &sender_rtp_addr6, sizeof(outgoing_rtcp_addr6));
+						memcpy(&outgoing_rtcp_addr6, &src_addr, sizeof(outgoing_rtcp_addr6));
 					}
 					else {
-						memcpy(&outgoing_rtcp_addr, &sender_rtp_addr, sizeof(outgoing_rtcp_addr));
+						memcpy(&outgoing_rtcp_addr, &src_addr, sizeof(outgoing_rtcp_addr));
 					}
-#endif
-					peer_known = true; // Mark peer as known (enables periodic thread + feedback)
-					cerr << "Learned sender address from first RTP packet" << endl;
+					pthread_mutex_unlock(&lock_scream);
+					if (relatch) {
+						cerr << "Sender source address changed; re-latched feedback target" << endl;
+					}
+					else {
+						peer_known = true; // Mark peer as known (enables periodic thread + feedback)
+						cerr << "Learned sender address from first RTP packet" << endl;
+					}
 				}
 
 				if (time_ntp - last_received_time_ntp > 2 * 65536) { // 2 sec in Q16
 					/*
 					* It's been more than 2 seconds since we last received an RTP packet
-					*  let's reset everything to be on the safe side
+					*  let's reset everything to be on the safe side.
+					* Hold lock_scream across the delete/new: rtcpPeriodicThread
+					* dereferences screamRx concurrently, so swapping the pointer
+					* unlocked is a use-after-free. This fires when the RTP source
+					* stalls then resumes (e.g. a flapping cellular/NAT link).
 					*/
 					receivedRtp = 0;
+					pthread_mutex_lock(&lock_scream);
 					delete screamRx;
 					screamRx = new ScreamRx(10, ackDiff, nReportedRtpPackets);
+					pthread_mutex_unlock(&lock_scream);
 					cerr << "Receiver state reset due to idle input" << endl;
 				}
 				last_received_time_ntp = time_ntp;
