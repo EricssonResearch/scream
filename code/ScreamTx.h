@@ -639,6 +639,7 @@ extern "C" {
 
 			uint32_t timeTxAck_ntp;  // timestamp when higest ACKed SN was transmitted
 			uint32_t timeStampAckHigh; // Highest ACKed timestamp
+			bool timeStampAckHighSet; 
 			uint32_t lastTransmitT_ntp;
 
 			int bytesRtp;           // Number of RTP bytes from media coder

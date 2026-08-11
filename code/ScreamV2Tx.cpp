@@ -849,7 +849,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
       /*
       * Increase maxPolicedCwnd with a time constant of 1000RTTs
       */
-      maxPolicedCwnd *= 1.001;
+      maxPolicedCwnd = std::min(1.0e8f, maxPolicedCwnd*1.001f);
 
       lastQueueDelayAvgUpdateT_ntp = time_ntp;
     }
@@ -984,8 +984,9 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
 			* Wrap-around safe update of timeStampAckHigh 
 			*/
 			uint32_t diff = tmp->timeStamp - stream->timeStampAckHigh;
-			if (diff < 50000) {
+			if (!stream->timeStampAckHighSet || diff < 50000) {
 				stream->timeStampAckHigh = tmp->timeStamp;
+				stream->timeStampAckHighSet = true;
 			}
 
 			stream->rtpQueueDelay = tmp->rtpQueueDelay;

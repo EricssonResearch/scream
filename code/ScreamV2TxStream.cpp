@@ -58,6 +58,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	rateRtp = 0.0f;
 	timeTxAck_ntp = 0;
 	timeStampAckHigh = 0;
+	timeStampAckHighSet = false;
 	lastTransmitT_ntp = 0;
 	numberOfUpdateRate = 0;
 	cleared = 0;
