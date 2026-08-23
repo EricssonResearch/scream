@@ -69,6 +69,9 @@ float multiplicativeIncreaseFactor = 0.05f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
 float reorderTime = 0.03f;
+float schedulingJitterMargin = 0.01f;
+int postCongestionDelayRtts = 200;
+
 
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
@@ -604,6 +607,8 @@ int setup() {
 	screamTx->enableRelaxedPacing(relaxedPacing);
 	screamTx->setMssListMinPacketsInFlight(mtuList, nMtuListItems, minPktsInFlight);
 	screamTx->setReorderTime(reorderTime);
+	screamTx->setPostCongestionDelayRtts(postCongestionDelayRtts);
+	screamTx->setSchedulingJitterMargin(schedulingJitterMargin);
 
 	if (disablePacing)
 		screamTx->enablePacketPacing(false);
@@ -655,7 +660,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-06-30 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-08-23 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -704,6 +709,8 @@ int main(int argc, char* argv[]) {
 		cerr << "     -hysteresis  val         Inhibit updated target rate to encoder if the rate change is small" << endl;
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
 		cerr << "     -reordertime val         Set packet reordering margin [s] (default 0.03)" << endl;
+		cerr << "     -jittermargin val        Set sheduling jitter margin [s] (default 0.01)" << endl;
+		cerr << "     -postcongdelay val       Set post congestion delay [RTTs] (default 200)" << endl;
 
 		exit(-1);
 	}
@@ -934,10 +941,19 @@ int main(int argc, char* argv[]) {
 			ix += 2;
 			continue;
 		}
+		if (strstr(argv[ix], "-jittermargin")) {
+			schedulingJitterMargin = atof(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
+		if (strstr(argv[ix], "-postcongdelay")) {
+			postCongestionDelayRtts = atoi(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
 		cerr << "unexpected arg " << argv[ix] << endl;
 		exit(0);
 	}
-
 
 	if (pushTraffic && fixedRate == 0) {
 		cerr << "Error : pushtraffic can only be used with fixedrate" << endl;

@@ -20,7 +20,7 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 10;
+const float Tmax = 50;
 const bool isChRate = true;
 const bool printLog = false;
 const bool ecnCapable = true;
@@ -62,6 +62,8 @@ int main(int argc, char* argv[])
 	//screamTx->setMaxTotalBitrate(40e6);
 	screamTx->setLogTag((char*)log_tag);
 	screamTx->isEnableAdaptiveWindowHeadroom(true);
+	screamTx->setSchedulingJitterMargin(0.01f);
+	screamTx->setPostCongestionDelayRtts(200);
 
 
 	FILE* fp = fopen("log.txt", "w");
@@ -71,7 +73,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 5e6, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 50.0e6f, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -79,7 +81,7 @@ int main(int argc, char* argv[])
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.1e6f, 0.5e6f, 2.5e6f, 1.0f, false, 0.0f, false);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1.0e6f, 1.0e6f, 100e6f, 1.0f, false, 0.0f, false);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
@@ -118,7 +120,7 @@ int main(int argc, char* argv[])
 			//time_ntp_rx_plus = 0.03 * 65536;
 		}
 
-		netQueueRate->updateRate(time);
+		//netQueueRate->updateRate(time);
 		bool isEvent = false;
 
 		bool isFrame = false;
@@ -177,16 +179,13 @@ int main(int argc, char* argv[])
 		bool isMark = false;
 		int seqNrTx = 0, seqNrRx = 0;
 		if (netQueueDelay->extract(time, rtpPacket, ssrc, size, seqNr, isCe, isMark, timeStamp)) {
-			netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr, isCe, isMark, timeStamp);
-			seqNrTx = seqNr;
-		}
-
-		if (true) {
+			netQueueRate->insert(time, rtpPacket, ssrc, size, seqNr, isCe, isMark, timeStamp);		
 			netQueueRate->addBytes(time);
+			//seqNrTx = seqNr;
+		}
+		if (true) {
 			while (netQueueRate->canExtract()) {
 				if (netQueueRate->extract(time, rtpPacket, ssrc, size, seqNr, isCe, isMark, timeStamp)) {
-
-
 					if (!oooQueue->insert(time, rtpPacket, ssrc, size, seqNr, isCe, isMark, timeStamp)) {
 						if (seqNr == 22821 || seqNr == 22822) {
 							//cerr << " INS 2  " << seqNr << endl;
@@ -294,8 +293,8 @@ int main(int argc, char* argv[])
 
 
 		if (isChRate) {
-			if ((time > 5.0 && time < 10) && isChRate) {
-				netQueueRate->rate = 1000e3;
+			if ((time > 20.0 && time < 30) && isChRate) {
+				netQueueRate->rate = 20000e3;
 			}
 			else {
 				netQueueRate->rate = 50000e3;

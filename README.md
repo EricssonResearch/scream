@@ -3,6 +3,11 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-08-23 :
+  - Existing window overhead and cwnd growth restriction adapted to work better with cellular access, configurable schedulingJitterMargin.
+  - postCogestionDelayRtts is configurable
+  - New SCReAM BW test tool parameters -jittermargin and -postcongdelay
+  - Build date for BW test tool sender changed
 - 2026-07-02 :
   - cwndI update simplified
 - 2026-06-30 :
