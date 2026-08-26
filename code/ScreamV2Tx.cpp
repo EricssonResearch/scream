@@ -39,13 +39,8 @@ static const uint32_t kBaseDelayUpdateInterval_ntp = 655360; // 10s in NTP doain
 static const uint32_t kBaseDelayResetInterval_ntp = 3932160; // 60s in NTP doain
 static const int kNumRateLimitRtts = 5;
 
-// L4S alpha increase gain factor, for scalable congestion control
-static const float kL4sGUp = 1.0f / 8;
-// L4S alpha decrease gain factor, for scalable congestion control
-static const float kL4sGDown = 1.0f / 128;
-
-// L4S alpha max value, for scalable congestion control
-static const float kL4sAlphaMax = 1.0;
+// L4S alpha gain factor, for scalable congestion control
+static const float kL4sG = 1.0f / 16;
 
 // Min CWND in MSS
 static const int kMinCwndMss = 3;
@@ -84,7 +79,7 @@ static const int kRecommendedMss = 1200;
 static const uint32_t kMssHoldTime = 10 * 65536;
 
 // Post congestion delay [RTT]
-static const int kPostCongestionDelayRtts = 200;
+static const int kPostCongestionDelayRtts = 50;
 
 static const float kRelaxedPacingLimitLow = 0.8f;
 static const float kRelaxedPacingLimitHigh = 1.0f;
@@ -771,21 +766,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 
                     /*
                     * L4S alpha (backoff factor) is averaged and limited
-                    * It can make sense to limit the backoff because
-                    *   1) source is rate limited
-                    *   2) delay estimation algorithm also works in parallel
-                    *   3) L4S marking algorithm can lag behind a little and potentially overmark
                     */
-
-                    if (fractionMarked >= l4sAlpha) {
-                        l4sAlpha = std::min(kL4sAlphaMax, kL4sGUp * fractionMarked + (1.0f - kL4sGUp) * l4sAlpha);
-                    }
-                    else {
-                        /*
-                        * Slow decay
-                        */
-                        l4sAlpha *= (1.0 - kL4sGDown);
-                    }
+                    l4sAlpha = std::min(1.0f, kL4sG * fractionMarked + (1.0f - kL4sG) * l4sAlpha);
 
 
                     bytesDeliveredThisRtt = 0;
@@ -1444,11 +1426,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
     float lossDistanceScale = std::max(0.0f, std::min(1.0f,
         ((time_ntp - lastLossEventT_ntp) / 65536.0f / sRtt - 4.0f) / 4.0f));
-    postCongestionScale =
-        std::max(0.0f,
-            std::min(1.0f,
-                float(time_ntp - lastCongestionDetectedT_ntp) /
-                (postCongestionDelayRtts * sRtt_ntp)));
 
     queueDelayMin = std::min(queueDelayMin, queueDelay);
     queueDelayMax = std::max(queueDelayMax, queueDelay);
@@ -1644,13 +1621,26 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
     /*
     * Compute scale factor based on relation between CWND and last known
-    * max CWND
+    * max CWND. Scale factor is relaxed for large cwnd (high bitrates) because 
+    * this is most beneficial when cwnd is small.
     */
     float sclI = 1.0;
-    float tmp = (cwnd - cwndI) / float(cwndI);
+    float tmp = float(cwnd - cwndI) / std::min(20*mss,cwndI);
     tmp *= 8;
     tmp = tmp * tmp;
     sclI = std::max(0.1f, std::min(1.0f, tmp));
+    if (sclI < 0.8f) {
+        /*
+        * Still in a near congested state  
+        */
+        lastCongestionDetectedT_ntp = time_ntp;
+    }
+
+    postCongestionScale =
+        std::max(0.0f,
+            std::min(1.0f,
+                float(time_ntp - lastCongestionDetectedT_ntp) /
+                (postCongestionDelayRtts * sRtt_ntp)));
 
     /*
     * At very low congestion windows (just a few MSS) the up and down scaling
@@ -1681,7 +1671,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         lastCongestionDetectedT_ntp = time_ntp;
 
         wasLossEvent = true;
-        postCongestionScale = 0.0f;
     }
     else if (ecnCeEvent || virtualCeEvent) {
         /*
@@ -1720,13 +1709,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
                     * Don't scaledown back off if queueDelay is large
                     */
                     backOff *= std::max(0.25f, sclI);
-
-                    /*
-                    * Counteract the limitation in CWND increase when queue delay varies.
-                    * This helps to avoid that SCReAM is starved by competing TCP Prague flows
-                    * Don't scaledown back off if queueDelay is large
-                    */
-                    backOff *= std::min(1.0f, std::max(0.25f, latencyDiffCwndScale));
                 }
 
                 if (time_ntp - lastCongestionDetectedT_ntp > 100 * std::max(sRtt, kSrttVirtual) * 65536) {
@@ -1778,7 +1760,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         lastCongestionDetectedT_ntp = time_ntp;
 
         wasLossEvent = true;
-        postCongestionScale = 0.0;
     }
 
     if (time_ntp - lastRttT_ntp > sRtt_ntp) {
@@ -1792,10 +1773,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
     /*
     * Compute max increment based on bytes acked
-    *  but subtract number of CE marked bytes
+    *  but subtract number of CE marked bytes.
+    * The increment is scaled down by a factor 2 to get closer
+    *  to to two L4S CE marked packets per/RTT in steady state
+    *  with L4S queues that build a few milliseconds queue
     */
     int bytesAckedMinusCe = bytesNewlyAcked - bytesNewlyAckedCe;
-    float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio;
+    float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio * 0.5;
 
     /*
      * Scale the increment more cautious when close the last
@@ -1826,7 +1810,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     * Limit multiplicative increase when congestion occured
     * recently
     */
-    tmp2 = 1.0 + ((tmp2 - 1.0) * postCongestionScale) * sclI;
+    tmp2 = 1.0 + ((tmp2 - 1.0) * postCongestionScale);
     increment *= tmp2;
 
     int cwndPrev = cwnd;

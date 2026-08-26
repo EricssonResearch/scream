@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
 	screamTx->setLogTag((char*)log_tag);
 	screamTx->isEnableAdaptiveWindowHeadroom(true);
 	screamTx->setSchedulingJitterMargin(0.01f);
-	screamTx->setPostCongestionDelayRtts(200);
+	screamTx->setPostCongestionDelayRtts(50);
 
 
 	FILE* fp = fopen("log.txt", "w");
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 50.0e6f, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 2.0e6f, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -294,10 +294,10 @@ int main(int argc, char* argv[])
 
 		if (isChRate) {
 			if ((time > 20.0 && time < 30) && isChRate) {
-				netQueueRate->rate = 20000e3;
+				netQueueRate->rate = 50000e3;
 			}
 			else {
-				netQueueRate->rate = 50000e3;
+				netQueueRate->rate = 100000e3;
 			}
 		}
 

@@ -10,8 +10,8 @@ using namespace std;
  * Implements a simple RTP packet queue
  */
 
-const float l4sThLo = 0.008f;
-const float l4sThHi = 0.012f;
+const float l4sThLo = 0.006f;
+const float l4sThHi = 0.010f;
 NetQueueItem::NetQueueItem() {
 	packet = 0;
 	used = false;

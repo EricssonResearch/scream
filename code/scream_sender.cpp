@@ -660,7 +660,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-08-23 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-08-26 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -710,7 +710,7 @@ int main(int argc, char* argv[]) {
 		cerr << "                               a value of 0.1 means a hysteresis of +10%/-2.5%" << endl;
 		cerr << "     -reordertime val         Set packet reordering margin [s] (default 0.03)" << endl;
 		cerr << "     -jittermargin val        Set sheduling jitter margin [s] (default 0.01)" << endl;
-		cerr << "     -postcongdelay val       Set post congestion delay [RTTs] (default 200)" << endl;
+		cerr << "     -postcongdelay val       Set post congestion delay [RTTs] (default 50)" << endl;
 
 		exit(-1);
 	}
