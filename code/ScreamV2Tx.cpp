@@ -42,6 +42,9 @@ static const int kNumRateLimitRtts = 5;
 // L4S alpha gain factor, for scalable congestion control
 static const float kL4sG = 1.0f / 16;
 
+// CWND up gain factor
+static const float kGainUp = 0.5f;
+
 // Min CWND in MSS
 static const int kMinCwndMss = 3;
 
@@ -98,6 +101,7 @@ static const float kBetaLossPolicer = 0.8f;
 static const float kLossBetaSlow = 0.95f;
 
 static const float kTotalAckedBitrateFraction = 0.8f;// Should be 0.8 when verified to be safe
+static const int cwndIUpdateHoldRtts = 10;
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -163,6 +167,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     queueDelayMinSlowAvg(0.0f),
     latencyDiffAvg(0.0f),
     latencyDiffCwndScale(1.0f),
+    cwndILastUpdateT_ntp(0),
 
     bytesNewlyAcked(0),
     bytesNewlyAckedCe(0),
@@ -1678,6 +1683,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         */
         if (!cwndIUpdateBlocked) {
             cwndI = cwnd;
+            cwndILastUpdateT_ntp = time_ntp;
             cwndIUpdateBlocked = true;
         }
         /*
@@ -1779,7 +1785,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     *  with L4S queues that build a few milliseconds queue
     */
     int bytesAckedMinusCe = bytesNewlyAcked - bytesNewlyAckedCe;
-    float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio * 0.5;
+    float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio;
 
     /*
      * Scale the increment more cautious when close the last
@@ -1826,7 +1832,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         cwnd = cwndTmp;
     }
 
-    if (cwnd > cwndPrev) {
+    if (cwnd > cwndPrev && time_ntp - cwndILastUpdateT_ntp > cwndIUpdateHoldRtts * sRtt_ntp) {
         cwndIUpdateBlocked = false;
     }
 

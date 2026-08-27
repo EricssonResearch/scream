@@ -45,9 +45,7 @@ extern "C" {
     //  when an audio + video stream is run, so bottomline is that
     //  this feature is a bit shaky
     static const bool kEnableSbd = false;
-    // CWND up and down gain factors
-    static const float kGainUp = 1.0f;
-    static const float kGainDown = 2.0f;
+
 
     // Stream related default parameters
     // Max video rampup speed in bps/s (bits per second increase per second)
@@ -877,6 +875,7 @@ extern "C" {
         float queueDelayMinSlowAvg;
         float latencyDiffAvg;
         float latencyDiffCwndScale;
+        uint32_t cwndILastUpdateT_ntp;
 
         int bytesNewlyAcked;
         int bytesNewlyAckedCe;

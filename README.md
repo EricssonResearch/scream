@@ -3,6 +3,8 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-08-27 :
+  - Additional hold time for cwndI update.
 - 2026-08-26 :
   - CWND inflection point scaling relaxed at high CWND (high bitrates).
   - CWND increase scaled down by a factor 2, this gives a better match against the L4S throughput equation with more real L4S queues. 
