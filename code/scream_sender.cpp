@@ -59,7 +59,7 @@ bool isBurst = false;
 float burstStartTime = -1.0;
 float burstSleepTime = -1.0;
 bool pushTraffic = false;
-float maxWindowHeadroom = 5.0f;
+float maxWindowHeadroom = 3.0f;
 bool relaxedPacing = false;
 float packetPacingHeadroom = 1.5f;
 float scaleFactor = 0.7f;
@@ -71,7 +71,7 @@ float hysteresis = 0.0f;
 float reorderTime = 0.03f;
 float schedulingJitterMargin = 0.01f;
 int postCongestionDelayRtts = 200;
-
+bool enableCyclicPacing = false;
 
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
@@ -609,6 +609,7 @@ int setup() {
 	screamTx->setReorderTime(reorderTime);
 	screamTx->setPostCongestionDelayRtts(postCongestionDelayRtts);
 	screamTx->setSchedulingJitterMargin(schedulingJitterMargin);
+	screamTx->setEnableCyclicPacing(enableCyclicPacing);
 
 	if (disablePacing)
 		screamTx->enablePacketPacing(false);
@@ -660,7 +661,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-08-27 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-08-30 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -686,7 +687,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -scale value             Scale factor in case of loss or ECN event (default 0.7) " << endl;
 		cerr << "     -delaytarget val         Set a queue delay target (default = 0.06s) " << endl;
 		cerr << "     -paceheadroom val        Set a packet pacing headroom (default = 1.5) " << endl;
-		cerr << "     -maxwindowheadroom val   How much bytes in flight can exceed cwnd  (default = 5.0) " << endl;
+		cerr << "     -maxwindowheadroom val   How much bytes in flight can exceed cwnd  (default = 3.0) " << endl;
 		cerr << "     -adaptivepaceheadroom val Set adaptive packet pacing headroom (default = 1.5) " << endl;
 		cerr << "     -relaxedpacing           Allow increased pacing rate when max rate reached (default = false) " << endl;
 		cerr << "     -inflightheadroom val    Set a bytes in flight headroom (default = 2.0) " << endl;
@@ -711,7 +712,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -reordertime val         Set packet reordering margin [s] (default 0.03)" << endl;
 		cerr << "     -jittermargin val        Set sheduling jitter margin [s] (default 0.01)" << endl;
 		cerr << "     -postcongdelay val       Set post congestion delay [RTTs] (default 50)" << endl;
-
+		cerr << "     -cyclicpacing            Enable cyclic pacing" << endl;
 		exit(-1);
 	}
 	int ix = 1;
@@ -949,6 +950,11 @@ int main(int argc, char* argv[]) {
 		if (strstr(argv[ix], "-postcongdelay")) {
 			postCongestionDelayRtts = atoi(argv[ix + 1]);
 			ix += 2;
+			continue;
+		}
+		if (strstr(argv[ix], "-cyclicpacing")) {
+			enableCyclicPacing = true;
+			ix += 1;
 			continue;
 		}
 		cerr << "unexpected arg " << argv[ix] << endl;

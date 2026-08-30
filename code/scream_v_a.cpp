@@ -33,7 +33,7 @@ const bool enablePacing = true;
 int swprio = -1;
 //#define TRACEFILE "../traces/trace_key.txt"
 #define TRACEFILE "../traces/trace_no_key.txt"
-#define TRACEFILE "../traces/trace_flat.txt"
+//#define TRACEFILE "../traces/trace_flat.txt"
 /*
 * Mode determines how many streams should be run
 * 0x1 = stream 0, 0x2 = stream 1, 0x3 = 1+2
@@ -64,6 +64,7 @@ int main(int argc, char* argv[])
 	screamTx->isEnableAdaptiveWindowHeadroom(true);
 	screamTx->setSchedulingJitterMargin(0.01f);
 	screamTx->setPostCongestionDelayRtts(50);
+	screamTx->setEnableCyclicPacing(true);
 
 
 	FILE* fp = fopen("log.txt", "w");

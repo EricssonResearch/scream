@@ -101,7 +101,11 @@ static const float kBetaLossPolicer = 0.8f;
 static const float kLossBetaSlow = 0.95f;
 
 static const float kTotalAckedBitrateFraction = 0.8f;// Should be 0.8 when verified to be safe
-static const int cwndIUpdateHoldRtts = 10;
+static const int kCwndIUpdateHoldRtts = 50;
+static const float kCwndIUpdateThreshold = 1.05f;
+
+static const float kCyclicPacingGain = 1.2; 
+static const int kPacingCycles = 4;
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -131,6 +135,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     enableSbd(enableSbd_),
     enableClockDriftCompensation(enableClockDriftCompensation_),
     enableRatePolicerProtection(false),
+    enableCyclicPacing(false),
 
     isEnablePacketPacing(true),
     isAutoTuneMinCwnd(false),
@@ -186,6 +191,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     cwndI(1),
     cwndRatio(0.001f),
     cwndIUpdateBlocked(false),
+    cwndLow(1),
     maxPolicedCwnd(1.0e8f), // Really high value
     isMaxPolicedCwndUpdateBlocked(false),
 
@@ -220,6 +226,8 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     reorderTime(kReorderTime),
     reorderTime_ntp(uint32_t(kReorderTime* sec2NtpScaleFactor + 0.5f)),
     lossRate(0.0f),
+    isCongestionDetected(false),
+    isEceDetected(false),
 
     rateTransmitted(0.0f),
     rateRtpAvg(0.0f),
@@ -233,6 +241,9 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     paceInterval_ntp(0),
     paceInterval(0.0f),
     adaptivePacingRateScale(1.0f),
+    cyclicPacingIx(0),
+    cyclicPacingGain(1.0),
+    adjustedPacketPacingHeadroom(1.0),
 
     baseOwdHistMin(UINT32_MAX),
     baseOwdHistPtr(0),
@@ -290,7 +301,15 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
         maxBytesInFlightHist[n] = 0;
 
     mssList[0] = kRecommendedMss;
+
+    if (enableCyclicPacing) {
+        adjustedPacketPacingHeadroom = std::max(1.0f, packetPacingHeadroom - (kCyclicPacingGain - 1.0f) / kPacingCycles);
+    }
+    else {
+        adjustedPacketPacingHeadroom = packetPacingHeadroom;
+    }
 }
+
 
 ScreamV2Tx::~ScreamV2Tx() {
     for (int n = 0; n < nStreams; n++)
@@ -724,6 +743,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
     if (isLast) {
         if (time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) { // CE event at least every 30ms
             if (isCeThisFeedback) {
+                isEceDetected = true;
                 ecnCeEvent = true;
                 lastLossEventT_ntp = time_ntp;
                 lastCeEventT_ntp = time_ntp;
@@ -774,7 +794,6 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
                     */
                     l4sAlpha = std::min(1.0f, kL4sG * fractionMarked + (1.0f - kL4sG) * l4sAlpha);
 
-
                     bytesDeliveredThisRtt = 0;
                     bytesMarkedThisRtt = 0;
                     packetsDeliveredThisRtt = 0;
@@ -788,6 +807,20 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
         }
 
         if (time_ntp - lastQueueDelayAvgUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
+
+            /*
+            * Implement cyclic pacing, this periodically increases the pacing rate to test the bottleneck capacity 
+            */
+            cyclicPacingIx++;
+            if (cyclicPacingIx == kPacingCycles) {
+                cyclicPacingIx = 0;
+                if (enableCyclicPacing) {
+                    cyclicPacingGain = kCyclicPacingGain;
+                }
+            }
+            else {
+                cyclicPacingGain = 1.0;
+            }
 
 
             /*
@@ -826,7 +859,17 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
             latencyDiffAvg = (1.0f - kLatencyDiffAlpha) * latencyDiffAvg +
                 kLatencyDiffAlpha * packetLatencyDiff;
 
-            latencyDiffCwndScale = std::min(1.0f, std::max(0.0f, 1.0f - latencyDiffAvg / (queueDelayTarget / 4)));
+            /*
+            * Lock latencyDiffCwndScale to 1.0 if
+            * a) Congestion is not (yet) detected or..
+            * b) ECN-CE marks detected and L4S is enabled
+            */
+            if (!isCongestionDetected || isEceDetected && isL4s) {
+                latencyDiffCwndScale = 1.0;
+            }
+            else {
+                latencyDiffCwndScale = std::min(1.0f, std::max(0.0f, 1.0f - latencyDiffAvg / (queueDelayTarget / 4)));
+            }
 
             /*
             * Max average queue delay targets zero while min average queue delay
@@ -883,6 +926,8 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 
         if (lossEvent || ecnCeEvent || virtualCeEvent) {
             lastLossEventT_ntp = time_ntp;
+            isCongestionDetected = true;
+            cyclicPacingGain = 1.0;
         }
 
         if (lastCwndUpdateT_ntp == 0)
@@ -1382,6 +1427,7 @@ void ScreamV2Tx::initialize(uint32_t time_ntp) {
     lastQueueDelayMinSlowAvgUpdateT_ntp = time_ntp;
     lastRateLimitT_ntp = time_ntp;
     lastMssChange_ntp = time_ntp;
+    cwndILastUpdateT_ntp = time_ntp;
 }
 
 float ScreamV2Tx::getTotalTargetBitrate() {
@@ -1422,6 +1468,19 @@ float ScreamV2Tx::getTotalTransmittedBitrate() {
     return totalTransmittedBitrate;
 }
 
+void ScreamV2Tx::updateCwndI(uint32_t time_ntp) {
+    if (cwnd > cwndLow * kCwndIUpdateThreshold ||
+        time_ntp - cwndILastUpdateT_ntp > kCwndIUpdateHoldRtts * sRtt_ntp) {
+        cwndIUpdateBlocked = false;
+    }
+    if (!cwndIUpdateBlocked) {
+        cwndI = cwnd;
+        cwndIUpdateBlocked = true;
+        cwndILastUpdateT_ntp = time_ntp;
+        cwndLow = cwnd;
+    }
+}
+
 /*
 * Update the  congestion window
 */
@@ -1434,8 +1493,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
     queueDelayMin = std::min(queueDelayMin, queueDelay);
     queueDelayMax = std::max(queueDelayMax, queueDelay);
-
-
 
     float time = time_ntp * ntp2SecScaleFactor;
 
@@ -1476,9 +1533,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
         float pacingBitrate = std::max(getTotalTargetBitrate(), rateRtpAvg);
 
-        pacingBitrate = std::max(50e3f, packetPacingHeadroom * adaptivePacingRateScale * pacingBitrate);
+        pacingBitrate = std::max(50e3f, adjustedPacketPacingHeadroom * adaptivePacingRateScale * pacingBitrate * cyclicPacingGain);
         if (maxTotalBitrate > 0) {
-            pacingBitrate = std::min(pacingBitrate, maxTotalBitrate * packetPacingHeadroom);
+            pacingBitrate = std::min(pacingBitrate, maxTotalBitrate * adjustedPacketPacingHeadroom * cyclicPacingGain);
         }
 
         if (isEnableRelaxedPacing && getTotalTargetBitrate() > kRelaxedPacingLimitLow * getTotalMaxBitrate()) {
@@ -1659,10 +1716,8 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         /*
         * Update inflexion point
         */
-        if (!cwndIUpdateBlocked) {
-            cwndI = cwnd;
-            cwndIUpdateBlocked = true;
-        }
+        updateCwndI(time_ntp);
+
         /*
         * loss event detected, decrease congestion window
         */
@@ -1674,6 +1729,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         }
         lossEvent = false;
         lastCongestionDetectedT_ntp = time_ntp;
+        cwndLow = std::min(cwndLow, cwnd);
 
         wasLossEvent = true;
     }
@@ -1681,11 +1737,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         /*
         * Update inflexion point
         */
-        if (!cwndIUpdateBlocked) {
-            cwndI = cwnd;
-            cwndILastUpdateT_ntp = time_ntp;
-            cwndIUpdateBlocked = true;
-        }
+        updateCwndI(time_ntp);
         /*
         * CE event detected, decrease congestion window
         */
@@ -1738,6 +1790,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
                 */
                 cwnd = std::max(cwndMin, (int)(ecnCeBeta * cwnd));
             }
+            cwndLow = std::min(cwndLow, cwnd);
             virtualCeEvent = false;
         }
         if (virtualCeEvent) {
@@ -1759,6 +1812,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
             backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 
             cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
+            cwndLow = std::min(cwndLow, cwnd);
         }
 
         ecnCeEvent = false;
@@ -1832,10 +1886,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
         cwnd = cwndTmp;
     }
 
-    if (cwnd > cwndPrev && time_ntp - cwndILastUpdateT_ntp > cwndIUpdateHoldRtts * sRtt_ntp) {
-        cwndIUpdateBlocked = false;
-    }
-
     /*
     * Limit to max policed CWND, if applicable
     */
@@ -1869,7 +1919,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     rateLeft *= 1.0f - std::min(0.2f, std::max(0.0f, cwndRatio - 0.1f));
 
     /*
-    * Scale down based on weigthed average high percentile of frame sizes
+    * Scale down based slightly
     */
     rateLeft /= 1.1f;
 

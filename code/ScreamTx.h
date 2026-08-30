@@ -534,6 +534,13 @@ extern "C" {
             postCongestionDelayRtts = value;
         }
 
+        /*
+        * Enable cyclic pacing
+        */
+        void setEnableCyclicPacing(bool value) {
+            enableCyclicPacing = value;
+        }
+
     private:
         /*
         * Struct for list of RTP packets in flight
@@ -736,6 +743,10 @@ extern "C" {
         */
         float getTotalTransmittedBitrate();
 
+        /*
+        * Update CWND
+        */
+        void updateCwndI(uint32_t time_ntp);
 
         /*
         * Update CWND
@@ -839,6 +850,7 @@ extern "C" {
         bool enableSbd;
         bool enableClockDriftCompensation;
         bool enableRatePolicerProtection;
+        bool enableCyclicPacing;
 
         bool isEnablePacketPacing;
         bool isAutoTuneMinCwnd;
@@ -893,9 +905,11 @@ extern "C" {
         int cwnd; // congestion window
         int cwndMin;
         int cwndMinLow;
+
         int cwndI; // congestion window inflexion point
         float cwndRatio;
         bool cwndIUpdateBlocked;
+        int cwndLow;
         float maxPolicedCwnd;
         bool isMaxPolicedCwndUpdateBlocked;
 
@@ -930,6 +944,8 @@ extern "C" {
         uint32_t reorderTime_ntp;
         float reorderTime;
         float lossRate;
+        bool isCongestionDetected;
+        bool isEceDetected;
 
         float rateTransmitted;
         float rateRtpAvg;
@@ -943,6 +959,10 @@ extern "C" {
         uint32_t paceInterval_ntp;
         float paceInterval;
         float adaptivePacingRateScale;
+        int cyclicPacingIx;
+        float cyclicPacingGain;
+        float adjustedPacketPacingHeadroom;
+
 
         uint32_t baseOwdHist[kBaseOwdHistSize];
         uint32_t baseOwdHistMin;

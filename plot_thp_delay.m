@@ -28,7 +28,7 @@ xlim(Tlim);
 ylim([0 maxThp]);
 
 subplot(4,1,2);
-plot(T,a(ix,5)/1e3,'-r',T,a(ix,4)/1e3,'.-b');
+plot(T,a(ix,5)/1e3,'-r',T,a(ix,4)/1e3,'.-b',T,a(ix,20)/1e3,'k');
 set(gca,'FontSize',12);grid on;
 set(gca,'XTickLabel',[]);grid on;
 title('CWND(B) and bytes in flight(R) [kByte]');
@@ -53,5 +53,7 @@ xlim(Tlim);
 
 xlabel('T [s]');
 xlim(Tlim);
+
+mean(a(ix,18)/1e6)
 end
 
