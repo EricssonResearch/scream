@@ -1691,7 +1691,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     tmp *= 8;
     tmp = tmp * tmp;
     sclI = std::max(0.1f, std::min(1.0f, tmp));
-    if (sclI < 0.8f) {
+    if (sclI < 1.0f && cwnd < cwndI) {
         /*
         * Still in a near congested state  
         */
