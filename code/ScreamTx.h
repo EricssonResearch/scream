@@ -884,7 +884,9 @@ extern "C" {
         float queueDelayMin;
         float queueDelayMaxAvg;
         float queueDelayMinAvg;
-        float queueDelayMinSlowAvg;
+        float queueDelayMinLongAvg;
+        float queueDelayShortAvg;
+        float queueDelayLongAvg;
         float latencyDiffAvg;
         float latencyDiffCwndScale;
         uint32_t cwndILastUpdateT_ntp;
@@ -962,6 +964,7 @@ extern "C" {
         int cyclicPacingIx;
         float cyclicPacingGain;
         float adjustedPacketPacingHeadroom;
+        float relaxedPacingFactorScale;
 
 
         uint32_t baseOwdHist[kBaseOwdHistSize];
@@ -1002,7 +1005,7 @@ extern "C" {
         uint32_t lastCwndUpdateT_ntp;
 
         uint32_t lastQueueDelayAvgUpdateT_ntp;
-        uint32_t lastQueueDelayMinSlowAvgUpdateT_ntp;
+        uint32_t lastQueueDelayMinLongAvgUpdateT_ntp;
         uint32_t lastL4sAlphaUpdateT_ntp;
         uint32_t lastBaseDelayRefreshT_ntp;
         uint32_t lastRateLimitT_ntp;

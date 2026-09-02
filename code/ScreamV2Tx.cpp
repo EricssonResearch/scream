@@ -68,7 +68,7 @@ static const float kLowCwndScaleFactor = 1.0f;
 
 // Time constant for queue delay average
 static const float kQueueDelayAvgAlpha = 1.0f / 4;
-static const float kQueueDelayMinSlowAvgAlpha = 1.0f / 8;
+static const float kQueueDelayMinLongAvgAlpha = 1.0f / 8;
 
 // Packet overhead
 static const int kPacketOverhead = 12 + 8; // RTP + UDP
@@ -87,12 +87,15 @@ static const int kPostCongestionDelayRtts = 50;
 static const float kRelaxedPacingLimitLow = 0.8f;
 static const float kRelaxedPacingLimitHigh = 1.0f;
 static const float kMaxRelaxedPacingFactor = 5.0f;
+static const float kRelaxedPacingFactorAlpha = 1.0f / 100; // 100 RTTs to reach kMaxRelaxedPacingFactor 
 
 static const float kMinWindowHeadroom = 1.5f;
 
-static const int kQueueDelayMinSlowAvgUpdateRtts = 100;
+static const int kQueueDelayMinLongAvgUpdateRtts = 100;
 
 static const float kLatencyDiffAlpha = 1.0f / 32;
+static const float kLatencyDiffMargin = 0.001f;
+static const float kLatencyDiffGain = 50.0;
 static const float kQueueDelayMinMaxAlpha = 1.0f / 16;
 static const float kSchedulingJitterMargin = 0.01f;
 static const float kLossRateThreshold = 0.01f;
@@ -106,6 +109,10 @@ static const float kCwndIUpdateThreshold = 1.05f;
 
 static const float kCyclicPacingGain = 1.2; 
 static const int kPacingCycles = 4;
+
+static const float kQueueDelayShortAvgAlpha = 1.0f / 5;
+static const float kQueueDelayLongAvgAlpha = 1.0f / 50;
+
 
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
@@ -169,7 +176,10 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     queueDelayMin(1000.0),
     queueDelayMaxAvg(0.0f),
     queueDelayMinAvg(1000.0),
-    queueDelayMinSlowAvg(0.0f),
+    queueDelayMinLongAvg(0.0f),
+    queueDelayShortAvg(0.0f),
+    queueDelayLongAvg(0.0f),
+
     latencyDiffAvg(0.0f),
     latencyDiffCwndScale(1.0f),
     cwndILastUpdateT_ntp(0),
@@ -243,7 +253,8 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     adaptivePacingRateScale(1.0f),
     cyclicPacingIx(0),
     cyclicPacingGain(1.0),
-    adjustedPacketPacingHeadroom(1.0),
+    adjustedPacketPacingHeadroom(1.0f),
+    relaxedPacingFactorScale(0.0f),
 
     baseOwdHistMin(UINT32_MAX),
     baseOwdHistPtr(0),
@@ -275,7 +286,7 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     lastRateUpdateT_ntp(0),
     lastCwndUpdateT_ntp(0),
     lastQueueDelayAvgUpdateT_ntp(0),
-    lastQueueDelayMinSlowAvgUpdateT_ntp(0),
+    lastQueueDelayMinLongAvgUpdateT_ntp(0),
     lastL4sAlphaUpdateT_ntp(0),
     lastBaseDelayRefreshT_ntp(0),
     lastRateLimitT_ntp(0),
@@ -710,273 +721,6 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 }
 
 /*
-* New incoming feedback
-*/
-void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
-    int streamId,
-    uint32_t timestamp,
-    uint16_t seqNr,
-    uint8_t ceBits,
-    bool isLast) {
-
-    Stream* stream = streams[streamId];
-    Transmitted* txPackets = stream->txPackets;
-    completeLogItem = false;
-    prevBytesInFlight = bytesInFlight;
-    maxBytesInFlight = std::max(bytesInFlight, maxBytesInFlight);
-
-
-    /*
-    * Mark received packets, given by the ACK vector
-    */
-    bool isMark = false;
-    isCeThisFeedback |= markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
-    /*
-    * Detect lost packets
-    */
-    if (isUseExtraDetailedLog || isLast || isMark) {
-        detectLoss(time_ntp, txPackets, seqNr, stream);
-    }
-
-    queueDelayMinAvg = std::min(queueDelayMinAvg, queueDelay);
-    queueDelayMaxAvg = std::min(queueDelayTarget, std::max(queueDelayMaxAvg, queueDelay));
-    if (isLast) {
-        if (time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) { // CE event at least every 30ms
-            if (isCeThisFeedback) {
-                isEceDetected = true;
-                ecnCeEvent = true;
-                lastLossEventT_ntp = time_ntp;
-                lastCeEventT_ntp = time_ntp;
-            }
-        }
-
-        if (!isEnablePacketPacing) {
-            /*
-            * The CE density is a metric of the fraction of updated RTCP
-            * feedback that indicates CE marking when congestion occurs
-            * This scales down the CE mark fraction when packet pacing
-            * is disabled
-            *
-            */
-            if (isCeThisFeedback)
-                ceDensity += kCeDensityAlpha;
-            ceDensity *= 1.0f - kCeDensityAlpha;
-            ceDensity = std::max(0.25f, ceDensity);
-        }
-
-        isCeThisFeedback = false;
-        if (isL4s) {
-            /*
-            * L4S mode compute a congestion scaling factor that is dependent on the fraction
-            * of ECN marked packets
-            */
-            if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(655u, sRtt_ntp)) { // Update at least every 10ms
-                lastL4sAlphaUpdateT_ntp = time_ntp;
-                fractionMarked = 0.0f;
-                if (bytesDeliveredThisRtt > 0) {
-                    fractionMarked = float(packetsMarkedThisRtt) / float(packetsDeliveredThisRtt);
-
-                    if (fractionMarked == 1.0f) {
-                        /*
-                        * Likely a fast reduction in throughput, reset ceDensity
-                        * so that CWND is reduced properly
-                        */
-                        ceDensity = 1.0;
-                    }
-
-                    /*
-                    * Scale down fractionMarked if packet pacing is disabled
-                    */
-                    fractionMarked *= ceDensity;
-
-                    /*
-                    * L4S alpha (backoff factor) is averaged and limited
-                    */
-                    l4sAlpha = std::min(1.0f, kL4sG * fractionMarked + (1.0f - kL4sG) * l4sAlpha);
-
-                    bytesDeliveredThisRtt = 0;
-                    bytesMarkedThisRtt = 0;
-                    packetsDeliveredThisRtt = 0;
-                    packetsMarkedThisRtt = 0;
-                    lastFractionMarked = fractionMarked;
-                }
-            }
-        }
-        else {
-            l4sAlpha = 0.0f;
-        }
-
-        if (time_ntp - lastQueueDelayAvgUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
-
-            /*
-            * Implement cyclic pacing, this periodically increases the pacing rate to test the bottleneck capacity 
-            */
-            cyclicPacingIx++;
-            if (cyclicPacingIx == kPacingCycles) {
-                cyclicPacingIx = 0;
-                if (enableCyclicPacing) {
-                    cyclicPacingGain = kCyclicPacingGain;
-                }
-            }
-            else {
-                cyclicPacingGain = 1.0;
-            }
-
-
-            /*
-            * Update a long term average of the min queue delay. This is used to take clock drift into account
-            * and also to be able to reset the queue delay history if clock drift becomes too large
-            */
-            if (time_ntp - lastQueueDelayMinSlowAvgUpdateT_ntp > sRtt_ntp * kQueueDelayMinSlowAvgUpdateRtts) {
-                if (queueDelayMin < queueDelayMinSlowAvg) {
-                    queueDelayMinSlowAvg = queueDelayMin;
-                }
-                else {
-                    queueDelayMinSlowAvg = kQueueDelayMinSlowAvgAlpha * queueDelayMin + (1.0f - kQueueDelayMinSlowAvgAlpha) * queueDelayMinSlowAvg;
-                }
-                queueDelayMin = 1000.0;
-                lastQueueDelayMinSlowAvgUpdateT_ntp = time_ntp;
-            }
-
-            /*
-            * Compute a more slowly varying queue delay estimate
-            */
-            float tmp = queueDelay - queueDelayMinSlowAvg;
-            if (tmp < queueDelayAvg) {
-                queueDelayAvg = tmp;
-            }
-            else {
-                queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * tmp;
-            }
-
-            /*
-            * Calculate the restriction on bytes in flight and the increase of the cwnd based on
-            * the difference between max and min queue delay.
-            */
-            float packetLatencyDiff = std::max(0.0f,
-                std::min(2.0f * queueDelayTarget / 4, queueDelayMaxAvg - queueDelayMinAvg - schedulingJitterMargin));
-
-            latencyDiffAvg = (1.0f - kLatencyDiffAlpha) * latencyDiffAvg +
-                kLatencyDiffAlpha * packetLatencyDiff;
-
-            /*
-            * Lock latencyDiffCwndScale to 1.0 if
-            * a) Congestion is not (yet) detected or..
-            * b) ECN-CE marks detected and L4S is enabled
-            */
-            if (!isCongestionDetected || isEceDetected && isL4s) {
-                latencyDiffCwndScale = 1.0;
-            }
-            else {
-                latencyDiffCwndScale = std::min(1.0f, std::max(0.0f, 1.0f - latencyDiffAvg / (queueDelayTarget / 4)));
-            }
-
-            /*
-            * Max average queue delay targets zero while min average queue delay
-            * targets the max average queue delay. This makes the difference robust against
-            * clock drift and increases the robustness against scheduling delay jitter somewhat
-            */
-            queueDelayMaxAvg *= (1.0f - kQueueDelayMinMaxAlpha);
-            queueDelayMinAvg = (1.0f - kQueueDelayMinMaxAlpha) * queueDelayMinAvg +
-                kQueueDelayMinMaxAlpha * queueDelayMaxAvg;
-
-
-            /*
-            * Increase maxPolicedCwnd with a time constant of 1000RTTs
-            */
-            maxPolicedCwnd = std::min(1.0e8f, maxPolicedCwnd * 1.001f);
-
-            lastQueueDelayAvgUpdateT_ntp = time_ntp;
-        }
-
-        /*
-        * This code fakes ECN-CE events when either ECN or L4S is not enabled or in case packets are not
-        * marked in the network
-        * The l4sAlphaLim condition is to avoid to use this when we are reasonable sure
-        * that packets are L4S marked. The reason is that the queue delay can sometimes suffer from issues with
-        * clock drift
-        * Use the average queue delay to avoid over reaction to lower later retransmissions
-        */
-
-        if (queueDelayAvg > queueDelayTarget / 2.0f &&
-            time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
-            virtualCeEvent = true;
-            /*
-             * A virtual L4S alpha is calculated based on the estimated queue delay
-             * Virtual L4S marking sets in with increased back-off as soon as the queue delay
-             * exceeds queueDelayTarget/2. With a queueDelayTarget=60ms this gives a 30ms margin
-             * against clock drift and clock skipping errors
-             * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim
-             */
-            virtualL4sAlpha = std::min(1.0f, std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
-            /*
-            * Scale down backoff when sRtt is large as backoff happens every several times per RTT
-            */
-            virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
-        }
-
-        if (sRttShPrev_ntp > sRttSh_ntp && fractionMarked == 1.0f) {
-            /*
-            * L4S marking may have too high marking thresholds, the result is that queues
-            * can become large that CE marking stays too long. This inhibits CE marking if the RTT reduces, which
-            * is a reasonably safe sign that queues begin to deplete
-            */
-            ecnCeEvent = false;
-        }
-
-        if (lossEvent || ecnCeEvent || virtualCeEvent) {
-            lastLossEventT_ntp = time_ntp;
-            isCongestionDetected = true;
-            cyclicPacingGain = 1.0;
-        }
-
-        if (lastCwndUpdateT_ntp == 0)
-            lastCwndUpdateT_ntp = time_ntp;
-
-        if (time_ntp - lastCwndUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp) ||
-            lossEvent || ecnCeEvent || virtualCeEvent || isNewFrame) {
-            /*
-            * There is no gain with a too frequent CWND update
-            * An update every 10ms is fast enough even at very high high bitrates
-            * Expections are loss or CE events
-            * or when a new frame arrives, in which case the packet pacing rate needs an update
-            */
-            bytesInFlightRatio = std::min(1.0f, float(prevBytesInFlight) / cwnd);
-
-            updateCwnd(time_ntp);
-            for (int n = 0; n < nStreams; n++) {
-                Stream* tmp = streams[n];
-                tmp->updateTargetBitrate(time_ntp);
-            }
-            ecnCeEvent = false;
-            virtualCeEvent = false;
-            lastCwndUpdateT_ntp = time_ntp;
-            isNewFrame = false;
-        }
-
-    }
-
-    float time = time_ntp * ntp2SecScaleFactor;
-
-    if (isUseExtraDetailedLog || isLast || isMark) {
-        if (fp_log && completeLogItem) {
-            fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d",
-                cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
-                stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
-                isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI); //rtpQueue->getDelay(time));
-            if (strlen(detailedLogExtraData) > 0) {
-                fprintf(fp_log, ",%s", detailedLogExtraData);
-            }
-            bytesNewlyAckedLog = 0;
-            ecnCeMarkedBytesLog = 0;
-        }
-        if (fp_log && completeLogItem) {
-            fprintf(fp_log, "\n");
-        }
-    }
-}
-
-/*
 *  Mark ACKed RTP packets
 */
 bool ScreamV2Tx::markAcked(uint32_t time_ntp,
@@ -1072,7 +816,7 @@ bool ScreamV2Tx::markAcked(uint32_t time_ntp,
                 */
                 clockDriftCompensation = 0;
                 clockDriftCompensationInc = 0;
-                queueDelayMinSlowAvg = 0.0f;
+                queueDelayMinLongAvg = 0.0f;
                 queueDelay = 0.0f;
                 for (int n = 0; n < kBaseOwdHistSize; n++)
                     baseOwdHist[n] = UINT32_MAX;
@@ -1266,7 +1010,7 @@ float ScreamV2Tx::getTargetBitrate(uint32_t time_ntp, uint32_t ssrc) {
     * Check if queue delay is constantly high either because of clock drift
     * or a standing queue. If that is the case, base delay history is reset.
     */
-    if (queueDelayMinSlowAvg > queueDelayTarget / 8) {
+    if (queueDelayMinLongAvg > queueDelayTarget / 8) {
         /*
         * The base delay may slowly creep up when SCReAM operates only on
         * detection of estimated one way delay. The reason can be clock drift
@@ -1289,7 +1033,7 @@ float ScreamV2Tx::getTargetBitrate(uint32_t time_ntp, uint32_t ssrc) {
                 */
                 clockDriftCompensation = 0;
                 clockDriftCompensationInc = 0;
-                queueDelayMinSlowAvg = 0.0f;
+                queueDelayMinLongAvg = 0.0f;
                 queueDelay = 0.0f;
                 for (int n = 0; n < kBaseOwdHistSize; n++)
                     baseOwdHist[n] = UINT32_MAX;
@@ -1318,7 +1062,7 @@ void ScreamV2Tx::getLogHeader(char* s) {
 void ScreamV2Tx::getLog(float time, char* s, uint32_t ssrc, bool clear) {
     int inFlightMax = bytesInFlight;
     sprintf(s, "%s Log, %4.3f, %4.3f, %4.3f, %4.3f, %6d, %6d, %6.0f, %1d, %d,",
-        logTag, queueDelay, queueDelayMax, queueDelayMinSlowAvg, sRtt,
+        logTag, queueDelay, queueDelayMax, queueDelayMinLongAvg, sRtt,
         cwnd, bytesInFlightLog, rateTransmittedAvg / 1000.0f, 0, mssList[mssIndex]);
     bytesInFlightLog = bytesInFlight;
     queueDelayMax = 0.0;
@@ -1424,7 +1168,7 @@ void ScreamV2Tx::initialize(uint32_t time_ntp) {
     initTime_ntp = time_ntp;
     lastCongestionDetectedT_ntp = 0;
     lastQueueDelayAvgUpdateT_ntp = time_ntp;
-    lastQueueDelayMinSlowAvgUpdateT_ntp = time_ntp;
+    lastQueueDelayMinLongAvgUpdateT_ntp = time_ntp;
     lastRateLimitT_ntp = time_ntp;
     lastMssChange_ntp = time_ntp;
     cwndILastUpdateT_ntp = time_ntp;
@@ -1467,6 +1211,297 @@ float ScreamV2Tx::getTotalTransmittedBitrate() {
     }
     return totalTransmittedBitrate;
 }
+
+/*
+* New incoming feedback
+*/
+void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
+    int streamId,
+    uint32_t timestamp,
+    uint16_t seqNr,
+    uint8_t ceBits,
+    bool isLast) {
+
+    Stream* stream = streams[streamId];
+    Transmitted* txPackets = stream->txPackets;
+    completeLogItem = false;
+    prevBytesInFlight = bytesInFlight;
+    maxBytesInFlight = std::max(bytesInFlight, maxBytesInFlight);
+
+
+    /*
+    * Mark received packets, given by the ACK vector
+    */
+    bool isMark = false;
+    isCeThisFeedback |= markAcked(time_ntp, txPackets, seqNr, timestamp, stream, ceBits, ecnCeMarkedBytesLog, isLast, isMark);
+    /*
+    * Detect lost packets
+    */
+    if (isUseExtraDetailedLog || isLast || isMark) {
+        detectLoss(time_ntp, txPackets, seqNr, stream);
+    }
+
+    queueDelayMinAvg = std::min(queueDelayMinAvg, queueDelay);
+    queueDelayMaxAvg = std::min(queueDelayTarget, std::max(queueDelayMaxAvg, queueDelay));
+    if (isLast) {
+        if (time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) { // CE event at least every 30ms
+            if (isCeThisFeedback) {
+                isEceDetected = true;
+                relaxedPacingFactorScale = 0.0;
+                ecnCeEvent = true;
+                lastLossEventT_ntp = time_ntp;
+                lastCeEventT_ntp = time_ntp;
+            }
+        }
+
+        if (!isEnablePacketPacing) {
+            /*
+            * The CE density is a metric of the fraction of updated RTCP
+            * feedback that indicates CE marking when congestion occurs
+            * This scales down the CE mark fraction when packet pacing
+            * is disabled
+            *
+            */
+            if (isCeThisFeedback)
+                ceDensity += kCeDensityAlpha;
+            ceDensity *= 1.0f - kCeDensityAlpha;
+            ceDensity = std::max(0.25f, ceDensity);
+        }
+
+        isCeThisFeedback = false;
+        if (isL4s) {
+            /*
+            * L4S mode compute a congestion scaling factor that is dependent on the fraction
+            * of ECN marked packets
+            */
+            if (time_ntp - lastL4sAlphaUpdateT_ntp > std::min(655u, sRtt_ntp)) { // Update at least every 10ms
+                lastL4sAlphaUpdateT_ntp = time_ntp;
+                fractionMarked = 0.0f;
+                if (bytesDeliveredThisRtt > 0) {
+                    fractionMarked = float(packetsMarkedThisRtt) / float(packetsDeliveredThisRtt);
+
+                    if (fractionMarked == 1.0f) {
+                        /*
+                        * Likely a fast reduction in throughput, reset ceDensity
+                        * so that CWND is reduced properly
+                        */
+                        ceDensity = 1.0;
+                    }
+
+                    /*
+                    * Scale down fractionMarked if packet pacing is disabled
+                    */
+                    fractionMarked *= ceDensity;
+
+                    /*
+                    * L4S alpha (backoff factor) is averaged and limited
+                    */
+                    l4sAlpha = std::min(1.0f, kL4sG * fractionMarked + (1.0f - kL4sG) * l4sAlpha);
+
+                    bytesDeliveredThisRtt = 0;
+                    bytesMarkedThisRtt = 0;
+                    packetsDeliveredThisRtt = 0;
+                    packetsMarkedThisRtt = 0;
+                    lastFractionMarked = fractionMarked;
+                }
+            }
+        }
+        else {
+            l4sAlpha = 0.0f;
+        }
+
+        if (time_ntp - lastQueueDelayAvgUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
+            /*
+            * Relaxed pacing is restricted when packets are CE marked, this avoids that a high pacing rate hits shallow L4S queues 
+            * when link capacity is higher than the max target bitrate
+            */
+            relaxedPacingFactorScale += kRelaxedPacingFactorAlpha;
+            relaxedPacingFactorScale = std::min(1.0f, relaxedPacingFactorScale);
+
+            /*
+            * Implement cyclic pacing, this periodically increases the pacing rate to test the bottleneck capacity
+            */
+            cyclicPacingIx++;
+            if (cyclicPacingIx == kPacingCycles) {
+                cyclicPacingIx = 0;
+                if (enableCyclicPacing) {
+                    cyclicPacingGain = kCyclicPacingGain;
+                }
+            }
+            else {
+                cyclicPacingGain = 1.0;
+            }
+
+
+            /*
+            * Update a long term average of the min queue delay. This is used to take clock drift into account
+            * and also to be able to reset the queue delay history if clock drift becomes too large
+            */
+            if (time_ntp - lastQueueDelayMinLongAvgUpdateT_ntp > sRtt_ntp * kQueueDelayMinLongAvgUpdateRtts) {
+                if (queueDelayMin < queueDelayMinLongAvg) {
+                    queueDelayMinLongAvg = queueDelayMin;
+                }
+                else {
+                    queueDelayMinLongAvg = kQueueDelayMinLongAvgAlpha * queueDelayMin + (1.0f - kQueueDelayMinLongAvgAlpha) * queueDelayMinLongAvg;
+                }
+                queueDelayMin = 1000.0;
+                lastQueueDelayMinLongAvgUpdateT_ntp = time_ntp;
+            }
+
+            /*
+            * Compute a more slowly varying queue delay estimate
+            */
+            float tmp = queueDelay - queueDelayMinLongAvg;
+            if (tmp < queueDelayAvg) {
+                queueDelayAvg = tmp;
+            }
+            else {
+                queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * tmp;
+            }
+
+            queueDelayShortAvg = (queueDelay - queueDelayMinLongAvg) * kQueueDelayShortAvgAlpha + queueDelayShortAvg * (1.0f - kQueueDelayShortAvgAlpha);
+            queueDelayLongAvg = (queueDelay - queueDelayMinLongAvg) * kQueueDelayLongAvgAlpha + queueDelayLongAvg * (1.0f - kQueueDelayLongAvgAlpha);
+
+            bool newAlgo = true;
+            if (newAlgo) {
+                float latencyDiff = std::max(0.0f, queueDelayShortAvg - queueDelayLongAvg);
+
+                if (isCongestionDetected) {
+                    latencyDiffAvg += kLatencyDiffGain * (latencyDiff - kLatencyDiffMargin);
+                    latencyDiffAvg = std::max(0.0f, std::min(1.0f, latencyDiffAvg));
+                }
+                latencyDiffCwndScale = std::max(0.0f, 1.0f - latencyDiffAvg);
+            }
+            else {
+                /*
+                * Calculate the restriction on bytes in flight and the increase of the cwnd based on
+                * the difference between max and min queue delay.
+                */
+                float packetLatencyDiff = std::max(0.0f,
+                    std::min(2.0f * queueDelayTarget / 4, queueDelayMaxAvg - queueDelayMinAvg - schedulingJitterMargin));
+
+                latencyDiffAvg = (1.0f - kLatencyDiffAlpha) * latencyDiffAvg +
+                    kLatencyDiffAlpha * packetLatencyDiff;
+
+                /*
+                * Lock latencyDiffCwndScale to 1.0 if
+                * a) Congestion is not (yet) detected or..
+                * b) ECN-CE marks detected and L4S is enabled
+                */
+                if (!isCongestionDetected || isEceDetected && isL4s) {
+                    latencyDiffCwndScale = 1.0;
+                }
+                else {
+                    latencyDiffCwndScale = std::min(1.0f, std::max(0.0f, 1.0f - latencyDiffAvg / (queueDelayTarget / 4)));
+                }
+            }
+
+            /*
+            * Max average queue delay targets zero while min average queue delay
+            * targets the max average queue delay. This makes the difference robust against
+            * clock drift and increases the robustness against scheduling delay jitter somewhat
+            */
+            queueDelayMaxAvg *= (1.0f - kQueueDelayMinMaxAlpha);
+            queueDelayMinAvg = (1.0f - kQueueDelayMinMaxAlpha) * queueDelayMinAvg +
+                kQueueDelayMinMaxAlpha * queueDelayMaxAvg;
+
+
+            /*
+            * Increase maxPolicedCwnd with a time constant of 1000RTTs
+            */
+            maxPolicedCwnd = std::min(1.0e8f, maxPolicedCwnd * 1.001f);
+
+            lastQueueDelayAvgUpdateT_ntp = time_ntp;
+        }
+
+        /*
+        * This code fakes ECN-CE events when either ECN or L4S is not enabled or in case packets are not
+        * marked in the network
+        * The l4sAlphaLim condition is to avoid to use this when we are reasonable sure
+        * that packets are L4S marked. The reason is that the queue delay can sometimes suffer from issues with
+        * clock drift
+        * Use the average queue delay to avoid over reaction to lower later retransmissions
+        */
+
+        if (queueDelayAvg > queueDelayTarget / 2.0f &&
+            time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
+            virtualCeEvent = true;
+            /*
+             * A virtual L4S alpha is calculated based on the estimated queue delay
+             * Virtual L4S marking sets in with increased back-off as soon as the queue delay
+             * exceeds queueDelayTarget/2. With a queueDelayTarget=60ms this gives a 30ms margin
+             * against clock drift and clock skipping errors
+             * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim
+             */
+            virtualL4sAlpha = std::min(1.0f, std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
+            /*
+            * Scale down backoff when sRtt is large as backoff happens every several times per RTT
+            */
+            virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
+        }
+
+        if (sRttShPrev_ntp > sRttSh_ntp && fractionMarked == 1.0f) {
+            /*
+            * L4S marking may have too high marking thresholds, the result is that queues
+            * can become large that CE marking stays too long. This inhibits CE marking if the RTT reduces, which
+            * is a reasonably safe sign that queues begin to deplete
+            */
+            ecnCeEvent = false;
+        }
+
+        if (lossEvent || ecnCeEvent || virtualCeEvent) {
+            lastLossEventT_ntp = time_ntp;
+            isCongestionDetected = true;
+            cyclicPacingGain = 1.0;
+        }
+
+        if (lastCwndUpdateT_ntp == 0)
+            lastCwndUpdateT_ntp = time_ntp;
+
+        if (time_ntp - lastCwndUpdateT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp) ||
+            lossEvent || ecnCeEvent || virtualCeEvent || isNewFrame) {
+            /*
+            * There is no gain with a too frequent CWND update
+            * An update every 10ms is fast enough even at very high high bitrates
+            * Expections are loss or CE events
+            * or when a new frame arrives, in which case the packet pacing rate needs an update
+            */
+            bytesInFlightRatio = std::min(1.0f, float(prevBytesInFlight) / cwnd);
+
+            updateCwnd(time_ntp);
+            for (int n = 0; n < nStreams; n++) {
+                Stream* tmp = streams[n];
+                tmp->updateTargetBitrate(time_ntp);
+            }
+            ecnCeEvent = false;
+            virtualCeEvent = false;
+            lastCwndUpdateT_ntp = time_ntp;
+            isNewFrame = false;
+        }
+
+    }
+
+    float time = time_ntp * ntp2SecScaleFactor;
+
+    if (isUseExtraDetailedLog || isLast || isMark) {
+        if (fp_log && completeLogItem) {
+            fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d",
+                cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
+                stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
+                isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI); //rtpQueue->getDelay(time));
+            if (strlen(detailedLogExtraData) > 0) {
+                fprintf(fp_log, ",%s", detailedLogExtraData);
+            }
+            bytesNewlyAckedLog = 0;
+            ecnCeMarkedBytesLog = 0;
+        }
+        if (fp_log && completeLogItem) {
+            fprintf(fp_log, "\n");
+        }
+    }
+}
+
+
 
 void ScreamV2Tx::updateCwndI(uint32_t time_ntp) {
     if (cwnd > cwndLow * kCwndIUpdateThreshold ||
@@ -1546,7 +1581,9 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
             float nominalRate = getTotalTargetBitrate() / getTotalMaxBitrate();
             float relaxedPacingScale = std::min(1.0f,
                 (nominalRate - kRelaxedPacingLimitLow) / (kRelaxedPacingLimitHigh - kRelaxedPacingLimitLow));
-            double tmp = std::min(1.0f, std::max(1.0f / kMaxRelaxedPacingFactor, 1.0f - relaxedPacingScale));
+            double tmp = std::min(1.0f, 
+                                  std::max(1.0f / std::max(1.0f, relaxedPacingFactorScale*kMaxRelaxedPacingFactor), 
+                                           1.0f - relaxedPacingScale));
             pacingBitrate /= tmp;
         }
 
@@ -1858,8 +1895,11 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
 
     /*
     * Limit increase if queue delay varies, this gives a more stable rate when congested.
+    * Only used if not L4S
     */
-    increment *= std::min(1.0f, std::max(0.1f, latencyDiffCwndScale));
+    if (!(isEceDetected && isL4s)) {
+        increment *= std::min(1.0f, std::max(0.1f, latencyDiffCwndScale));
+    }
 
     /*
     * Calculate relative growth of CWND

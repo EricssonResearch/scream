@@ -3,6 +3,10 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-09-02 :
+  - Relaxed pacing restricted when CE marking occurs.
+  - latencyDiffCwndScale calculation modified. 
+  - Build date for BW test tool sender changed.	 
 - 2026-08-30 :
   - cwndI update function modified.
   - Optional cyclic pacing function, selectable with -cyclicpacing option in BW test tool. Function can increase rate stability when sources are static (fixed frame sizes).
