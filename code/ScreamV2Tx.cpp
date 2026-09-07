@@ -42,8 +42,6 @@ static const int kNumRateLimitRtts = 5;
 // L4S alpha gain factor, for scalable congestion control
 static const float kL4sG = 1.0f / 16;
 
-// CWND up gain factor
-static const float kGainUp = 0.5f;
 
 // Min CWND in MSS
 static const int kMinCwndMss = 3;
@@ -94,8 +92,9 @@ static const float kMinWindowHeadroom = 1.5f;
 static const int kQueueDelayMinLongAvgUpdateRtts = 100;
 
 static const float kLatencyDiffAlpha = 1.0f / 32;
-static const float kLatencyDiffMargin = 0.001f;
-static const float kLatencyDiffGain = 50.0;
+static const float kLatencyDiffMargin = 0.002f;
+static const float kLatencyDiffUpGain = 50.0;
+static const float kLatencyDiffDownGain = 5.0;
 static const float kQueueDelayMinMaxAlpha = 1.0f / 16;
 static const float kSchedulingJitterMargin = 0.01f;
 static const float kLossRateThreshold = 0.01f;
@@ -1367,7 +1366,12 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
                 float latencyDiff = std::max(0.0f, queueDelayShortAvg - queueDelayLongAvg);
 
                 if (isCongestionDetected) {
-                    latencyDiffAvg += kLatencyDiffGain * (latencyDiff - kLatencyDiffMargin);
+                    float tmp = latencyDiff - kLatencyDiffMargin;
+                    if (tmp > 0.0f) {
+                        latencyDiffAvg += kLatencyDiffUpGain * tmp;
+                    } else {
+                        latencyDiffAvg += kLatencyDiffDownGain * tmp;
+                    }
                     latencyDiffAvg = std::max(0.0f, std::min(1.0f, latencyDiffAvg));
                 }
                 latencyDiffCwndScale = std::max(0.0f, 1.0f - latencyDiffAvg);
@@ -1876,7 +1880,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     *  with L4S queues that build a few milliseconds queue
     */
     int bytesAckedMinusCe = bytesNewlyAcked - bytesNewlyAckedCe;
-    float increment = (kGainUp * bytesAckedMinusCe) * cwndRatio;
+    float increment = bytesAckedMinusCe * cwndRatio / (2.0f - latencyDiffCwndScale);
 
     /*
      * Scale the increment more cautious when close the last

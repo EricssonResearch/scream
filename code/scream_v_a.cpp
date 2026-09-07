@@ -23,7 +23,7 @@ const char* log_tag = "";
 const float Tmax = 50;
 const bool isChRate = true;
 const bool printLog = false;
-const bool ecnCapable = true;
+const bool ecnCapable = false;
 const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
@@ -82,7 +82,7 @@ int main(int argc, char* argv[])
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1.0e6f, 1.0e6f, 80e6f, 1.0f, false, 0.0f, false);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1.0e6f, 1.0e6f, 200e6f, 1.0f, false, 0.0f, false);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)
