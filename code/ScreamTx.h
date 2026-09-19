@@ -300,14 +300,11 @@ extern "C" {
 
         /* New incoming feedback, this function
         * triggers a CWND update
-        * The SCReAM timestamp is in jiffies, where the frequency is controlled
-        * by the timestamp clock frequency(default 1000Hz)
-        * The ackVector indicates recption of the 64 RTP SN prior to highestSeqNr
+        * The SCReAM timestamp is in NTP
         *  Note : isOkToTransmit should be called after incomingFeedback
         *
-        * Parse standardized feedback according to
-        * https://tools.ietf.org/wg/avtcore/draft-ietf-avtcore-cc-feedback-message/
-        * Current implementation implements -02 version
+        * Parse standardized feedback according to RFC8888
+        * 
         * It is assumed that SR/RR or other non-CCFB feedback is stripped
         */
         void incomingStandardizedFeedback(uint32_t time_ntp,

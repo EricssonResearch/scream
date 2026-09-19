@@ -3,6 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-09-19 :
+  -	RTCP feedback is changed to be fully RFC8888 compliant rather than following an older version of the draft.
+  - Build date for BW test tool sender/receiver changed, it is IMPORTANT to update both sender and receiver!
 - 2026-09-07 :
   - latencyDiffCwndScale calculation modified further.
   - CWND increase gain controlled by latencyDiffCwndScale.
