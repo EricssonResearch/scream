@@ -37,7 +37,7 @@ ylim([0 maxC]);
 
 subplot(4,1,3);
 x = a(ix,11)./a(ix,10)*100;
-plot(T,x);
+plot(T,x,T,a(ix,21)*100);
 mean(x)
 set(gca,'FontSize',12);grid on;
 set(gca,'XTickLabel',[]);grid on;
@@ -46,9 +46,9 @@ xlim(Tlim);
 ylim([0 110]);
 
 subplot(4,1,4);
-plot(T,a(ix,2),'.-',T,a(ix,3),'.-','linewidth',1);ylim([0 maxDelay]);
+plot(T,a(ix,2),'.-',T,a(ix,19),'.-','linewidth',1);ylim([0 maxDelay]);
 set(gca,'FontSize',12);grid on;
-title('Network queue(B) and RTT(R) [s]');
+title('Network queue(B) and RTP queue(R) [s]');
 xlim(Tlim);
 
 xlabel('T [s]');

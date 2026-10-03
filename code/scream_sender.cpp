@@ -72,6 +72,7 @@ float reorderTime = 0.03f;
 float schedulingJitterMargin = 0.01f;
 int postCongestionDelayRtts = 200;
 bool enableCyclicPacing = false;
+int expFeature = 0;
 
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
@@ -603,13 +604,13 @@ int setup() {
 			enableClockDriftCompensation);
 	}
 	rtpQueue = new RtpQueue();
-	screamTx->setCwndMinLow((mtu+12)*2);
+	screamTx->setCwndMin(mtu+12);
 	screamTx->enableRelaxedPacing(relaxedPacing);
 	screamTx->setMssListMinPacketsInFlight(mtuList, nMtuListItems, minPktsInFlight);
 	screamTx->setReorderTime(reorderTime);
 	screamTx->setPostCongestionDelayRtts(postCongestionDelayRtts);
-	screamTx->setSchedulingJitterMargin(schedulingJitterMargin);
 	screamTx->setEnableCyclicPacing(enableCyclicPacing);
+	screamTx->setExpFeature(expFeature);
 
 	if (disablePacing)
 		screamTx->enablePacketPacing(false);
@@ -661,7 +662,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-09-19 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-10-03 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -713,6 +714,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -jittermargin val        Set sheduling jitter margin [s] (default 0.01)" << endl;
 		cerr << "     -postcongdelay val       Set post congestion delay [RTTs] (default 50)" << endl;
 		cerr << "     -cyclicpacing            Enable cyclic pacing" << endl;
+		cerr << "     -expfeature val          Semi-hidden experimental feature (default 0)" << end;
 		exit(-1);
 	}
 	int ix = 1;
@@ -957,6 +959,11 @@ int main(int argc, char* argv[]) {
 			ix += 1;
 			continue;
 		}
+
+		if (strstr(argv[ix], "-expfeature")) {
+			expFeature = atoi(argv[ix + 1]);
+			ix += 2;
+			c
 		cerr << "unexpected arg " << argv[ix] << endl;
 		exit(0);
 	}

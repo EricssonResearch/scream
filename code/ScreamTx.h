@@ -417,13 +417,6 @@ extern "C" {
         float getQualityIndex(float time, float thresholdRate, float rttMin);
 
         /*
-        * Set lowest possible cwndMin
-        */
-        void setCwndMinLow(int aValue) {
-            cwndMinLow = aValue;
-        }
-
-        /*
         * Enable/disable rate update. This function is used with the
         * SCReAM BW test tool to avoid that the periodic bitrate reduction
         *  messes up the rate estimation
@@ -501,12 +494,10 @@ extern "C" {
         }
 
         /*
-        * Enable/disable adaptive window headroom
-        * Recommended for cases where it is preferred to get a stable bitrate for instance
-        * when the media encoder reacts slowly to rate changes.
+        * Set min congestion window
         */
-        void isEnableAdaptiveWindowHeadroom(bool val) {
-            enableAdaptiveWindowHeadroom = val;
+        void setCwndMin(int value) {
+            cwndMin = value;
         }
 
         /*
@@ -514,13 +505,6 @@ extern "C" {
         */
         void isEnableRatePolicerProtection(bool val) {
             enableRatePolicerProtection = val;
-        }
-
-        /*
-        * Set scheduling jitter margin
-        */
-        void setSchedulingJitterMargin(float value) {
-            schedulingJitterMargin = value;
         }
 
         /*
@@ -536,6 +520,13 @@ extern "C" {
         */
         void setEnableCyclicPacing(bool value) {
             enableCyclicPacing = value;
+        }
+
+        /*
+        * Set experimental features
+        */
+        void setExpFeature(int val) {
+            expFeature = val;
         }
 
     private:
@@ -827,7 +818,6 @@ extern "C" {
         */
         void setLossEvent();
 
-
         /*
         * Variables for network congestion control
         */
@@ -854,7 +844,6 @@ extern "C" {
         bool enableRateUpdate;
         bool isUseExtraDetailedLog;
         bool isEnableRelaxedPacing;
-        float schedulingJitterMargin;
         int postCongestionDelayRtts;
 
         float sRtt;
@@ -877,10 +866,9 @@ extern "C" {
         float queueDelaySbdSkew;
 
         float queueDelayAvg;
+        float queueDelayAvgPrev;
         float queueDelayMax;
         float queueDelayMin;
-        float queueDelayMaxAvg;
-        float queueDelayMinAvg;
         float queueDelayMinLongAvg;
         float queueDelayShortAvg;
         float queueDelayLongAvg;
@@ -903,7 +891,6 @@ extern "C" {
 
         int cwnd; // congestion window
         int cwndMin;
-        int cwndMinLow;
 
         int cwndI; // congestion window inflexion point
         float cwndRatio;
@@ -920,7 +907,6 @@ extern "C" {
         bool isApplicationLimited;
         float bytesInFlightRatio;
         float windowHeadroom;
-        bool enableAdaptiveWindowHeadroom;
 
         int bytesMarkedThisRtt;
         int bytesDeliveredThisRtt;
@@ -983,6 +969,8 @@ extern "C" {
         bool completeLogItem;
         char timeString[100];
         char detailedLogExtraData[256];
+
+        int expFeature;
 
         bool isInitialized;
         uint32_t initTime_ntp;
