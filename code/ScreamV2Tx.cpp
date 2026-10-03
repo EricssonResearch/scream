@@ -1358,6 +1358,10 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
             queueDelayShortAvg = (queueDelay - queueDelayMinLongAvg) * kQueueDelayShortAvgAlpha + queueDelayShortAvg * (1.0f - kQueueDelayShortAvgAlpha);
             queueDelayLongAvg = (queueDelay - queueDelayMinLongAvg) * kQueueDelayLongAvgAlpha + queueDelayLongAvg * (1.0f - kQueueDelayLongAvgAlpha);
 
+            if (!isCongestionDetected) {
+                queueDelayLongAvg = queueDelayShortAvg;
+            }
+
             float latencyDiff = std::max(0.0f, queueDelayShortAvg - queueDelayLongAvg);
 
             if (isCongestionDetected) {
