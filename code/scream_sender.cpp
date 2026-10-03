@@ -356,7 +356,7 @@ void* createRtpThread(void* arg) {
 
 		mtu = screamTx->getRecommendedMss(time_ntp);
 
-		screamTx->setCwndMinLow((mtu+12)*2);
+		screamTx->setCwndMin(mtu+12);
 
 		float randVal = float(rand()) / RAND_MAX - 0.5;
 		int bytes = (int)(rateTx / FPS / 8 * (1.0 + randVal * randRate));
