@@ -55,14 +55,13 @@ int main(int argc, char* argv[])
 	int tick = (int)(65536.0f / FR);
 	ScreamV2Tx* screamTx = new ScreamV2Tx(0.7f, 0.8f, 0.06f, 10000, 1.5f, 1.5f, 2.0f, 0.05f, isL4s, 3.0f, false, false);
 
-	screamTx->setCwndMinLow(2000);
+	screamTx->setCwndMin(2000);
 	screamTx->enablePacketPacing(enablePacing);
 	screamTx->enableRelaxedPacing(true);
 	screamTx->setMssListMinPacketsInFlight(mssList, nMssListItems, 5);
 	//screamTx->autoTuneMinCwnd(true);
 	//screamTx->setMaxTotalBitrate(40e6);
 	screamTx->setLogTag((char*)log_tag);
-	screamTx->isEnableAdaptiveWindowHeadroom(true);
 
 	FILE* fp = fopen("log.txt", "w");
 	screamTx->setDetailedLogFp(fp);
