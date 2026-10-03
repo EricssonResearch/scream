@@ -714,7 +714,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -jittermargin val        Set sheduling jitter margin [s] (default 0.01)" << endl;
 		cerr << "     -postcongdelay val       Set post congestion delay [RTTs] (default 50)" << endl;
 		cerr << "     -cyclicpacing            Enable cyclic pacing" << endl;
-		cerr << "     -expfeature val          Semi-hidden experimental feature (default 0)" << end;
+		cerr << "     -expfeature val          Semi-hidden experimental feature (default 0)" << endl;
 		exit(-1);
 	}
 	int ix = 1;
