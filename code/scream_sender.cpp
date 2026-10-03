@@ -963,7 +963,7 @@ int main(int argc, char* argv[]) {
 		if (strstr(argv[ix], "-expfeature")) {
 			expFeature = atoi(argv[ix + 1]);
 			ix += 2;
-			c
+		}
 		cerr << "unexpected arg " << argv[ix] << endl;
 		exit(0);
 	}
