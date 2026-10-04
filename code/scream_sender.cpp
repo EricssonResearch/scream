@@ -64,7 +64,7 @@ bool relaxedPacing = false;
 float packetPacingHeadroom = 1.5f;
 float scaleFactor = 0.7f;
 ScreamV2Tx* screamTx = 0;
-float bytesInFlightHeadroom = 2.0f;
+float bytesInFlightHeadroom = 1.2f;
 float multiplicativeIncreaseFactor = 0.05f;
 float adaptivePaceHeadroom = 1.5f;
 float hysteresis = 0.0f;
@@ -662,7 +662,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-10-03 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-10-04 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -691,7 +691,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -maxwindowheadroom val   How much bytes in flight can exceed cwnd  (default = 3.0) " << endl;
 		cerr << "     -adaptivepaceheadroom val Set adaptive packet pacing headroom (default = 1.5) " << endl;
 		cerr << "     -relaxedpacing           Allow increased pacing rate when max rate reached (default = false) " << endl;
-		cerr << "     -inflightheadroom val    Set a bytes in flight headroom (default = 2.0) " << endl;
+		cerr << "     -inflightheadroom val    Set a bytes in flight headroom (default = 1.2) " << endl;
 		cerr << "     -mulincrease val         Multiplicative increase factor for (default 0.05)" << endl;
 		cerr << "     -fps value               Set the frame rate (default 50)" << endl;
 		cerr << "     -clockdrift              Enable clock drift compensation for the case that the" << endl;

@@ -3,8 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
-- 2026-10-03 :
+- 2026-10-04 :
   - latencyDiffCwndScale logic and constants changed.
+  - bytesInflightHeadroom reduced to 1.2 to make SCReAM work better (avoid large RTP queue) when SCReAM becomes CPU limited.
   - kTotalAckedBitrateFraction restored back to 0.8.
   - Build date for BW test tool sender changed.	 
 - 2026-09-26 :

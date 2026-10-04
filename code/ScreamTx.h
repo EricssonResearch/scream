@@ -70,8 +70,9 @@ extern "C" {
     static const float kPacketPacingHeadRoom = 1.5f;
     static const float kMaxAdaptivePacingRateScale = 1.5;
 
-    // Bytes in flight headroom
-    static const float kBytesInFlightHeadRoom = 2.0f;
+    // Bytes in flight headroom, a default value 1.2 gives a good performance
+    // For cases when SCReAM becomes CPU limited and cannot push more than a given bitrate
+    static const float kBytesInFlightHeadRoom = 1.2f;
     // A multiplicative increase factor, 0.05 means that CWND can increase at most 5% per RTT
     static const float kMultiplicativeIncreaseScalefactor = 0.05f;
     // Packet reordering margin
