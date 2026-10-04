@@ -603,13 +603,6 @@ extern "C" {
                 timeStampClockRate = aValue;
             }
 
-            /*
-            * Get the high percentile relative frame size
-            */
-            float getRelFrameSizeHigh() {
-                return relFrameSizeHigh;
-            }
-
             ScreamV2Tx* parent;
             RtpQueueIface* rtpQueue;      // RTP Packet queue
             uint32_t ssrc;            // SSRC of stream
@@ -680,12 +673,9 @@ extern "C" {
             float frameSizeAvg;
             float framePeriod;
             float rateAdjustFactor;
+            float frameSizeDev;
 
             float adaptivePacingRateScale;
-
-            float relFrameSizeHist[kRelFrameSizeHistBins];
-            float relFrameSizeHigh;
-            int nFrames;
 
             float rateShare;
             bool isMaxrate;
@@ -939,7 +929,6 @@ extern "C" {
         float maxTotalBitrate;
         float rateTransmittedAvg;
 
-        float relFrameSizeHigh;
         bool isNewFrame;
 
         uint32_t paceInterval_ntp;

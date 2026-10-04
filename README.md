@@ -7,6 +7,7 @@ This project includes an implementation of SCReAM, a mobile optimised congestion
   - latencyDiffCwndScale logic and constants changed.
   - bytesInflightHeadroom reduced to 1.2 to make SCReAM work better (avoid large RTP queue) when SCReAM becomes CPU limited.
   - kTotalAckedBitrateFraction restored back to 0.8.
+  - Additional frameSizeDev added to compensate for cases when the frame sizes are constantly higher than the nominal for the given target bitrate.
   - Build date for BW test tool sender changed.	 
 - 2026-09-26 :
   - latencyDiffCwndScale CWND increase scaling applied to also to L4S when CWND is low.

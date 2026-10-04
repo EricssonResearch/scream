@@ -10,6 +10,7 @@ static const int kRelFrameSizeHistPreamble = 50;
 static const float kRelFrameSizeHistRange = 3.0f;
 static const float kRateAdjustGain1 = 0.2f;
 static const float kRateAdjustGain2 = 1.0f/8;
+static const float kFrameSizeDevAlpha = 1.0 / 64;
 
 ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	RtpQueueIface* rtpQueue_,
@@ -91,12 +92,8 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	adaptivePacingRateScale = 1.0f;
 	framePeriod = 0.02f;
 	rateAdjustFactor = 0.0f;
-	relFrameSizeHist[0] = 1.0f;
-	for (int n = 1; n < kRelFrameSizeHistBins; n++) {
-		relFrameSizeHist[n] = 0.0f;
-	}
-	relFrameSizeHigh = 1.0f;
-	nFrames = 0;
+	frameSizeDev = 0.0f;
+
 
 	rateShare = minBitrate;
 	isMaxrate = false;
@@ -182,7 +179,7 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 	* Pacing rate scaling is also increased if the RTP queue grows
 	*/
 	if (isMarker) {
-		nFrames++;
+
 		/*
 		* Compute average frame period
 		*/
@@ -203,46 +200,17 @@ void ScreamV2Tx::Stream::newMediaFrame(uint32_t time_ntp, int bytesRtp, bool isM
 		rateAdjustFactor += error * kRateAdjustGain2;
 		rateAdjustFactor = std::min(0.5f, std::max(0.0f, rateAdjustFactor));
 
-		frameSize = std::max(rtpQueue->bytesInQueue(), frameSizeAcc);
-
 		/*
-		* Calculate a histogram over how much the frame sizes exceeds the average. This helps to avoid that
-		* the RTP queue builds up when the video encoder generates frames with very varying sizes.
+		* Calculate a compensation for the case that the frameSize is constantly higher than the 
+		* nominal for the given target bitrate.
 		*/
-		if (frameSizeAcc > frameSizeAvg && enableFrameSizeOverhead) {
-
-			float diff = frameSizeAcc - frameSizeAvg;
-			/*
-			 * Extra precaution for a case that the video encoder is sluggish i.e
-			 * takes a while to reach a given target bitrate
-			 */
-			if (frameSizeAcc > 0) {
-				diff = std::max(0.0f, std::min(diff, (float)(frameSizeAcc - frameSizePrev)));
-			}
-			frameSizePrev = frameSizeAcc;
-
-			int ix = std::max(0, std::min(kRelFrameSizeHistBins - 1,
-				(int)((diff) / (frameSizeAvg * (kRelFrameSizeHistRange - 1.0)) * kRelFrameSizeHistBins)));
-
-			relFrameSizeHist[ix]++;
-			for (int n = 0; n < kRelFrameSizeHistBins; n++) {
-				relFrameSizeHist[n] *= (1.0f - kRelFrameSizeHistDecay);
-			}
-			if (nFrames > kRelFrameSizeHistPreamble) {
-				float sum = 0.0f;
-				for (int n = 0; n < kRelFrameSizeHistBins; n++) {
-					sum += relFrameSizeHist[n];
-				}
-				float relFrameSizeHighMark = sum * kRelFrameSizeHighPercentile;
-				ix = 1;
-				sum = relFrameSizeHist[0];
-				while (sum < relFrameSizeHighMark && ix < kRelFrameSizeHistBins) {
-					sum += relFrameSizeHist[ix];ix++;
-				}
-				ix--;
-				relFrameSizeHigh = 1.0f + ((float)ix) * (kRelFrameSizeHistRange - 1.0f) / kRelFrameSizeHistBins;
-			}
+		frameSize = std::max(rtpQueue->bytesInQueue(), frameSizeAcc);
+		float frameSizeAvg = ((targetBitrate * framePeriod) / 8.0f);
+		if (frameSizeAvg > 500.0f) {
+			error = std::max(0.0f, (frameSizeAcc - frameSizeAvg) / frameSizeAvg);
+			frameSizeDev = std::min(0.2f, (1.0f - kFrameSizeDevAlpha) * frameSizeDev) + kFrameSizeDevAlpha * error;
 		}
+		
 		frameSizeAcc = 0;
 
 		if (frameSizeAvg > 500.0f) {
@@ -322,7 +290,7 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	* for the stream and add the hysteresis
 	* Add rateAdjustFactor compensation to avoid RTP queue buildup
 	*/
-	targetBitrate = std::min(maxBitrate, std::max(minBitrate, rateShare / (1.0f+rateAdjustFactor)));
+	targetBitrate = std::min(maxBitrate, std::max(minBitrate, rateShare / (1.0f+rateAdjustFactor+frameSizeDev)));
 
 	/*
 	* Update targetBitrateH

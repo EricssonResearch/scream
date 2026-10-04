@@ -242,7 +242,6 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     maxTotalBitrate(0.0f),
     rateTransmittedAvg(0.0f),
 
-    relFrameSizeHigh(1.0f),
     isNewFrame(false),
 
     paceInterval_ntp(0),
@@ -1571,7 +1570,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
             pacingBitrate /= tmp;
         }
 
-
         float tp = (getMss() * 8.0f) / pacingBitrate;
         paceInterval = std::max(kMinPaceInterval, tp);
     }
@@ -1648,7 +1646,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
             * with extra headroom, to avoid that the target bitrates
             * varies unnecessarily near the max rate
             */
-            tmp = std::max(tmp, (int)(packetPacingHeadroom * relFrameSizeHigh * getTotalMaxBitrate() / 8 *
+            tmp = std::max(tmp, (int)(packetPacingHeadroom * getTotalMaxBitrate() / 8 *
                 (sRtt + 0.001f)));
 
             /*
@@ -1676,16 +1674,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
             maxBytesInFlight = 0;
         }
 
-        /*
-        * Updated relFrameSizeHigh based on individual streams' histogram
-        */
-        relFrameSizeHigh = 0.0f;
-        float sumPrio = 0.0f;
-        for (int n = 0; n < nStreams; n++) {
-            relFrameSizeHigh += streams[n]->getRelFrameSizeHigh() * streams[n]->targetPriority;
-            sumPrio += streams[n]->targetPriority;
-        }
-        relFrameSizeHigh /= sumPrio;
 
         lastSlowUpdateT_ntp = time_ntp;
     }
@@ -1949,7 +1937,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     /*
     * Scale down based slightly
     */
-    rateLeft /= 1.2f;// +0.2f * (1.0f - latencyDiffCwndScale);
+    rateLeft /= 1.2f;
 
     /*
     * Compensation for packetization overhead, important when MSS is small
