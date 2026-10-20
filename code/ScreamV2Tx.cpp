@@ -28,7 +28,7 @@ static const float kQueueDelayTargetMax = 0.3f; //s
 // Queue delay trend and shared bottleneck detection
 static const uint32_t kSlowUpdateInterval_ntp = 3277; // 50ms in NTP domain
 // video rate estimation update period
-static const uint32_t kRateUpdateInterval_ntp = 6553; // 100ms in NTP domain //3277; // 50ms in NTP domain
+static const uint32_t kRateUpdateInterval_ntp = 3277; // 100ms in NTP domain //3277; // 50ms in NTP domain
 // Update period for MSS estimation
 static const int kMssUpdateInterval_ntp = 65536;      // 1s in NTP
 
@@ -1190,14 +1190,24 @@ float ScreamV2Tx::getTotalMaxBitrate() {
 /*
 * Get total acked bitrate for all streams
 */
-float ScreamV2Tx::getTotalAckedBitrate() {
-    float totalAckedBitrate = 0.0f;
+float ScreamV2Tx::getTotalRateAcked() {
+    float totalRateAcked = 0.0f;
     for (int n = 0; n < nStreams; n++) {
-        totalAckedBitrate += streams[n]->rateAcked;
+        totalRateAcked += streams[n]->rateAcked;
     }
-    return totalAckedBitrate;
+    return totalRateAcked;
 }
 
+/*
+* Get total acked bitrate for all streams
+*/
+float ScreamV2Tx::getTotalRateAckedMax() {
+    float totalRateAckedMax = 0.0f;
+    for (int n = 0; n < nStreams; n++) {
+        totalRateAckedMax += streams[n]->rateAckedMax;
+    }
+    return totalRateAckedMax;
+}
 /*
 * Get total transmitted bitrate for all streams
 */
@@ -1239,7 +1249,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
     }
 
     if (isLast) {
-        if (time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) { // CE event at least every 30ms
+        if (time_ntp - lastLossEventT_ntp > sRtt_ntp) { 
             if (isCeThisFeedback) {
                 isEceDetected = true;
                 relaxedPacingFactorScale = 0.0;
@@ -1390,7 +1400,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
             */
 
             if (queueDelayAvg > queueDelayTarget / 2.0f &&
-                time_ntp - lastLossEventT_ntp > std::min(kMinCongestionBackOffInterval_ntp, sRtt_ntp)) {
+                time_ntp - lastLossEventT_ntp > sRtt_ntp) {
                 virtualCeEvent = true;
                 /*
                  * A virtual L4S alpha is calculated based on the estimated queue delay
@@ -1410,11 +1420,9 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
                 */
                 if (queueDelayAvg < queueDelayAvgPrev) {
                     /*
-                    * Queue delay decreases, limit virtualL4sAlpha to the expected steady state (L4S) marking 
-                    * at the given rate, mss and rtt
+                    * Queue delay decreases, set virtualL4sAlpha to zero
                     */
-                    float pMark = 1.0f / (1.0 + (sRtt*getTotalTargetBitrate()) / (2*mss*8));
-                    virtualL4sAlpha = std::min(virtualL4sAlpha, pMark);
+                    virtualL4sAlpha = 0.0f;
                 }
             }
 
@@ -1757,19 +1765,28 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
                 /*
                 * L4S backoff
                 */
-                float backOff = l4sAlpha / 2.0f;
+                float backOff = std::max(virtualL4sAlpha, l4sAlpha) / 2.0f;
 
                 /*
                 * Reduce backoff if target bitrate is less than RX rate
                 */
-                if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
-                    backOff *= 0.25f;
+                if (getTotalTargetBitrate() < getTotalRateAckedMax() * kTotalAckedBitrateFraction) {
+                    /*
+                    * Reduce backoff to zero if bytes in flight decreases, 
+                    * otherwise scale down more carefully to avoid that the queue grows.  
+                    */
+                    if (bytesInFlight < prevBytesInFlight) {
+                        backOff = 0.0f;
+                    }
+                    else {
+                        backOff *= 0.25f;
+                    }
                 }
 
                 /*
                 * Scale down backoff when RTT is high as several backoff events occur per RTT
                 */
-                backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
+                //backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 
                 if (queueDelay < queueDelayTarget * 0.25f) {
                     /*
@@ -1813,14 +1830,23 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
             /*
             * Reduce backoff if target bitrate rate is less than RX rate
             */
-            if (getTotalTargetBitrate() < getTotalAckedBitrate() * kTotalAckedBitrateFraction) {
-                backOff *= 0.25f;
+            if (getTotalTargetBitrate() < getTotalRateAckedMax() * kTotalAckedBitrateFraction) {
+                /*
+                * Reduce backoff to zero if bytes in flight decreases,
+                * otherwise scale down more carefully to avoid that the queue grows.
+                */
+                if (bytesInFlight < prevBytesInFlight) {
+                    backOff = 0.0f;
+                }
+                else {
+                    backOff *= 0.25f;
+                }
             }
 
             /*
             * Scale down backoff when RTT is high as several backoff events occur per RTT
             */
-            backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
+            //backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 
             cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
             cwndLow = std::min(cwndLow, cwnd);

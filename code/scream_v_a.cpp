@@ -21,9 +21,9 @@ const char* log_tag = "";
 #endif
 
 const float Tmax = 50;
-const bool isChRate = false;
+const bool isChRate = true;
 const bool printLog = false;
-const bool ecnCapable = true;
+const bool ecnCapable = false;
 const bool isL4s = true && ecnCapable;
 const float FR = 50.0f; // Frame rate for stream 0
 const int FR_DIV = 1;   // Divisor for framerate for streams 1...N
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
 	RtpQueue* rtpQueue[4] = { new RtpQueue(), new RtpQueue(), new RtpQueue() , new RtpQueue() };
 	VideoEnc* videoEnc[4] = { 0, 0, 0, 0 };
 	NetQueue* netQueueDelay = new NetQueue(RTT, 0.0f, 0.0f);
-	NetQueue* netQueueRate = new NetQueue(0.0f, 50e6f, 0.0f, true && isL4s);
+	NetQueue* netQueueRate = new NetQueue(0.0f, 10e6f, 0.0f, true && isL4s);
 	OooQueue* oooQueue = new OooQueue(0.0f);
 	videoEnc[0] = new VideoEnc(rtpQueue[0], FR, (char*)TRACEFILE, 0, 0.0);
 	videoEnc[1] = new VideoEnc(rtpQueue[1], FR / FR_DIV, (char*)TRACEFILE, 50);
@@ -293,11 +293,11 @@ int main(int argc, char* argv[])
 
 
 		if (isChRate) {
-			if ((time > 20.0 && time < 30) && isChRate) {
-				netQueueRate->rate = 50000e3;
+			if ((time > 15.0 && time < 25) && isChRate) {
+				netQueueRate->rate = 5000e3;
 			}
 			else {
-				netQueueRate->rate = 100000e3;
+				netQueueRate->rate = 10000e3;
 			}
 		}
 

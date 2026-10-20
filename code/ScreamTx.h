@@ -100,7 +100,7 @@ extern "C" {
     static const int kQueueDelayNormHistSizeSh = 50;
     static const int kQueueDelayFractionHistSize = 20;
     static const int kBytesInFlightHistSizeMax = 60;
-    static const int kRateUpDateSize = 4;
+    static const int kRateUpDateSize = 8;
     static const int kLossRateHistSize = 10;
     static const int kRelFrameSizeHistBins = 50;
     static const int kMaxBytesInFlightHistSize = 20;
@@ -627,6 +627,7 @@ extern "C" {
             float rateTransmitted;  // Transmitted rate
             float rateTransmittedAvg;// Transmitted rate
             float rateAcked;        // ACKed rate
+            float rateAckedMax;
             float rateLost;         // Lost packets (bit)rate
             float rateCe;           // Ce marked packets (bit)rate
             uint16_t hiSeqAck;      // Highest sequence number ACKed
@@ -650,6 +651,8 @@ extern "C" {
             float rateRtpAvg;
             float rateRtpHist[kRateUpDateSize];
             int rateUpdateHistPtr;
+            float rateAckedHist[2];
+            int rateAckedHistPtr;
             float targetRateScale;
             uint32_t numberOfUpdateRate;
 
@@ -715,8 +718,12 @@ extern "C" {
         /*
         * Get total acked bitrate for all streams
         */
-        float getTotalAckedBitrate();
+        float getTotalRateAcked();
 
+        /*
+        * Get total max acked bitrate for all streams
+        */
+        float getTotalRateAckedMax();
         /*
         * Get total transmitted bitrate for all streams
         */

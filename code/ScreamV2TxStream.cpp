@@ -48,6 +48,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	rateTransmitted = 0.0f;
 	rateTransmittedAvg = 0.0f;
 	rateAcked = 0.0f;
+	rateAckedMax = 0.0f;
 	rateLost = 0.0f;
 	rateCe = 0.0f;
 	rateRtpAvg = 0.0f;
@@ -69,6 +70,10 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	for (int n = 0; n < kRateUpDateSize; n++) {
 		rateRtpHist[n] = 0.0f;
 	}
+	rateUpdateHistPtr = 0;
+	rateAckedHist[0] = 0.0f;
+	rateAckedHist[1] = 0.0f;
+	rateAckedHistPtr = 0;
 	rateUpdateHistPtr = 0;
 	targetRateScale = 1.0;
 	isActive = false;
@@ -116,9 +121,10 @@ void ScreamV2Tx::Stream::updateRate(uint32_t time_ntp) {
 		rateRtpHist[rateUpdateHistPtr] = bytesRtp * 8.0f / tDelta;
 
 		rateRtp = rateRtpHist[rateUpdateHistPtr];
-
 		rateUpdateHistPtr = (rateUpdateHistPtr + 1) % kRateUpDateSize;
-
+		rateAckedHist[rateAckedHistPtr] = rateAcked;
+		rateAckedHistPtr = (rateAckedHistPtr + 1) % 2;
+		rateAckedMax = std::max(rateAckedHist[0], rateAckedHist[1]);
 		rateRtpAvg = 0.0f;
 		for (int n = 0; n < kRateUpDateSize; n++) {
 			rateRtpAvg += rateRtpHist[n];
