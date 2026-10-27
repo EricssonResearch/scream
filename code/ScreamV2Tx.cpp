@@ -92,7 +92,8 @@ static const float kMinWindowHeadroom = 1.5f;
 static const int kQueueDelayMinLongAvgUpdateRtts = 100;
 
 static const float kLatencyDiffAlpha = 1.0f / 32;
-static const float kLatencyDiffMargin = 0.001f;
+static const float kLatencyDiffMargin1 = 0.001f;
+static const float kLatencyDiffMargin2 = 0.010f;
 static const float kLatencyDiffUpGain = 20.0f;
 static const float kLatencyDiffDownGain = 2.0f;
 
@@ -1374,9 +1375,14 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
             float latencyDiff = std::max(0.0f, queueDelayShortAvg - queueDelayLongAvg);
 
             if (isCongestionDetected) {
-                float tmp = std::min(kLatencyDiffMargin, latencyDiff - kLatencyDiffMargin);
+                float tmp = std::min(kLatencyDiffMargin1, latencyDiff - kLatencyDiffMargin1);
                 if (tmp > 0.0f) {
-                    latencyDiffAvg += kLatencyDiffUpGain * tmp;
+                    /*
+                    * Reduce increase if queueDelay is small. This avoids that latencyDiffAvg increases
+                    * if queue delay is very small but still varying
+                    */
+                    float tmp2 = std::min(1.0f, queueDelayAvg / kLatencyDiffMargin2);
+                    latencyDiffAvg += kLatencyDiffUpGain * tmp * tmp2;
                 } else {
                     latencyDiffAvg += kLatencyDiffDownGain * tmp;
                 }
@@ -1710,6 +1716,13 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     tmp *= 8;
     tmp = tmp * tmp;
     sclI = std::max(0.1f, std::min(1.0f, tmp));
+    if (cwnd > cwndI && sclI < 1.0f) {
+        /*
+        * Limit cwnd increase above cwndI if latency varies
+        */
+        sclI *= std::max(0.2f, latencyDiffCwndScale);
+    }
+
     if (sclI < 1.0f && cwnd < cwndI) {
         /*
         * Still in a near congested state  
@@ -1783,11 +1796,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
                     }
                 }
 
-                /*
-                * Scale down backoff when RTT is high as several backoff events occur per RTT
-                */
-                //backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
-
                 if (queueDelay < queueDelayTarget * 0.25f) {
                     /*
                     * Scale down backoff if close to the last known max
@@ -1843,11 +1851,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
                 }
             }
 
-            /*
-            * Scale down backoff when RTT is high as several backoff events occur per RTT
-            */
-            //backOff /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
-
             cwnd = std::max(cwndMin, (int)((1.0f - backOff) * cwnd));
             cwndLow = std::min(cwndLow, cwnd);
         }
@@ -1893,15 +1896,6 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     */
     tmp = std::min(1.0f, sRtt / kSrttVirtual);
     increment *= tmp;
-
-    /*
-    * Limit increase if queue delay varies, this gives a more stable rate when congested.
-    * 
-    */
-    if ((expFeature & 0x01) || !(isEceDetected && isL4s)) {
-        increment *= std::max(std::max(0.2f, latencyDiffCwndScale),
-            1.0f - cwndRatio * kHighCwndRatio);
-    }
 
     /*
     * Calculate relative growth of CWND
