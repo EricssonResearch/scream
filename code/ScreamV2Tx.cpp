@@ -1416,10 +1416,6 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
                  * Allow up to 4 times higher virtual marking rate than the reference l4sAlphaLim
                  */
                 virtualL4sAlpha = std::min(1.0f, std::max(0.0f, (queueDelayAvg - queueDelayTarget / 2.0f) / (queueDelayTarget / 2.0f)));
-                /*
-                * Scale down backoff when sRtt is large as backoff happens every several times per RTT
-                */
-                virtualL4sAlpha /= std::max(1.0f, float(sRtt_ntp) / kMinCongestionBackOffInterval_ntp);
 
                 /*
                 * Scale down virtualL4sAlpha if the queue delay appears to decrease
@@ -1713,14 +1709,14 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     */
     float sclI = 1.0;
     float tmp = float(cwnd - cwndI) / std::min(kHighCwndRatio*mss,cwndI);
-    tmp *= 8;
+    tmp *= 8.0f;
     tmp = tmp * tmp;
-    sclI = std::max(0.1f, std::min(1.0f, tmp));
+    sclI = std::max(0.2f, std::min(1.0f, tmp));
     if (cwnd > cwndI && sclI < 1.0f) {
         /*
         * Limit cwnd increase above cwndI if latency varies
         */
-        sclI *= std::max(0.2f, latencyDiffCwndScale);
+        sclI = std::max(0.2f, sclI * latencyDiffCwndScale);
     }
 
     if (sclI < 1.0f && cwnd < cwndI) {
@@ -1802,7 +1798,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
                     * This is complemented with a scale down of the CWND increase
                     * Don't scaledown back off if queueDelay is large
                     */
-                    backOff *= std::max(0.25f, sclI);
+                    backOff *= sclI;
                 }
 
                 if (time_ntp - lastCongestionDetectedT_ntp > 100 * std::max(sRtt, kSrttVirtual) * 65536) {
@@ -1889,7 +1885,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     * This downscaling is complemented with a similar downscaling of
     * the CWND back off.
     */
-    increment *= std::max(0.25f, sclI);
+    increment *= sclI;
 
     /*
     * Reduce increment for very small RTTs

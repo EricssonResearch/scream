@@ -3,6 +3,10 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-11-06 :
+  -	virtualL4sAlpha scaling removed.
+  - Inconsistence against IETF draft on sclI fixed.
+  - Build date for BW test tool sender changed.
 - 2026-10-27 :
   - latencyDiffCwndScale logic modified further, with increased robustness to scheduling delay jitter. 
   - Build date for BW test tool sender changed.
