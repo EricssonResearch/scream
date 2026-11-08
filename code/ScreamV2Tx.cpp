@@ -114,7 +114,14 @@ static const float kQueueDelayLongAvgAlpha = 1.0f / 50;
 
 static const int kHighCwndRatio = 20;
 
+static const int kNLargeQueueDelayLimit = 10;
+static const float kQueueDelayTargetDecay = 0.99f;
 
+
+/*
+* expFeature(s)
+* 0x01 : Adaptive queueDelayTarget
+*/
 
 ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     float ecnCeBeta_,
@@ -165,6 +172,8 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     queueDelay(0.0),
     queueDelayFractionAvg(0.0f),
     queueDelayTarget(queueDelayTargetMin),
+    nRttsWithLargeQueueDelay(0),
+    cwndRestoreValue(0),
 
     queueDelaySbdVar(0.0f),
     queueDelaySbdMean(0.0f),
@@ -289,7 +298,9 @@ ScreamV2Tx::ScreamV2Tx(float lossBeta_,
     lastL4sAlphaUpdateT_ntp(0),
     lastBaseDelayRefreshT_ntp(0),
     lastRateLimitT_ntp(0),
-    lastMssChange_ntp(0)
+    lastMssChange_ntp(0),
+    lastQueueDelayTargetUpdateT_ntp(0)
+
 {
     strcpy(detailedLogExtraData, "");
     strcpy(timeString, "");
@@ -1170,6 +1181,7 @@ void ScreamV2Tx::initialize(uint32_t time_ntp) {
     lastRateLimitT_ntp = time_ntp;
     lastMssChange_ntp = time_ntp;
     cwndILastUpdateT_ntp = time_ntp;
+    lastQueueDelayTargetUpdateT_ntp = time_ntp;
 }
 
 float ScreamV2Tx::getTotalTargetBitrate() {
@@ -1364,6 +1376,7 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
             else {
                 queueDelayAvg = (1.0f - kQueueDelayAvgAlpha) * queueDelayAvg + kQueueDelayAvgAlpha * tmp;
             }
+            calculateQueueDelayTarget(time_ntp);
 
             queueDelayShortAvg = (queueDelay - queueDelayMinLongAvg) * kQueueDelayShortAvgAlpha + queueDelayShortAvg * (1.0f - kQueueDelayShortAvgAlpha);
             queueDelayLongAvg = (queueDelay - queueDelayMinLongAvg) * kQueueDelayLongAvgAlpha + queueDelayLongAvg * (1.0f - kQueueDelayLongAvgAlpha);
@@ -1478,10 +1491,10 @@ void ScreamV2Tx::incomingStandardizedFeedback(uint32_t time_ntp,
 
     if (isUseExtraDetailedLog || isLast || isMark) {
         if (fp_log && completeLogItem) {
-            fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d, %3.2f",
+            fprintf(fp_log, " %d,%d,%d,%1.0f,%d,%d,%d,%d,%1.0f,%1.0f,%1.0f,%1.0f,%1.0f,%d,%1.0f,%3.3f, %d, %3.2f, %3.3f",
                 cwnd, bytesInFlight, 0, rateTransmittedAvg, streamId, seqNr, bytesNewlyAckedLog, ecnCeMarkedBytesLog,
                 stream->rateRtpAvg, stream->rateTransmittedAvg, stream->rateAcked, stream->rateLost, stream->rateCe,
-                isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI, latencyDiffCwndScale); //rtpQueue->getDelay(time));
+                isMark, stream->targetBitrate, stream->rtpQueueDelay, cwndI, latencyDiffCwndScale, queueDelayTarget);
             if (strlen(detailedLogExtraData) > 0) {
                 fprintf(fp_log, ",%s", detailedLogExtraData);
             }
@@ -2256,6 +2269,45 @@ ScreamV2Tx::Stream* ScreamV2Tx::getPrioritizedStream(uint32_t time_ntp) {
         }
     }
     return stream;
+}
+
+void ScreamV2Tx::calculateQueueDelayTarget(uint32_t time_ntp) {
+    if ((expFeature & 0x01) > 0) {
+        if (queueDelayAvg > queueDelayTarget / 2.0f) {
+            if (nRttsWithLargeQueueDelay == 0) {
+                cwndRestoreValue = cwnd;
+                // This value may need to be adjusted down if loss occurs
+            }
+            /*
+            * Require kNLargeQueueDelayLimit with high qdelay_avg, this prevents that self congestion
+            * leads to increased qdelay_target.The cwnd is however reduced because of
+            * delay based congestion backoff.The cwndRestoreValue is used to undo this.
+            */
+            if (nRttsWithLargeQueueDelay > kNLargeQueueDelayLimit) {
+                float tmp = queueDelayAvg * 2.0f;
+                // Update queueDelayTarget
+                queueDelayTarget = std::min(kQueueDelayTargetMax, tmp);
+                /* 
+                * Restore ref_wnd to undo the ref_wnd decrease caused
+                * by delay based backoff.
+                */
+                cwnd = std::max(cwnd, cwndRestoreValue);
+                cwndRestoreValue = 0;
+            }
+            nRttsWithLargeQueueDelay++;
+            lastQueueDelayTargetUpdateT_ntp = time_ntp;
+            return;
+        }
+        nRttsWithLargeQueueDelay = 0;
+        if (queueDelayTarget == queueDelayTargetMin) {
+            lastQueueDelayTargetUpdateT_ntp = time_ntp;
+        } else if (time_ntp - lastQueueDelayTargetUpdateT_ntp >= sRtt_ntp) {
+            // Reduce queueDelayTarget
+            queueDelayTarget = std::max(queueDelayTargetMin,
+                queueDelayTarget * kQueueDelayTargetDecay);
+            lastQueueDelayTargetUpdateT_ntp = time_ntp;
+        }
+    }
 }
 
 int ScreamV2Tx::getMss() {

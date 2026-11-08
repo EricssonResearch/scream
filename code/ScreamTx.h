@@ -802,6 +802,11 @@ extern "C" {
         float getQueueDelayFraction();
 
         /*
+        * Calculate adaptive queueDelayTarget
+        */
+        void calculateQueueDelayTarget(uint32_t time_ntp);
+
+        /*
         * Get the mss
         */
         int getMss();
@@ -857,6 +862,8 @@ extern "C" {
         float queueDelay;
         float queueDelayFractionAvg;
         float queueDelayTarget;
+        float nRttsWithLargeQueueDelay;
+        int cwndRestoreValue;
 
         float queueDelaySbdVar;
         float queueDelaySbdMean;
@@ -992,6 +999,7 @@ extern "C" {
         uint32_t lastBaseDelayRefreshT_ntp;
         uint32_t lastRateLimitT_ntp;
         uint32_t lastMssChange_ntp;
+        uint32_t lastQueueDelayTargetUpdateT_ntp;
     };
 }
 #endif

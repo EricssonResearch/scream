@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
 	screamTx->setLogTag((char*)log_tag);
 	screamTx->setPostCongestionDelayRtts(50);
 	screamTx->setEnableCyclicPacing(false);
-	screamTx->setExpFeature(0x00);
+	screamTx->setExpFeature(0x01);
 
 
 	FILE* fp = fopen("log.txt", "w");
