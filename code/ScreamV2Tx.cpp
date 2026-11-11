@@ -1725,7 +1725,7 @@ void ScreamV2Tx::updateCwnd(uint32_t time_ntp) {
     tmp *= 8.0f;
     tmp = tmp * tmp;
     sclI = std::max(0.2f, std::min(1.0f, tmp));
-    if (cwnd > cwndI && sclI < 1.0f) {
+    if (cwnd > cwndI && sclI < 1.0f && !(isL4s && isEceDetected)) {
         /*
         * Limit cwnd increase above cwndI if latency varies
         */

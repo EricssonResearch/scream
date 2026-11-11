@@ -3,8 +3,11 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-11-11 :
+  - Latency scaling of sclI disabled when L4S is enabled.
+  - Build date for BW test tool sender changed.
 - 2026-11-08 :
-  - Experimental adaptive target queue delay algorithm added (-expfeature 1)
+  - Experimental adaptive target queue delay algorithm added (-expfeature 1).
   - Build date for BW test tool sender changed.
 - 2026-11-06 :
   -	virtualL4sAlpha scaling removed.
