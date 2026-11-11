@@ -19,6 +19,8 @@
 struct itimerval timer;
 struct sigaction sa;
 
+#define BIND bind
+
 struct periodicInfo
 {
 	int timer_fd;
@@ -503,7 +505,7 @@ int setup() {
 			}
 		}
 
-		if (bind(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr6, sizeof(incoming_rtcp_addr6)) < 0) {
+		if (BIND(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr6, sizeof(incoming_rtcp_addr6)) < 0) {
 			perror("bind outgoing_rtp_addr failed");
 			return 0;
 		}
@@ -540,7 +542,7 @@ int setup() {
 			}
 		}
 
-		if (bind(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr, sizeof(incoming_rtcp_addr)) < 0) {
+		if (BIND(fd_outgoing_rtp, (struct sockaddr*)&incoming_rtcp_addr, sizeof(incoming_rtcp_addr)) < 0) {
 			perror("bind outgoing_rtp_addr failed");
 			return 0;
 		}
