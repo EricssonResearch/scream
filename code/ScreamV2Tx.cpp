@@ -115,7 +115,8 @@ static const float kQueueDelayLongAvgAlpha = 1.0f / 50;
 static const int kHighCwndRatio = 20;
 
 static const int kNLargeQueueDelayLimit = 10;
-static const float kQueueDelayTargetDecay = 0.99f;
+static const float kQueueDelayTargetDecayFast = 0.9f;
+static const float kQueueDelayTargetDecaySlow = 0.99f;
 
 
 /*
@@ -2275,7 +2276,7 @@ void ScreamV2Tx::calculateQueueDelayTarget(uint32_t time_ntp) {
     if ((expFeature & 0x01) > 0) {
         if (queueDelayAvg > queueDelayTarget / 2.0f) {
             if (nRttsWithLargeQueueDelay == 0) {
-                cwndRestoreValue = cwnd;
+                cwndRestoreValue = int(cwnd * 0.8f);
                 // This value may need to be adjusted down if loss occurs
             }
             /*
@@ -2303,8 +2304,12 @@ void ScreamV2Tx::calculateQueueDelayTarget(uint32_t time_ntp) {
             lastQueueDelayTargetUpdateT_ntp = time_ntp;
         } else if (time_ntp - lastQueueDelayTargetUpdateT_ntp >= sRtt_ntp) {
             // Reduce queueDelayTarget
-            queueDelayTarget = std::max(queueDelayTargetMin,
-                queueDelayTarget * kQueueDelayTargetDecay);
+            if (queueDelayAvg < queueDelayTarget * 0.25f)
+                queueDelayTarget = std::max(queueDelayTargetMin,
+                    queueDelayTarget * kQueueDelayTargetDecayFast);
+            else
+                queueDelayTarget = std::max(queueDelayTargetMin,
+                    queueDelayTarget * kQueueDelayTargetDecaySlow);
             lastQueueDelayTargetUpdateT_ntp = time_ntp;
         }
     }
