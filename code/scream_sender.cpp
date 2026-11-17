@@ -75,6 +75,7 @@ float schedulingJitterMargin = 0.01f;
 int postCongestionDelayRtts = 200;
 bool enableCyclicPacing = false;
 int expFeature = 0;
+float watchDog = 0.0f;
 
 uint16_t seqNr = 0;
 uint32_t lastKeyFrameT_ntp = 0;
@@ -84,6 +85,7 @@ bool stopThread = false;
 pthread_t create_rtp_thread = 0;
 pthread_t transmit_rtp_thread = 0;
 pthread_t rtcp_thread = 0;
+pthread_t create_watchdog_thread = 0;
 
 int mtu = 1200;
 int mtuList[10];
@@ -205,6 +207,23 @@ void sendPacket(void* buf, int size) {
 		sendto(fd_outgoing_rtp, buf, size, 0, (struct sockaddr*)&outgoing_rtp_addr6, sizeof(outgoing_rtp_addr6));
 	else
 		sendto(fd_outgoing_rtp, buf, size, 0, (struct sockaddr*)&outgoing_rtp_addr, sizeof(outgoing_rtp_addr));
+}
+
+/*
+* Transmit a small one byte UDP payload at very short intervals 
+* lets call it a watch dog -watchdog ms option
+*/
+void* createWatchDogThread(void* arg) {
+	char s[1];
+	s[0] = 0;
+	useconds_t sleepTime = useconds_t(watchDog * 1000);
+	for (;;) {
+		if (stopThread) {
+			return NULL;
+		}
+		sendPacket(s, 1);
+		usleep(sleepTime);
+	}
 }
 
 /*
@@ -664,7 +683,7 @@ int main(int argc, char* argv[]) {
 	* Parse command line
 	*/
 	if (argc <= 1) {
-		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-11-11 " << endl;
+		cerr << "SCReAM V2 BW test tool, sender. Ericsson AB. Version 2026-11-17 " << endl;
 		cerr << "Usage : " << endl << " > scream_bw_test_tx <options> decoder_ip decoder_port " << endl;
 		cerr << "     -if name                 Bind to specific interface" << endl;
 		cerr << "     -ipv6                    IPv6" << endl;
@@ -717,6 +736,7 @@ int main(int argc, char* argv[]) {
 		cerr << "     -postcongdelay val       Set post congestion delay [RTTs] (default 50)" << endl;
 		cerr << "     -cyclicpacing            Enable cyclic pacing" << endl;
 		cerr << "     -expfeature val          Semi-hidden experimental feature (default 0)" << endl;
+		cerr << "     -watchdog val            Send a small one byte UDP payload every val ms (default 0 = off)" << endl;
 		exit(-1);
 	}
 	int ix = 1;
@@ -962,6 +982,11 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
+		if (strstr(argv[ix], "-watchdog")) {
+			watchDog = atof(argv[ix + 1]);
+			ix += 2;
+			continue;
+		}
 		if (strstr(argv[ix], "-expfeature")) {
 			expFeature = atoi(argv[ix + 1]);
 			ix += 2;
@@ -1015,6 +1040,11 @@ int main(int argc, char* argv[]) {
 
 	/* Create RTP thread */
 	pthread_create(&create_rtp_thread, NULL, createRtpThread, (void*)"Create RTP thread...");
+
+	if (watchDog > 0) {
+		pthread_create(&create_watchdog_thread, NULL, createWatchDogThread, (void*)"Create Watch Dog thread...");
+	}
+
 	if (pushTraffic) {
 		cerr << "Scream sender started in push traffic mode " << fixedRate << "kbps" << endl;
 

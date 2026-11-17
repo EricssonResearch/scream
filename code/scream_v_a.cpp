@@ -20,7 +20,7 @@ const char* log_tag = "scream_lib";
 const char* log_tag = "";
 #endif
 
-const float Tmax = 50;
+const float Tmax = 10;
 const bool isChRate = true;
 const bool printLog = false;
 const bool ecnCapable = false;
@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
 	//screamTx->autoTuneMinCwnd(true);
 	//screamTx->setMaxTotalBitrate(40e6);
 	screamTx->setLogTag((char*)log_tag);
-	screamTx->setPostCongestionDelayRtts(50);
+	screamTx->setPostCongestionDelayRtts(200);
 	screamTx->setEnableCyclicPacing(false);
 	screamTx->setExpFeature(0x01);
 
@@ -81,7 +81,7 @@ int main(int argc, char* argv[])
 	videoEnc[3] = new VideoEnc(rtpQueue[3], FR / FR_DIV, (char*)TRACEFILE, 150);
 	if (mode & 0x01)
 		//screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 10e6f, 0.1f, false, 0.05f);
-		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 1e6f, 1e6f, 50e6f, 0.1f, false, 0.0f, false);
+		screamTx->registerNewStream(rtpQueue[0], 10, 1.0f, 0.5e6f, 0.5e6f, 50e6f, 0.1f, false, 0.0f, false);
 	if (mode & 0x02)
 		screamTx->registerNewStream(rtpQueue[1], 11, 0.1f, 1.0e6f, 5e6f, 50e6f, 0.1f, false, 0.1f);
 	if (mode & 0x04)

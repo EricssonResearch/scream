@@ -3,6 +3,9 @@
 This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
 
 ## News
+- 2026-11-17 :
+  - New -watchdog val option added to SCReAM BW test tool. If enabled (val > 0), a one byte UDP payload is transmitted every val ms.
+  - Build date for BW test tool sender changed.
 - 2026-11-11 :
   - Latency scaling of sclI disabled when L4S is enabled.
   - Build date for BW test tool sender changed.
